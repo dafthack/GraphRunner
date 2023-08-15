@@ -143,6 +143,11 @@
 	<div id="chatMessages"></div>
 	<hr>
 
+    <!-- List OneDrive Files and Folders -->
+    <h2>OneDrive Files and Folders</h2>
+    <button id="listFilesButton">List Files</button>
+    <div id="fileList"></div>
+
 
     </div>
 
@@ -407,7 +412,7 @@ async function listChats() {
         data.value.forEach(chat => {
             const chatSummary = `
                 <div class="chat-summary" data-id="${chat.id}">
-                    <strong>With:</strong> ${chat.lastUpdatedDateTime} (${chat.lastUpdatedDateTime})<br>
+                    <strong>Teams Chat Conversation:</strong> ${chat.lastUpdatedDateTime} (${chat.lastUpdatedDateTime})<br>
                 </div>
                 <hr>
             `;
@@ -458,6 +463,125 @@ async function fetchAndDisplayChatMessages(chatId, headers) {
         chatMessages.innerHTML = `Error fetching chat messages: ${error.message}`;
     }
 }
+
+
+
+const listFilesButton = document.getElementById('listFilesButton');
+const fileList = document.getElementById('fileList');
+
+listFilesButton.addEventListener('click', async function () {
+    const token = tokenInput.value;
+    const apiEndpoint = 'https://graph.microsoft.com/v1.0/me/drive/root/children';
+
+    const headers = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const response = await fetch(apiEndpoint, { headers });
+        const data = await response.json();
+
+        fileList.innerHTML = '';
+        data.value.forEach(file => {
+            const fileSummary = `
+                <div class="file-summary" data-id="${file.id}" data-type="${file.file ? 'file' : 'folder'}">
+                    <strong>Name:</strong> ${file.name}<br>
+                    <strong>Size:</strong> ${file.size ? `${file.size} bytes` : 'N/A'}<br>
+                    <strong>Type:</strong> ${file.file ? 'File' : 'Folder'}<br>
+                    ${file.file ? `<a href="#" class="download-link">Download</a>` : `<a href="#" class="folder-link">Open Folder</a>`}<br>
+                </div>
+                <hr>
+            `;
+            fileList.innerHTML += fileSummary;
+        });
+
+        // Add event listener to file and folder links
+        const downloadLinks = document.querySelectorAll('.download-link');
+        downloadLinks.forEach(link => {
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const fileId = link.parentElement.getAttribute('data-id');
+                await downloadFile(fileId, headers);
+            });
+        });
+
+        const folderLinks = document.querySelectorAll('.folder-link');
+        folderLinks.forEach(link => {
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const folderId = link.parentElement.getAttribute('data-id');
+                await fetchAndDisplayFolderContents(folderId, headers);
+            });
+        });
+    } catch (error) {
+        fileList.innerHTML = `Error fetching files and folders: ${error.message}`;
+    }
+});
+
+// Function to download a file
+async function downloadFile(fileId, headers) {
+    // Construct the download URL
+    const downloadUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`;
+
+    try {
+        const response = await fetch(downloadUrl, { headers });
+        const blob = await response.blob();
+
+        // Create a temporary anchor element to initiate download
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fileId;
+        a.click();
+    } catch (error) {
+        fileList.innerHTML = `Error downloading file: ${error.message}`;
+    }
+}
+
+// Function to fetch and display folder contents
+async function fetchAndDisplayFolderContents(folderId, headers) {
+    const folderContentsUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children`;
+
+    try {
+        const response = await fetch(folderContentsUrl, { headers });
+        const data = await response.json();
+
+        fileList.innerHTML = '';
+        data.value.forEach(item => {
+            const itemSummary = `
+                <div class="file-summary" data-id="${item.id}" data-type="${item.file ? 'file' : 'folder'}">
+                    <strong>Name:</strong> ${item.name}<br>
+                    <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
+                    <strong>Type:</strong> ${item.file ? 'File' : 'Folder'}<br>
+                    ${item.file ? `<a href="#" class="download-link">Download</a>` : `<a href="#" class="folder-link">Open Folder</a>`}<br>
+                </div>
+                <hr>
+            `;
+            fileList.innerHTML += itemSummary;
+        });
+
+        // Add event listener to file and folder links
+        const downloadLinks = document.querySelectorAll('.download-link');
+        downloadLinks.forEach(link => {
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const fileId = link.parentElement.getAttribute('data-id');
+                await downloadFile(fileId, headers);
+            });
+        });
+
+        const folderLinks = document.querySelectorAll('.folder-link');
+        folderLinks.forEach(link => {
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const itemId = link.parentElement.getAttribute('data-id');
+                await fetchAndDisplayFolderContents(itemId, headers);
+            });
+        });
+    } catch (error) {
+        fileList.innerHTML = `Error fetching folder contents: ${error.message}`;
+    }
+}
+
 
 
 
