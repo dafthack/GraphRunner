@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkinGRAPHt (Microsoft Graph API GUI)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #007bff;
+        }
+        label {
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="submit"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        input[type="file"] {
+            padding: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .response {
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            white-space: pre-wrap;
+        }
+        .email-summary {
+            cursor: pointer;
+            padding: 10px;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .email-summary:hover {
+            background-color: #fff;
+            box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SkinGRAPHt (Microsoft Graph API GUI)</h1>
+        
+        <!-- Token Input -->
+        <label for="token">Access Token:</label>
+        <input type="text" id="token" name="token" required>
+        <hr>
+
+        <!-- API Request Form -->
+        <h2>Custom API Request</h2>
+        <form id="apiRequestForm">
+            <label for="apiEndpoint">API Endpoint:</label>
+            <input type="text" id="apiEndpoint" name="apiEndpoint" value="https://graph.microsoft.com/v1.0/me" required>
+            <button type="submit">Send Request</button>
+        </form>
+        <pre class="response" id="apiResponse"></pre>
+        <hr>
+
+        <!-- List All Users Button -->
+        <h2>List All Users</h2>
+        <button id="listUsersButton">List Users</button>
+        <pre class="response" id="listUsersResponse"></pre>
+        <hr>
+
+        <!-- Email Viewer -->
+        <h2>Current User Email Viewer</h2>
+        <button id="fetchEmailsButton">Fetch Emails</button>
+        <div id="emailList"></div>
+        <div id="emailDetail"></div>
+        <hr>
+
+	<!-- Other User Email Viewer -->
+        <h2>Other User Email Viewer</h2>
+        <form id="customEmailViewerForm">
+            <label for="customUserId">User ID:</label>
+            <input type="text" id="customUserId" name="customUserId" required>
+            <br>
+            <label for="customFolder">Folder:</label>
+            <input type="text" id="customFolder" name="customFolder" value="Inbox" required>
+            <br>
+            <button type="submit">Fetch Emails</button>
+        </form>
+        <div id="customEmailList"></div>
+        <div id="customEmailDetail"></div>
+        <hr>
+
+        <!-- Send Email Form -->
+        <h2>Send Email</h2>
+        <form id="sendEmailForm">
+            <label for="to">To:</label>
+            <input type="text" id="to" name="to" required>
+            <label for="subject">Subject:</label>
+            <input type="text" id="subject" name="subject" required>
+            <label for="body">Body:</label>
+            <textarea id="body" name="body" rows="4" required></textarea>
+            <label for="attachments">Attachments:</label>
+            <input type="file" id="attachments" name="attachments" multiple>
+            <button type="submit">Send Email</button>
+        </form>
+        <pre class="response" id="sendEmailResponse"></pre>
+        <hr>
+
+	<!-- Button to Fetch Teams Chats -->
+	<h2>Teams Chat</h2>
+	<button id="fetchChatsButton">Fetch Teams Chats</button>
+	<div id="chatList"></div>
+	<!-- Chat Messages -->
+	<div id="chatMessages"></div>
+	<hr>
+
+
+    </div>
+
+
+ <script>
+    const tokenInput = document.getElementById('token');
+    const apiRequestForm = document.getElementById('apiRequestForm');
+    const apiResponse = document.getElementById('apiResponse');
+    const fetchEmailsButton = document.getElementById('fetchEmailsButton');
+    const emailList = document.getElementById('emailList');
+    const emailDetail = document.getElementById('emailDetail');
+    const sendEmailForm = document.getElementById('sendEmailForm');
+    const sendEmailResponse = document.getElementById('sendEmailResponse');
+
+
+
+
+    apiRequestForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
+
+        const token = tokenInput.value;
+        const apiEndpoint = document.getElementById('apiEndpoint').value;
+
+        const headers = {
+            'Authorization': `Bearer ${token}`
+        };
+
+        try {
+            const response = await fetch(apiEndpoint, { headers });
+            const data = await response.json();
+
+            apiResponse.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+            apiResponse.textContent = 'Error: ' + error.message;
+        }
+    });
+
+    fetchEmailsButton.addEventListener('click', async function() {
+        const token = tokenInput.value;
+        const apiEndpoint = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages';
+
+        const headers = {
+            'Authorization': `Bearer ${token}`
+        };
+
+        try {
+            const response = await fetch(apiEndpoint, { headers });
+            const data = await response.json();
+
+            emailList.innerHTML = '';
+            data.value.forEach(email => {
+                const emailSummary = `
+                    <div class="email-summary" data-id="${email.id}">
+                        <strong>From:</strong> ${email.from.emailAddress.name} (${email.from.emailAddress.address})<br>
+                        <strong>Subject:</strong> ${email.subject}<br>
+                        <strong>Date:</strong> ${new Date(email.sentDateTime).toLocaleString()}<br>
+                        <strong>Preview:</strong> ${email.bodyPreview}<br>
+                    </div>
+                    <hr>
+                `;
+                emailList.innerHTML += emailSummary;
+            });
+
+            // Add event listener to email summaries
+            const emailSummaries = document.querySelectorAll('.email-summary');
+            emailSummaries.forEach(emailSummary => {
+                emailSummary.addEventListener('click', async () => {
+                    const emailId = emailSummary.getAttribute('data-id');
+                    const emailDetailEndpoint = `https://graph.microsoft.com/v1.0/me/messages/${emailId}`;
+                    try {
+                        const emailDetailResponse = await fetch(emailDetailEndpoint, { headers });
+                        const emailDetailData = await emailDetailResponse.json();
+
+                        emailDetail.innerHTML = `
+                            <h3>Email Details</h3>
+                            <strong>From:</strong> ${emailDetailData.from.emailAddress.name} (${emailDetailData.from.emailAddress.address})<br>
+                            <strong>Subject:</strong> ${emailDetailData.subject}<br>
+                            <strong>Date:</strong> ${new Date(emailDetailData.sentDateTime).toLocaleString()}<br>
+                            <strong>Body:</strong> ${emailDetailData.body.content}
+                        `;
+                    } catch (error) {
+                        emailDetail.innerHTML = `Error fetching email details: ${error.message}`;
+                    }
+                });
+            });
+        } catch (error) {
+            emailList.innerHTML = `Error fetching emails: ${error.message}`;
+        }
+    });
+
+    listUsersButton.addEventListener('click', async function() {
+        const token = tokenInput.value;
+        const apiEndpoint = 'https://graph.microsoft.com/v1.0/users';
+
+        const headers = {
+            'Authorization': `Bearer ${token}`
+        };
+
+        try {
+            const response = await fetch(apiEndpoint, { headers });
+            const data = await response.json();
+
+            // Display userPrincipalName fields only
+            const userPrincipalNames = data.value.map(user => user.userPrincipalName);
+            listUsersResponse.textContent = userPrincipalNames.join('\n');
+        } catch (error) {
+            listUsersResponse.textContent = 'Error: ' + error.message;
+        }
+    });
+
+    const customEmailViewerForm = document.getElementById('customEmailViewerForm');
+            const customEmailList = document.getElementById('customEmailList');
+            const customEmailDetail = document.getElementById('customEmailDetail');
+
+            customEmailViewerForm.addEventListener('submit', async function(event) {
+                event.preventDefault();
+
+                const token = tokenInput.value;
+                const customUserId = document.getElementById('customUserId').value;
+                const customFolder = document.getElementById('customFolder').value;
+
+                const customApiEndpoint = `https://graph.microsoft.com/v1.0/users/${customUserId}/mailFolders/${customFolder}/messages`;
+
+                const headers = {
+                    'Authorization': `Bearer ${token}`
+                };
+
+                try {
+                    const response = await fetch(customApiEndpoint, { headers });
+                    const data = await response.json();
+
+                    customEmailList.innerHTML = '';
+                    data.value.forEach(email => {
+                        const customEmailSummary = `
+                            <div class="email-summary" data-id="${email.id}">
+                                <strong>From:</strong> ${email.sender ? `${email.sender.emailAddress.name} (${email.sender.emailAddress.address})` : 'Unknown'}<br>
+                                <strong>Subject:</strong> ${email.subject}<br>
+                                <strong>Date:</strong> ${new Date(email.sentDateTime).toLocaleString()}<br>
+                                <strong>Preview:</strong> ${email.bodyPreview}<br>
+                            </div>
+                            <hr>
+                        `;
+                        customEmailList.innerHTML += customEmailSummary;
+                    });
+
+                    // Add event listener to custom email summaries
+                    const customEmailSummaries = document.querySelectorAll('.email-summary');
+                    customEmailSummaries.forEach(customEmailSummary => {
+                        customEmailSummary.addEventListener('click', async () => {
+                            const customEmailId = customEmailSummary.getAttribute('data-id');
+                            const customEmailDetailEndpoint = `https://graph.microsoft.com/v1.0/users/${customUserId}/messages/${customEmailId}`;
+                            try {
+                                const customEmailDetailResponse = await fetch(customEmailDetailEndpoint, { headers });
+                                const customEmailDetailData = await customEmailDetailResponse.json();
+
+                                customEmailDetail.innerHTML = `
+                                    <h3>Email Details</h3>
+                                    <strong>From:</strong> ${customEmailDetailData.sender ? `${customEmailDetailData.sender.emailAddress.name} (${customEmailDetailData.sender.emailAddress.address})` : 'Unknown'}<br>
+                                    <strong>Subject:</strong> ${customEmailDetailData.subject}<br>
+                                    <strong>Date:</strong> ${new Date(customEmailDetailData.sentDateTime).toLocaleString()}<br>
+                                    <strong>Body:</strong> ${customEmailDetailData.body.content}
+                                `;
+                            } catch (error) {
+                                customEmailDetail.innerHTML = `Error fetching email details: ${error.message}`;
+                            }
+                        });
+                    });
+                } catch (error) {
+                    customEmailList.innerHTML = `Error fetching emails: ${error.message}`;
+                }
+            });
+
+    sendEmailForm.addEventListener('submit', async function(event) {
+    event.preventDefault();
+
+    const token = tokenInput.value;
+    const to = document.getElementById('to').value;
+    const subject = document.getElementById('subject').value;
+    const body = document.getElementById('body').value;
+
+    const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+    };
+
+    const attachmentsInput = document.getElementById('attachments');
+    const attachments = attachmentsInput.files;
+
+    const emailMessage = {
+        message: {
+            subject,
+            body: {
+                contentType: 'Text',
+                content: body
+            },
+            toRecipients: [
+                {
+                    emailAddress: {
+                        address: to
+                    }
+                }
+            ],
+            attachments: [] // Initialize an empty array for attachments
+        },
+        saveToSentItems: false
+    };
+
+    for (const attachment of attachments) {
+        const attachmentPayload = {
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            contentBytes: '',
+            contentType: attachment.type,
+            name: attachment.name
+        };
+
+        // Read the attachment content as base64 and assign it to the payload
+        const attachmentContent = await readFileAsBase64(attachment);
+        attachmentPayload.contentBytes = attachmentContent;
+
+        emailMessage.message.attachments.push(attachmentPayload);
+    }
+
+    try {
+    // Use fetch to send the email and handle the response
+    const sendEmailResponse = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(emailMessage)
+    });
+
+    if (sendEmailResponse.status === 202) {
+        sendEmailResponse.textContent = 'Message Sent Successfully. It is being processed.';
+    } else {
+        sendEmailResponse.textContent = 'Error sending email: Unexpected response.';
+    }
+} catch (error) {
+    sendEmailResponse.textContent = `Error sending email: ${error.message}`;
+}
+});
+
+
+// Add the event listener for the "Fetch Teams Chats" button
+const fetchChatsButton = document.getElementById('fetchChatsButton');
+fetchChatsButton.addEventListener('click', listChats);
+
+// Function to fetch and display list of chats
+async function listChats() {
+    const token = tokenInput.value;
+    const apiEndpoint = 'https://graph.microsoft.com/v1.0/me/chats';
+
+    const headers = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const response = await fetch(apiEndpoint, { headers });
+        const data = await response.json();
+
+        const chatList = document.getElementById('chatList');
+        chatList.innerHTML = '';
+
+        data.value.forEach(chat => {
+            const chatSummary = `
+                <div class="chat-summary" data-id="${chat.id}">
+                    <strong>With:</strong> ${chat.lastUpdatedDateTime} (${chat.lastUpdatedDateTime})<br>
+                </div>
+                <hr>
+            `;
+            chatList.innerHTML += chatSummary;
+        });
+
+        // Add event listener to chat summaries
+        const chatSummaries = document.querySelectorAll('.chat-summary');
+        chatSummaries.forEach(chatSummary => {
+            chatSummary.addEventListener('click', async () => {
+                const chatId = chatSummary.getAttribute('data-id');
+                await fetchAndDisplayChatMessages(chatId, headers);
+            });
+        });
+    } catch (error) {
+        chatList.innerHTML = `Error fetching chats: ${error.message}`;
+    }
+}
+
+// Function to fetch and display chat messages
+async function fetchAndDisplayChatMessages(chatId, headers) {
+    const chatMessagesEndpoint = `https://graph.microsoft.com/v1.0/me/chats/${chatId}/messages`;
+
+    try {
+        const response = await fetch(chatMessagesEndpoint, { headers });
+        const data = await response.json();
+
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.innerHTML = '';
+
+        data.value.forEach(message => {
+            const senderDisplayName = message.from && message.from.user && message.from.user.displayName ? message.from.user.displayName : "Unknown User";
+            const senderUserId = message.from && message.from.user && message.from.user.id ? message.from.user.id : "Unknown ID";
+            const messageContent = message.body && message.body.content ? message.body.content : "No content available";
+            const createdDateTime = new Date(message.createdDateTime).toLocaleString();
+
+            const messageDetail = `
+                <div>
+                    <strong>From:</strong> ${senderDisplayName} (${senderUserId})<br>
+                    <strong>Message:</strong> ${messageContent}<br>
+                    <strong>Created:</strong> ${createdDateTime}<br>
+                </div>
+                <hr>
+            `;
+            chatMessages.innerHTML += messageDetail;
+        });
+    } catch (error) {
+        chatMessages.innerHTML = `Error fetching chat messages: ${error.message}`;
+    }
+}
+
+
+
+// Function to read a file and convert it to base64
+function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            resolve(reader.result.split(',')[1]); // Extract base64 content from data URL
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+
+</script>
+</body>
+</html>
