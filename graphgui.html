@@ -141,13 +141,27 @@
 	<div id="chatList"></div>
 	<!-- Chat Messages -->
 	<div id="chatMessages"></div>
-	<hr>
+    <hr>
+    <h3>Send Message</h3>
+    <input type="text" id="messageTextBox" placeholder="Type your message...">
+    <button id="sendMessageButton">Send Message</button>
+    <hr>
+
+    <!-- List Public Teams Chats -->
+    <h2>Public Teams Chats</h2>
+    <button id="listPublicChatsButton">List Public Chats</button>
+    <div id="publicChatList"></div>
+    <hr>
+
 
     <!-- List OneDrive Files and Folders -->
     <h2>OneDrive Files and Folders</h2>
     <button id="listFilesButton">List Files</button>
     <div id="fileList"></div>
-
+    <!-- Chat Messages -->
+    <div id="publicChatMessages"></div>
+    <hr>
+    <hr>
 
     </div>
 
@@ -161,10 +175,10 @@
     const emailDetail = document.getElementById('emailDetail');
     const sendEmailForm = document.getElementById('sendEmailForm');
     const sendEmailResponse = document.getElementById('sendEmailResponse');
+    const FileReader = window.FileReader;
 
 
-
-
+    // CUSTOM GRAPH API QUERY
     apiRequestForm.addEventListener('submit', async function(event) {
         event.preventDefault();
 
@@ -185,6 +199,7 @@
         }
     });
 
+    //MAIL - VIEWER
     fetchEmailsButton.addEventListener('click', async function() {
         const token = tokenInput.value;
         const apiEndpoint = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages';
@@ -211,7 +226,7 @@
                 emailList.innerHTML += emailSummary;
             });
 
-            // Add event listener to email summaries
+            // MAIL VIEWER - Event listener for email summaries
             const emailSummaries = document.querySelectorAll('.email-summary');
             emailSummaries.forEach(emailSummary => {
                 emailSummary.addEventListener('click', async () => {
@@ -238,6 +253,7 @@
         }
     });
 
+    // LIST USERS
     listUsersButton.addEventListener('click', async function() {
         const token = tokenInput.value;
         const apiEndpoint = 'https://graph.microsoft.com/v1.0/users';
@@ -258,6 +274,7 @@
         }
     });
 
+    // MAIL - CUSTOM EMAIL VIEWER
     const customEmailViewerForm = document.getElementById('customEmailViewerForm');
             const customEmailList = document.getElementById('customEmailList');
             const customEmailDetail = document.getElementById('customEmailDetail');
@@ -293,7 +310,7 @@
                         customEmailList.innerHTML += customEmailSummary;
                     });
 
-                    // Add event listener to custom email summaries
+                    // MAIL - CUSTOM EMAIL VIEWER - Add event listener to custom email summaries
                     const customEmailSummaries = document.querySelectorAll('.email-summary');
                     customEmailSummaries.forEach(customEmailSummary => {
                         customEmailSummary.addEventListener('click', async () => {
@@ -320,6 +337,7 @@
                 }
             });
 
+    // MAIL SEND - Form
     sendEmailForm.addEventListener('submit', async function(event) {
     event.preventDefault();
 
@@ -333,6 +351,7 @@
         'Content-Type': 'application/json'
     };
 
+    // MAIL SEND - Attachments
     const attachmentsInput = document.getElementById('attachments');
     const attachments = attachmentsInput.files;
 
@@ -371,7 +390,7 @@
     }
 
     try {
-    // Use fetch to send the email and handle the response
+    // MAIL SEND - Use fetch to send the email and handle the response
     const sendEmailResponse = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
         method: 'POST',
         headers,
@@ -389,11 +408,11 @@
 });
 
 
-// Add the event listener for the "Fetch Teams Chats" button
+// TEAMS -Event listener for the "Fetch Teams Chats" button
 const fetchChatsButton = document.getElementById('fetchChatsButton');
 fetchChatsButton.addEventListener('click', listChats);
 
-// Function to fetch and display list of chats
+// TEAMS -  Function to fetch and display list of chats
 async function listChats() {
     const token = tokenInput.value;
     const apiEndpoint = 'https://graph.microsoft.com/v1.0/me/chats';
@@ -422,9 +441,11 @@ async function listChats() {
         // Add event listener to chat summaries
         const chatSummaries = document.querySelectorAll('.chat-summary');
         chatSummaries.forEach(chatSummary => {
-            chatSummary.addEventListener('click', async () => {
-                const chatId = chatSummary.getAttribute('data-id');
-                await fetchAndDisplayChatMessages(chatId, headers);
+        chatSummary.addEventListener('click', async () => {
+        const chatId = chatSummary.getAttribute('data-id');
+        await fetchAndDisplayChatMessages(chatId, headers);
+        // Update chat ID for sending messages
+        sendMessageButton.setAttribute('data-chat-id', chatId);
             });
         });
     } catch (error) {
@@ -432,7 +453,7 @@ async function listChats() {
     }
 }
 
-// Function to fetch and display chat messages
+// TEAMS - Function to fetch and display chat messages
 async function fetchAndDisplayChatMessages(chatId, headers) {
     const chatMessagesEndpoint = `https://graph.microsoft.com/v1.0/me/chats/${chatId}/messages`;
 
@@ -464,8 +485,145 @@ async function fetchAndDisplayChatMessages(chatId, headers) {
     }
 }
 
+// TEAMS - Send Message Functionality
+const sendMessageButton = document.getElementById('sendMessageButton');
+const messageTextBox = document.getElementById('messageTextBox');
+
+sendMessageButton.addEventListener('click', async () => {
+    const message = messageTextBox.value;
+    if (message) {
+        const chatId = sendMessageButton.getAttribute('data-chat-id');
+        await sendMessageToChat(chatId, message);
+    }
+});
+
+// TEAMS - SEND 
+async function sendMessageToChat(chatId, message) {
+    const token = tokenInput.value;
+    const sendMessageUrl = `https://graph.microsoft.com/v1.0/me/chats/${chatId}/messages`;
+
+    const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+    };
+
+    const messagePayload = {
+        body: {
+            content: message
+        }
+    };
+
+    try {
+        const response = await fetch(sendMessageUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(messagePayload)
+        });
+
+        if (response.status === 201) {
+            // Message sent successfully
+            console.log('Message sent successfully');
+        } else {
+            // Handle error response
+            console.error('Error sending message:', response.statusText);
+        }
+    } catch (error) {
+        console.error('Error sending message:', error.message);
+    }
+}
 
 
+// TEAMS - PUBLIC Add event listener for listing public Teams chats
+const listPublicChatsButton = document.getElementById('listPublicChatsButton');
+listPublicChatsButton.addEventListener('click', listPublicChats);
+
+// TEAMS - PUBLIC Function to fetch and display public Teams chats
+async function listPublicChats() {
+    const token = tokenInput.value;
+    const apiEndpoint = 'https://graph.microsoft.com/v1.0/me/joinedTeams';
+
+    const headers = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const response = await fetch(apiEndpoint, { headers });
+        const data = await response.json();
+
+        const publicChatList = document.getElementById('publicChatList');
+        publicChatList.innerHTML = '';
+
+        data.value.forEach(async team => {
+            const teamChatsEndpoint = `https://graph.microsoft.com/v1.0/teams/${team.id}/channels`;
+
+            try {
+                const chatsResponse = await fetch(teamChatsEndpoint, { headers });
+                const chatsData = await chatsResponse.json();
+
+                chatsData.value.forEach(chat => {
+                    if (chat.displayName) {
+                        const chatSummary = `
+                            <div class="public-chat-summary" data-id="${chat.id}">
+                                <strong>Public Chat Name:</strong> ${chat.displayName}<br>
+                                <strong>Description:</strong> ${chat.description || 'No description available'}<br>
+                            </div>
+                            <hr>
+                        `;
+                        publicChatList.innerHTML += chatSummary;
+                    }
+                });
+            } catch (error) {
+                publicChatList.innerHTML = `Error fetching chats: ${error.message}`;
+            }
+        });
+
+        // Add event listener to public chat summaries
+        const publicChatSummaries = document.querySelectorAll('.public-chat-summary');
+        publicChatSummaries.forEach(chatSummary => {
+            chatSummary.addEventListener('click', async () => {
+                const chatId = chatSummary.getAttribute('data-id');
+                await fetchAndDisplayPublicChatMessages(chatId, headers);
+                // Update chat ID for sending messages
+                sendMessageButton.setAttribute('data-chat-id', chatId);
+            });
+        });
+    } catch (error) {
+        publicChatList.innerHTML = `Error fetching public chats: ${error.message}`;
+    }
+}
+
+// TEAMS - PUBLIC Function to fetch and display chat messages
+async function fetchAndDisplayPublicChatMessages(chatId, headers) {
+    const chatMessagesEndpoint = `https://graph.microsoft.com/v1.0/teams/${chatId}/messages`;
+
+    try {
+        const response = await fetch(chatMessagesEndpoint, { headers });
+        const data = await response.json();
+
+        const publicChatMessages = document.getElementById('publicChatMessages');
+        publicChatMessages.innerHTML = '';
+
+        data.value.forEach(message => {
+            const senderDisplayName = message.from && message.from.user && message.from.user.displayName ? message.from.user.displayName : "Unknown User";
+            const messageContent = message.body && message.body.content ? message.body.content : "No content available";
+            const createdDateTime = new Date(message.createdDateTime).toLocaleString();
+
+            const messageDetail = `
+                <div>
+                    <strong>From:</strong> ${senderDisplayName}<br>
+                    <strong>Message:</strong> ${messageContent}<br>
+                    <strong>Created:</strong> ${createdDateTime}<br>
+                </div>
+                <hr>
+            `;
+            publicChatMessages.innerHTML += messageDetail;
+        });
+    } catch (error) {
+        publicChatMessages.innerHTML = `Error fetching chat messages: ${error.message}`;
+    }
+}
+
+// ONEDRIVE -  List Files
 const listFilesButton = document.getElementById('listFilesButton');
 const fileList = document.getElementById('fileList');
 
@@ -518,7 +676,7 @@ listFilesButton.addEventListener('click', async function () {
     }
 });
 
-// Function to download a file
+// ONEDRIVE - Function to download a file
 async function downloadFile(fileId, headers) {
     // Construct the download URL
     const downloadUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`;
@@ -537,7 +695,7 @@ async function downloadFile(fileId, headers) {
     }
 }
 
-// Function to fetch and display folder contents
+// ONEDRIVE - Function to fetch and display folder contents
 async function fetchAndDisplayFolderContents(folderId, headers) {
     const folderContentsUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children`;
 
