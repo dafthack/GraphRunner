@@ -82,12 +82,27 @@
         <hr>
 
         <!-- API Request Form -->
-        <h2>Custom API Request</h2>
-        <form id="apiRequestForm">
-            <label for="apiEndpoint">API Endpoint:</label>
-            <input type="text" id="apiEndpoint" name="apiEndpoint" value="https://graph.microsoft.com/v1.0/me" required>
-            <button type="submit">Send Request</button>
-        </form>
+    <h2>Custom API Request</h2>
+    <form id="apiRequestForm">
+    <label for="apiEndpoint">API Endpoint:</label>
+    <input type="text" id="apiEndpoint" name="apiEndpoint" value="https://graph.microsoft.com/v1.0/me" required>
+
+    <!-- Dropdown for HTTP Method -->
+    <label for="httpMethod">HTTP Method:</label>
+    <select id="httpMethod" name="httpMethod">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+        <option value="PUT">PUT</option>
+        <option value="OPTIONS">OPTIONS</option>
+    </select>
+
+    <!-- Additional input for POST/PUT request body -->
+    <label for="requestBody" id="requestBodyLabel">Request Body:</label>
+    <textarea id="requestBody" name="requestBody" rows="4"></textarea>
+
+    <button type="submit">Send Request</button>
+    </form>
+
         <pre class="response" id="apiResponse"></pre>
         <hr>
 
@@ -180,24 +195,41 @@
 
     // CUSTOM GRAPH API QUERY
     apiRequestForm.addEventListener('submit', async function(event) {
-        event.preventDefault();
+    event.preventDefault();
 
-        const token = tokenInput.value;
-        const apiEndpoint = document.getElementById('apiEndpoint').value;
+    const token = tokenInput.value;
+    const apiEndpoint = document.getElementById('apiEndpoint').value;
+    const httpMethod = document.getElementById('httpMethod').value;
 
-        const headers = {
-            'Authorization': `Bearer ${token}`
+    const headers = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    // Check if POST or PUT method selected
+    let requestBody = null;
+    if (httpMethod === 'POST' || httpMethod === 'PUT') {
+        requestBody = document.getElementById('requestBody').value;
+        headers['Content-Type'] = 'application/json';
+    }
+
+    try {
+        const requestOptions = {
+            method: httpMethod,
+            headers
         };
 
-        try {
-            const response = await fetch(apiEndpoint, { headers });
-            const data = await response.json();
-
-            apiResponse.textContent = JSON.stringify(data, null, 2);
-        } catch (error) {
-            apiResponse.textContent = 'Error: ' + error.message;
+        if (requestBody) {
+            requestOptions.body = requestBody; 
         }
-    });
+
+        const response = await fetch(apiEndpoint, requestOptions);
+        const data = await response.json();
+
+        apiResponse.textContent = JSON.stringify(data, null, 2);
+    } catch (error) {
+        apiResponse.textContent = 'Error: ' + error.message;
+    }
+});
 
     //MAIL - VIEWER
     fetchEmailsButton.addEventListener('click', async function() {
