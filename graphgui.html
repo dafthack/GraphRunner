@@ -74,14 +74,14 @@
 </head>
 <body>
     <div class="container">
-        <h1>SkinGRAPHt (Microsoft Graph API GUI)</h1>
-        
-        <!-- Token Input -->
-        <label for="token">Access Token:</label>
-        <input type="text" id="token" name="token" required>
-        <hr>
+    <h1>SkinGRAPHt (Microsoft Graph API GUI)</h1>
+    
+    <!-- Token Input -->
+    <label for="token">Access Token:</label>
+    <input type="text" id="token" name="token" required>
+    <hr>
 
-        <!-- API Request Form -->
+    <!-- API Request Form -->
     <h2>Custom API Request</h2>
     <form id="apiRequestForm">
     <label for="apiEndpoint">API Endpoint:</label>
@@ -103,52 +103,56 @@
     <button type="submit">Send Request</button>
     </form>
 
-        <pre class="response" id="apiResponse"></pre>
-        <hr>
+    <pre class="response" id="apiResponse"></pre>
+    <hr>
 
-        <!-- List All Users Button -->
-        <h2>List All Users</h2>
-        <button id="listUsersButton">List Users</button>
-        <pre class="response" id="listUsersResponse"></pre>
-        <hr>
+    <!-- List All Users Button -->
+    <h2>List All Users</h2>
+    <button id="listUsersButton">List Users</button>
+    <button id="exportUsersButton">Export</button> 
+    <pre class="response" id="listUsersResponse"></pre>
+    <hr>
 
-        <!-- Email Viewer -->
-        <h2>Current User Email Viewer</h2>
-        <button id="fetchEmailsButton">Fetch Emails</button>
-        <div id="emailList"></div>
-        <div id="emailDetail"></div>
-        <hr>
+    <!-- Email Viewer -->
+    <h2>Current User Email Viewer</h2>
+    <button id="fetchEmailsButton">Fetch Emails</button>
+    <button id="exportEmailsButton">Export</button>
+    <input type="text" id="searchInput" placeholder="Search emails...">
+    <button id="searchButton">Search</button>
+    <div id="emailList"></div>
+    <div id="emailDetail"></div>
+    <hr>
 
 	<!-- Other User Email Viewer -->
-        <h2>Other User Email Viewer</h2>
-        <form id="customEmailViewerForm">
-            <label for="customUserId">User ID:</label>
-            <input type="text" id="customUserId" name="customUserId" required>
-            <br>
-            <label for="customFolder">Folder:</label>
-            <input type="text" id="customFolder" name="customFolder" value="Inbox" required>
-            <br>
-            <button type="submit">Fetch Emails</button>
-        </form>
-        <div id="customEmailList"></div>
-        <div id="customEmailDetail"></div>
-        <hr>
+    <h2>Other User Email Viewer</h2>
+    <form id="customEmailViewerForm">
+        <label for="customUserId">User ID:</label>
+        <input type="text" id="customUserId" name="customUserId" required>
+        <br>
+        <label for="customFolder">Folder:</label>
+        <input type="text" id="customFolder" name="customFolder" value="Inbox" required>
+        <br>
+        <button type="submit">Fetch Emails</button>
+    </form>
+    <div id="customEmailList"></div>
+    <div id="customEmailDetail"></div>
+    <hr>
 
-        <!-- Send Email Form -->
-        <h2>Send Email</h2>
-        <form id="sendEmailForm">
-            <label for="to">To:</label>
-            <input type="text" id="to" name="to" required>
-            <label for="subject">Subject:</label>
-            <input type="text" id="subject" name="subject" required>
-            <label for="body">Body:</label>
-            <textarea id="body" name="body" rows="4" required></textarea>
-            <label for="attachments">Attachments:</label>
-            <input type="file" id="attachments" name="attachments" multiple>
-            <button type="submit">Send Email</button>
-        </form>
-        <pre class="response" id="sendEmailResponse"></pre>
-        <hr>
+    <!-- Send Email Form -->
+    <h2>Send Email</h2>
+    <form id="sendEmailForm">
+        <label for="to">To:</label>
+        <input type="text" id="to" name="to" required>
+        <label for="subject">Subject:</label>
+        <input type="text" id="subject" name="subject" required>
+        <label for="body">Body:</label>
+        <textarea id="body" name="body" rows="4" required></textarea>
+        <label for="attachments">Attachments:</label>
+        <input type="file" id="attachments" name="attachments" multiple>
+        <button type="submit">Send Email</button>
+    </form>
+    <pre class="response" id="sendEmailResponse"></pre>
+    <hr>
 
 	<!-- Button to Fetch Teams Chats -->
 	<h2>Teams Chat</h2>
@@ -232,6 +236,31 @@
 });
 
     //MAIL - VIEWER
+    // Function to export emails to a CSV file
+    function exportEmailsToCSV(emails) {
+    const csvContent = [
+        'From,To,Subject,Date,Body'
+    ];
+
+    emails.forEach(email => {
+        const from = email.from.emailAddress.name + ' (' + email.from.emailAddress.address + ')';
+        const to = email.toRecipients.map(recipient => recipient.emailAddress.address).join(', ');
+        const subject = email.subject;
+        const date = new Date(email.sentDateTime).toLocaleString();
+        const body = email.bodyPreview;
+
+        csvContent.push(`"${from}","${to}","${subject}","${date}","${body}"`);
+    });
+
+    const csvText = csvContent.join('\n');
+    const blob = new Blob([csvText], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'emails.csv';
+    a.click();
+    }
+
+    // Fetch and display emails
     fetchEmailsButton.addEventListener('click', async function() {
         const token = tokenInput.value;
         const apiEndpoint = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages';
@@ -280,15 +309,31 @@
                     }
                 });
             });
+        // Store email data for exporting
+        window.emailsForExport = data.value;
         } catch (error) {
             emailList.innerHTML = `Error fetching emails: ${error.message}`;
         }
+        
     });
 
-    // LIST USERS
-    listUsersButton.addEventListener('click', async function() {
-        const token = tokenInput.value;
-        const apiEndpoint = 'https://graph.microsoft.com/v1.0/users';
+    // Export Emails
+    exportEmailsButton.addEventListener('click', function() {
+    if (window.emailsForExport) {
+        exportEmailsToCSV(window.emailsForExport);
+    } else {
+        alert('No email data available for export.');
+    }
+    });
+
+
+    // Search Emails
+    searchButton.addEventListener('click', async function() {
+    const token = tokenInput.value;
+    const searchInput = document.getElementById('searchInput').value.trim();
+
+    if (searchInput) {
+        const apiEndpoint = `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$search="${searchInput}"`;
 
         const headers = {
             'Authorization': `Bearer ${token}`
@@ -298,12 +343,107 @@
             const response = await fetch(apiEndpoint, { headers });
             const data = await response.json();
 
-            // Display userPrincipalName fields only
-            const userPrincipalNames = data.value.map(user => user.userPrincipalName);
-            listUsersResponse.textContent = userPrincipalNames.join('\n');
+            // Store search results for exporting
+            window.emailsForExport = data.value;
+
+            // Call displayEmails with search results and headers
+            displayEmails(data.value, headers);
         } catch (error) {
-            listUsersResponse.textContent = 'Error: ' + error.message;
+            emailList.innerHTML = `Error searching emails: ${error.message}`;
         }
+    } else {
+        alert('Please enter a search term.');
+    }
+    });
+
+
+    // Function to search display emails
+    function displayEmails(emails, headers) {
+    emailList.innerHTML = '';
+
+    emails.forEach(email => {
+        const emailSummary = `
+            <div class="email-summary" data-id="${email.id}">
+                <strong>From:</strong> ${email.from.emailAddress.name} (${email.from.emailAddress.address})<br>
+                <strong>Subject:</strong> ${email.subject}<br>
+                <strong>Date:</strong> ${new Date(email.sentDateTime).toLocaleString()}<br>
+                <strong>Preview:</strong> ${email.bodyPreview}<br>
+            </div>
+            <hr>
+        `;
+        emailList.innerHTML += emailSummary;
+    });
+
+    // Add event listener for email summaries
+    const emailSummaries = document.querySelectorAll('.email-summary');
+    emailSummaries.forEach(emailSummary => {
+        emailSummary.addEventListener('click', async () => {
+            const emailId = emailSummary.getAttribute('data-id');
+            const emailDetailEndpoint = `https://graph.microsoft.com/v1.0/me/messages/${emailId}`;
+            try {
+                const emailDetailResponse = await fetch(emailDetailEndpoint, { headers });
+                const emailDetailData = await emailDetailResponse.json();
+
+                emailDetail.innerHTML = `
+                    <h3>Email Details</h3>
+                    <strong>From:</strong> ${emailDetailData.from.emailAddress.name} (${emailDetailData.from.emailAddress.address})<br>
+                    <strong>Subject:</strong> ${emailDetailData.subject}<br>
+                    <strong>Date:</strong> ${new Date(emailDetailData.sentDateTime).toLocaleString()}<br>
+                    <strong>Body:</strong> ${emailDetailData.body.content}
+                `;
+            } catch (error) {
+                emailDetail.innerHTML = `Error fetching email details: ${error.message}`;
+            }
+        });
+    });
+    }
+        
+
+
+
+    // LIST USERS
+    // Function to export users to a text file
+    function exportUsersToFile(users) {
+    const userText = users.join('\n');
+
+    const blob = new Blob([userText], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'users.txt';
+    a.click();
+    }
+
+    // List Users
+    listUsersButton.addEventListener('click', async function() {
+    const token = tokenInput.value;
+    const apiEndpoint = 'https://graph.microsoft.com/v1.0/users';
+
+    const headers = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const response = await fetch(apiEndpoint, { headers });
+        const data = await response.json();
+
+        // Display userPrincipalName fields only
+        const userPrincipalNames = data.value.map(user => user.userPrincipalName);
+        listUsersResponse.textContent = userPrincipalNames.join('\n');
+
+        // Store userPrincipalNames for exporting
+        window.userPrincipalNamesForExport = userPrincipalNames;
+    } catch (error) {
+        listUsersResponse.textContent = 'Error: ' + error.message;
+    }
+    });
+
+    // Export Users
+    exportUsersButton.addEventListener('click', function() {
+    if (window.userPrincipalNamesForExport) {
+        exportUsersToFile(window.userPrincipalNamesForExport);
+    } else {
+        alert('No user data available for export.');
+    }
     });
 
     // MAIL - CUSTOM EMAIL VIEWER
