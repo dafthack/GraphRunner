@@ -114,7 +114,7 @@
     <hr>
 
     <!-- Email Viewer -->
-    <h2>Current User Email Viewer</h2>
+    <h2>Email Viewer (Current User)</h2>
     <button id="fetchEmailsButton">Fetch Emails</button>
     <button id="exportEmailsButton">Export</button>
     <input type="text" id="searchInput" placeholder="Search emails...">
@@ -124,7 +124,7 @@
     <hr>
 
 	<!-- Other User Email Viewer -->
-    <h2>Other User Email Viewer</h2>
+    <h2>Email Viewer (Other Users)</h2>
     <form id="customEmailViewerForm">
         <label for="customUserId">User ID:</label>
         <input type="text" id="customUserId" name="customUserId" required>
@@ -167,22 +167,30 @@
     <hr>
 
     <!-- List Public Teams Chats -->
-    <h2>Public Teams Chats</h2>
+    <h2>Public Teams Chat</h2>
     <button id="listPublicChatsButton">List Public Chats</button>
     <div id="publicChatList"></div>
     <hr>
 
 
     <!-- List OneDrive Files and Folders -->
-    <h2>OneDrive Files and Folders</h2>
+    <h2>OneDrive</h2>
     <button id="listFilesButton">List Files</button>
     <div id="fileList"></div>
     <!-- Chat Messages -->
     <div id="publicChatMessages"></div>
     <hr>
+    
+
+    <!-- List SharePoint Files and Folders -->
+    <h2>SharePoint</h2>
+    <button id="listDrivesButton">List SharePoint Drives</button>
+    <div id="driveList"></div>
+    <div id="sharePointfileList"></div>
     <hr>
 
     </div>
+
 
 
  <script>
@@ -912,7 +920,172 @@ async function fetchAndDisplayFolderContents(folderId, headers) {
     }
 }
 
+// SHAREPOINT
+const listDrivesButton = document.getElementById('listDrivesButton');
+listDrivesButton.addEventListener('click', listSharePointDrives);
 
+async function listSharePointDrives() {
+    const token = tokenInput.value;
+    
+    // Step 1: Get the root SharePoint site
+    const siteApiEndpoint = 'https://graph.microsoft.com/v1.0/sites/root';
+
+    const siteHeaders = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const siteResponse = await fetch(siteApiEndpoint, { headers: siteHeaders });
+        const siteData = await siteResponse.json();
+
+        const siteId = siteData.id;
+
+        // Step 2: Get drives associated with the root SharePoint site
+        const drivesApiEndpoint = `https://graph.microsoft.com/v1.0/sites/${siteId}/drives`;
+
+        const drivesHeaders = {
+            'Authorization': `Bearer ${token}`
+        };
+
+        const drivesResponse = await fetch(drivesApiEndpoint, { headers: drivesHeaders });
+        const drivesData = await drivesResponse.json();
+
+        const driveList = document.getElementById('driveList');
+        driveList.innerHTML = '';
+
+        drivesData.value.forEach(drive => {
+            const driveSummary = `
+        <div class="drive-summary" data-drive-id="${drive.id}">
+            <strong>Drive Name:</strong> ${drive.name}<br>
+            <strong>Drive Type:</strong> ${drive.driveType}<br>
+            <strong>Drive ID:</strong> ${drive.id}<br>
+        </div>
+        <hr>
+    `;
+    driveList.innerHTML += driveSummary;
+        });
+        // Event Listener for drive summaries
+        const driveSummaries = document.querySelectorAll('.drive-summary');
+        driveSummaries.forEach(driveSummary => {
+        driveSummary.addEventListener('click', async () => {
+            const driveId = driveSummary.getAttribute('data-drive-id');
+            await listDriveContents(driveId, token);
+        });
+    });
+    } catch (error) {
+        driveList.innerHTML = `Error fetching SharePoint drives: ${error.message}`;
+    }
+}
+
+async function listDriveContents(driveId, token) {
+    const driveContentsApiEndpoint = `https://graph.microsoft.com/v1.0/drives/${driveId}/root/children`;
+
+    const driveContentsHeaders = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const driveContentsResponse = await fetch(driveContentsApiEndpoint, { headers: driveContentsHeaders });
+        const driveContentsData = await driveContentsResponse.json();
+
+        const sharePointfileListContainer = document.getElementById('sharePointfileList');
+        sharePointfileListContainer.innerHTML = '';
+
+        driveContentsData.value.forEach(item => {
+            const itemSummary = `
+                <div class="item-summary" data-item-id="${item.id}" data-item-type="${item.folder ? 'folder' : 'file'}">
+                    <strong>Name:</strong> ${item.name}<br>
+                    <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
+                    <strong>Type:</strong> ${item.folder ? 'Folder' : 'File'}<br>
+                    ${item.folder ? `<a href="#" class="folder-link" data-folder-id="${item.id}">Open Folder</a>` : `<a href="${item['@microsoft.graph.downloadUrl']}" class="sharepoint-download-link">Download</a>`}
+                </div>
+                <hr>
+            `;
+            sharePointfileListContainer.innerHTML += itemSummary;
+        });
+
+        // Event listener to file links
+        const sharePointDownloadLinks = document.querySelectorAll('.sharepoint-download-link');
+        sharePointDownloadLinks.forEach(link => {
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const downloadUrl = link.getAttribute('href');
+                await downloadSharePointFile(downloadUrl);
+            });
+        });
+
+        const spfolderLinks = document.querySelectorAll('.folder-link');
+        spfolderLinks.forEach(link => {
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const folderId = link.getAttribute('data-folder-id');
+                await fetchAndDisplaySharePointFolderContents(driveId, folderId, token, sharePointfileListContainer); // Pass sharePointfileListContainer
+            });
+        });
+    } catch (error) {
+        sharePointfileListContainer.innerHTML = `Error fetching drive contents: ${error.message}`;
+    }
+}
+
+// Function to fetch and display folder contents within SharePoint drive
+async function fetchAndDisplaySharePointFolderContents(driveId, folderId, token, container) {
+    const folderContentsUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderId}/children`;
+
+    const folderContentsHeaders = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const response = await fetch(folderContentsUrl, { headers: folderContentsHeaders });
+        const data = await response.json();
+
+        const sharePointfileListContainer = document.getElementById('sharePointfileList');
+        data.value.forEach(item => {
+            const itemSummary = `
+                <div class="item-summary" data-item-id="${item.id}" data-item-type="${item.folder ? 'folder' : 'file'}">
+                    <strong>Name:</strong> ${item.name}<br>
+                    <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
+                    <strong>Type:</strong> ${item.folder ? 'Folder' : 'File'}<br>
+                    ${item.folder ? `<a href="#" class="folder-link" data-folder-id="${item.id}" onclick="openSharePointFolder(event, '${driveId}', '${item.id}', token)">Open Folder</a>` : `<a href="${item['@microsoft.graph.downloadUrl']}" class="sharepoint-download-link">Download</a>`}
+                </div>
+                <hr>
+            `;
+            sharePointfileListContainer.innerHTML += itemSummary;
+        });
+
+        // Event listener to folder links
+        const spFolderLinks = document.querySelectorAll('.folder-link');
+        spFolderLinks.forEach(link => {
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const driveId = link.parentElement.getAttribute('data-drive-id');
+                const folderId = link.getAttribute('data-folder-id');
+                await fetchAndDisplaySharePointFolderContents(driveId, folderId, token);
+            });
+        });
+    } catch (error) {
+        container.innerHTML = `Error fetching folder contents: ${error.message}`; 
+    }
+}
+
+async function downloadSharePointFile(downloadUrl) {
+    try {
+        const response = await fetch(downloadUrl);
+        const blob = await response.blob();
+
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'downloadedFile';
+        a.click();
+    } catch (error) {
+        sharePointfileList.innerHTML = `Error downloading file: ${error.message}`;
+    }
+}
+
+function openSharePointFolder(event, driveId, folderId, token) {
+    event.preventDefault();
+    fetchAndDisplaySharePointFolderContents(driveId, folderId);
+}
 
 
 // Function to read a file and convert it to base64
@@ -926,7 +1099,6 @@ function readFileAsBase64(file) {
         reader.readAsDataURL(file);
     });
 }
-
 
 </script>
 </body>
