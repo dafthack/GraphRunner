@@ -6,28 +6,36 @@
     <title>SkinGRAPHt (Microsoft Graph API GUI)</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: Courier, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f4f4f4;
-            color: #333;
+            background-color: #303030;
+            color: #ffffff;
         }
         .container {
-            max-width: 800px;
+            max-width: 1000px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #fff;
+            background-color: #505050;
             box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
         }
         h1 {
             text-align: center;
             margin-bottom: 20px;
-            color: #007bff;
+            color: #00FF00;
         }
         label {
             font-weight: bold;
         }
-        input[type="text"],
+        input[type="text"]{
+            padding: 8px;
+            font-size: 14px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            width: 100%; 
+            max-width: 400px; 
+        }
         input[type="submit"],
         textarea,
         select {
@@ -42,34 +50,300 @@
         }
         button {
             padding: 10px 20px;
-            background-color: #007bff;
-            color: #fff;
+            background-color: #00FF00;
+            color: #000;
             border: none;
             border-radius: 4px;
             cursor: pointer;
         }
         button:hover {
-            background-color: #0056b3;
+            background-color: #64E986;
         }
         .response {
             border: 1px solid #ccc;
-            padding: 10px;
+            padding: 4px;
             border-radius: 4px;
-            background-color: #f9f9f9;
+            background-color: #303030;
             white-space: pre-wrap;
         }
-        .email-summary {
-            cursor: pointer;
-            padding: 10px;
-            border: 1px solid #ccc;
-            margin-bottom: 10px;
-            background-color: #f9f9f9;
-            border-radius: 4px;
-        }
-        .email-summary:hover {
-            background-color: #fff;
-            box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.1);
-        }
+.item-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.item-card {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 10px;
+  width: 200px;
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.item-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.item-thumbnail {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.item-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin: 8px 0;
+}
+
+.item-description {
+  font-size: 14px;
+  color: #666;
+}
+
+.item-action {
+  display: inline-block;
+  padding: 6px 12px;
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 14px;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.item-action:hover {
+  background-color: #0056b3;
+}
+/* Email Viewer Styles */
+.email-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.search-input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 0px;
+    font-size: 14px;
+    margin-right: 10px;
+    max-width: 40%;
+}
+
+.search-button {
+    padding: 10px 20px;
+    background-color: #00FF00;
+    color: #000;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.search-button:hover {
+    background-color: #0056b3;
+}
+
+.email-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(600px, 1fr));
+    gap: 8px;
+}
+
+.email-summary {
+    padding: 10px;
+    border: 1px solid #ccc;
+    background-color: #303030;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.email-summary:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.email-detail {
+    margin-top: 20px;
+    padding: 4px;
+    border: 1px solid #ccc;
+    background-color: #dddddd;
+    border-radius: 4px;
+    color: #000000;
+}
+
+.email-detail h3 {
+    margin-bottom: 10px;
+    color: #000000;
+}
+
+.email-detail strong {
+    font-weight: bold;
+}
+
+.email-detail p {
+    margin: 10px 0;
+    font-size: 14px;
+    color: #FFFFFF;
+}
+
+.email-detail a {
+    color: #00ff00;
+    text-decoration: none;
+    transition: color 0.2s ease-in-out;
+}
+
+.email-detail a:hover {
+    color: #0056b3;
+}
+select#httpMethod {
+    padding: 8px;
+    font-size: 14px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    width: 100%; 
+    max-width: 80px; 
+}
+#chatViewer {
+    margin-bottom: 20px;
+}
+
+.chat-summary {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 10px;
+    width: 100%;
+    background-color: #303030;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    cursor: pointer;
+    margin-bottom: 10px;
+}
+
+.chat-summary:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+#chatMessages {
+    border: 1px solid #ccc;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    margin-top: 20px;
+    color: #000000;
+}
+.message {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.message-header {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.message-content {
+    margin-top: 5px;
+}
+
+/* Style for image attachments */
+.message-content img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-top: 5px;
+}
+
+/* Style for file links */
+.message-content a {
+    color: #007bff;
+    text-decoration: none;
+    transition: color 0.2s ease-in-out;
+}
+
+.message-content a:hover {
+    color: #0056b3;
+}
+ .file-card {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .file-name {
+    font-weight: bold;
+    color: #333;
+  }
+
+  .file-details {
+    margin-top: 5px;
+    font-size: 14px;
+    color: #666;
+  }
+
+  .file-link {
+    color: #007bff;
+    text-decoration: none;
+  }
+  .item-name {
+    font-weight: bold;
+    color: #333;
+  }
+
+  .item-details {
+    margin-top: 5px;
+    font-size: 14px;
+    color: #666;
+  }
+  .sharepoint-drive-summary {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 10px;
+    width: 100%;
+    background-color: #303030;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    cursor: pointer;
+    margin-bottom: 10px;
+}
+
+.sharepoint-drive-summary:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+.sharepoint-item-summary {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 10px;
+    width: 100%;
+    background-color: #303030;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    cursor: pointer;
+    margin-bottom: 10px;
+}
+
+.sharepoint-item-summary:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
     </style>
 </head>
 <body>
@@ -117,21 +391,27 @@
     <h2>Email Viewer (Current User)</h2>
     <button id="fetchEmailsButton">Fetch Emails</button>
     <button id="exportEmailsButton">Export</button>
-    <input type="text" id="searchInput" placeholder="Search emails...">
-    <button id="searchButton">Search</button>
-    <div id="emailList"></div>
-    <div id="emailDetail"></div>
+    <button id="searchButton" class="search-button">Search</button>
+    <br></br>
+    <div class="email-controls">
+    <input type="text" id="searchInput" class="search-input" placeholder="Search emails...">
+    
+    </div>
+    <div class="email-list" id="emailList"></div>
+    <div class="email-detail" id="emailDetail"></div>
     <hr>
 
 	<!-- Other User Email Viewer -->
     <h2>Email Viewer (Other Users)</h2>
     <form id="customEmailViewerForm">
         <label for="customUserId">User ID:</label>
+        <br>
         <input type="text" id="customUserId" name="customUserId" required>
-        <br>
+        <br></br>
         <label for="customFolder">Folder:</label>
-        <input type="text" id="customFolder" name="customFolder" value="Inbox" required>
         <br>
+        <input type="text" id="customFolder" name="customFolder" value="Inbox" required>
+        <br></br>
         <button type="submit">Fetch Emails</button>
     </form>
     <div id="customEmailList"></div>
@@ -156,20 +436,26 @@
 
 	<!-- Button to Fetch Teams Chats -->
 	<h2>Teams Chat</h2>
-	<button id="fetchChatsButton">Fetch Teams Chats</button>
-	<div id="chatList"></div>
-	<!-- Chat Messages -->
-	<div id="chatMessages"></div>
-    <hr>
+	<div id="chatViewer">
+    <!-- Fetch Chats Button -->
+    <button id="fetchChatsButton">Fetch Teams Chats</button>
+    <!-- Chat List -->
+    <div id="chatList" class="item-list"></div>
+    <!-- Chat Messages -->
+    <div id="chatMessages" class="item-list"></div>
+    <!-- Send Message Form -->
     <h3>Send Message</h3>
     <input type="text" id="messageTextBox" placeholder="Type your message...">
     <button id="sendMessageButton">Send Message</button>
+    </div>
     <hr>
 
     <!-- List Public Teams Chats -->
     <h2>Public Teams Chat</h2>
     <button id="listPublicChatsButton">List Public Chats</button>
     <div id="publicChatList"></div>
+    <!-- Chat Messages -->
+    <div id="publicChatMessages"></div>
     <hr>
 
 
@@ -177,8 +463,6 @@
     <h2>OneDrive</h2>
     <button id="listFilesButton">List Files</button>
     <div id="fileList"></div>
-    <!-- Chat Messages -->
-    <div id="publicChatMessages"></div>
     <hr>
     
 
@@ -377,7 +661,6 @@
                 <strong>Date:</strong> ${new Date(email.sentDateTime).toLocaleString()}<br>
                 <strong>Preview:</strong> ${email.bodyPreview}<br>
             </div>
-            <hr>
         `;
         emailList.innerHTML += emailSummary;
     });
@@ -611,9 +894,8 @@ async function listChats() {
         data.value.forEach(chat => {
             const chatSummary = `
                 <div class="chat-summary" data-id="${chat.id}">
-                    <strong>Teams Chat Conversation:</strong> ${chat.lastUpdatedDateTime} (${chat.lastUpdatedDateTime})<br>
+                    <strong>Teams Chat Conversation:</strong> ${chat.lastUpdatedDateTime}
                 </div>
-                <hr>
             `;
             chatList.innerHTML += chatSummary;
         });
@@ -644,25 +926,74 @@ async function fetchAndDisplayChatMessages(chatId, headers) {
         const chatMessages = document.getElementById('chatMessages');
         chatMessages.innerHTML = '';
 
-        data.value.forEach(message => {
+        // Reverse the order of messages to display the latest message at the bottom
+        const reversedMessages = data.value.reverse();
+
+        for (const message of reversedMessages) {
             const senderDisplayName = message.from && message.from.user && message.from.user.displayName ? message.from.user.displayName : "Unknown User";
             const senderUserId = message.from && message.from.user && message.from.user.id ? message.from.user.id : "Unknown ID";
-            const messageContent = message.body && message.body.content ? message.body.content : "No content available";
             const createdDateTime = new Date(message.createdDateTime).toLocaleString();
 
+            let messageContent = '';
+
+            if (message.body && message.body.contentType === 'html') {
+                messageContent = message.body.content;
+                const imageUrls = extractImageUrls(messageContent);
+
+                // Display extracted images
+                for (const imageUrl of imageUrls) {
+                    const imageData = await fetch(imageUrl, { headers });
+                    if (imageData.ok) {
+                        const imageBlob = await imageData.blob();
+                        const imageUrlObject = URL.createObjectURL(imageBlob);
+                        messageContent += `<br><img src="${imageUrlObject}" alt="Image" style="max-width: 100%; height: auto;"><br>`;
+                    }
+                }
+            } else if (message.body && message.body.content) {
+                messageContent = message.body.content;
+            }
+
+            const attachments = message.attachments || [];
+            attachments.forEach(attachment => {
+                if (attachment.contentType === 'image/png' || attachment.contentType === 'image/jpeg') {
+                    // Display image attachment
+                    const imageSrc = attachment.contentUrl;
+                    messageContent += `<br><img class="message-image" src="${imageSrc}" alt="Attachment">`;
+                } else {
+                    // Display other file attachment
+                    const fileSrc = attachment.contentUrl;
+                    const fileName = attachment.name;
+                    messageContent += `<br><a href="${fileSrc}" target="_blank">${fileName}</a>`;
+                }
+            });
+
             const messageDetail = `
-                <div>
-                    <strong>From:</strong> ${senderDisplayName} (${senderUserId})<br>
-                    <strong>Message:</strong> ${messageContent}<br>
-                    <strong>Created:</strong> ${createdDateTime}<br>
+                <div class="message">
+                    <div class="message-header">
+                        <strong>${senderDisplayName} (${senderUserId})</strong> - ${createdDateTime}
+                    </div>
+                    <div class="message-content">
+                        ${messageContent}
+                    </div>
                 </div>
                 <hr>
             `;
             chatMessages.innerHTML += messageDetail;
-        });
+        }
     } catch (error) {
         chatMessages.innerHTML = `Error fetching chat messages: ${error.message}`;
     }
+}
+
+function extractImageUrls(htmlContent) {
+    const imageUrls = [];
+    const imageRegex = /<img[^>]+src="([^">]+)"/g;
+    let match = imageRegex.exec(htmlContent);
+    while (match !== null) {
+        imageUrls.push(match[1]);
+        match = imageRegex.exec(htmlContent);
+    }
+    return imageUrls;
 }
 
 // TEAMS - Send Message Functionality
@@ -820,41 +1151,45 @@ listFilesButton.addEventListener('click', async function () {
         const data = await response.json();
 
         fileList.innerHTML = '';
+
         data.value.forEach(file => {
-            const fileSummary = `
-                <div class="file-summary" data-id="${file.id}" data-type="${file.file ? 'file' : 'folder'}">
-                    <strong>Name:</strong> ${file.name}<br>
-                    <strong>Size:</strong> ${file.size ? `${file.size} bytes` : 'N/A'}<br>
-                    <strong>Type:</strong> ${file.file ? 'File' : 'Folder'}<br>
-                    ${file.file ? `<a href="#" class="download-link">Download</a>` : `<a href="#" class="folder-link">Open Folder</a>`}<br>
-                </div>
-                <hr>
+            const fileCard = document.createElement('div');
+            fileCard.classList.add('file-card');
+
+            const fileName = document.createElement('div');
+            fileName.classList.add('file-name');
+            fileName.textContent = file.name;
+            fileCard.appendChild(fileName);
+
+            const fileDetails = document.createElement('div');
+            fileDetails.classList.add('file-details');
+            fileDetails.innerHTML = `
+                <p>Size: ${file.size ? `${file.size} bytes` : 'N/A'}</p>
+                <p>Type: ${file.file ? 'File' : 'Folder'}</p>
+                <a href="#" class="${file.file ? 'download-link' : 'folder-link'}" data-id="${file.id}">
+                    ${file.file ? 'Download' : 'Open Folder'}
+                </a>
             `;
-            fileList.innerHTML += fileSummary;
-        });
+            fileCard.appendChild(fileDetails);
 
-        // Add event listener to file and folder links
-        const downloadLinks = document.querySelectorAll('.download-link');
-        downloadLinks.forEach(link => {
+            fileList.appendChild(fileCard);
+
+            const link = fileDetails.querySelector('.download-link, .folder-link');
             link.addEventListener('click', async (event) => {
                 event.preventDefault();
-                const fileId = link.parentElement.getAttribute('data-id');
-                await downloadFile(fileId, headers);
-            });
-        });
-
-        const folderLinks = document.querySelectorAll('.folder-link');
-        folderLinks.forEach(link => {
-            link.addEventListener('click', async (event) => {
-                event.preventDefault();
-                const folderId = link.parentElement.getAttribute('data-id');
-                await fetchAndDisplayFolderContents(folderId, headers);
+                const itemId = link.getAttribute('data-id');
+                if (file.file) {
+                    await downloadFile(itemId, headers);
+                } else {
+                    await fetchAndDisplayFolderContents(itemId, headers);
+                }
             });
         });
     } catch (error) {
         fileList.innerHTML = `Error fetching files and folders: ${error.message}`;
     }
 });
+
 
 // ONEDRIVE - Function to download a file
 async function downloadFile(fileId, headers) {
@@ -885,34 +1220,36 @@ async function fetchAndDisplayFolderContents(folderId, headers) {
 
         fileList.innerHTML = '';
         data.value.forEach(item => {
-            const itemSummary = `
-                <div class="file-summary" data-id="${item.id}" data-type="${item.file ? 'file' : 'folder'}">
-                    <strong>Name:</strong> ${item.name}<br>
-                    <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
-                    <strong>Type:</strong> ${item.file ? 'File' : 'Folder'}<br>
-                    ${item.file ? `<a href="#" class="download-link">Download</a>` : `<a href="#" class="folder-link">Open Folder</a>`}<br>
-                </div>
-                <hr>
+            const fileCard = document.createElement('div');
+            fileCard.classList.add('file-card');
+
+            const itemName = document.createElement('div');
+            itemName.classList.add('item-name');
+            itemName.textContent = item.name;
+            fileCard.appendChild(itemName);
+
+            const itemDetails = document.createElement('div');
+            itemDetails.classList.add('item-details');
+            itemDetails.innerHTML = `
+                <p>Size: ${item.size ? `${item.size} bytes` : 'N/A'}</p>
+                <p>Type: ${item.file ? 'File' : 'Folder'}</p>
+                <a href="#" class="${item.file ? 'download-link' : 'folder-link'}" data-id="${item.id}">
+                    ${item.file ? 'Download' : 'Open Folder'}
+                </a>
             `;
-            fileList.innerHTML += itemSummary;
-        });
+            fileCard.appendChild(itemDetails);
 
-        // Add event listener to file and folder links
-        const downloadLinks = document.querySelectorAll('.download-link');
-        downloadLinks.forEach(link => {
+            fileList.appendChild(fileCard);
+
+            const link = itemDetails.querySelector('.download-link, .folder-link');
             link.addEventListener('click', async (event) => {
                 event.preventDefault();
-                const fileId = link.parentElement.getAttribute('data-id');
-                await downloadFile(fileId, headers);
-            });
-        });
-
-        const folderLinks = document.querySelectorAll('.folder-link');
-        folderLinks.forEach(link => {
-            link.addEventListener('click', async (event) => {
-                event.preventDefault();
-                const itemId = link.parentElement.getAttribute('data-id');
-                await fetchAndDisplayFolderContents(itemId, headers);
+                const itemId = link.getAttribute('data-id');
+                if (item.file) {
+                    await downloadFile(itemId, headers);
+                } else {
+                    await fetchAndDisplayFolderContents(itemId, headers);
+                }
             });
         });
     } catch (error) {
@@ -955,23 +1292,23 @@ async function listSharePointDrives() {
 
         drivesData.value.forEach(drive => {
             const driveSummary = `
-        <div class="drive-summary" data-drive-id="${drive.id}">
-            <strong>Drive Name:</strong> ${drive.name}<br>
-            <strong>Drive Type:</strong> ${drive.driveType}<br>
-            <strong>Drive ID:</strong> ${drive.id}<br>
-        </div>
-        <hr>
-    `;
-    driveList.innerHTML += driveSummary;
+                <div class="sharepoint-drive-summary" data-drive-id="${drive.id}">
+                    <strong>Drive Name:</strong> ${drive.name}<br>
+                    <strong>Drive Type:</strong> ${drive.driveType}<br>
+                    <strong>Drive ID:</strong> ${drive.id}<br>
+                </div>
+                <hr>
+            `;
+            driveList.innerHTML += driveSummary;
         });
-        // Event Listener for drive summaries
-        const driveSummaries = document.querySelectorAll('.drive-summary');
+
+        const driveSummaries = document.querySelectorAll('.sharepoint-drive-summary');
         driveSummaries.forEach(driveSummary => {
-        driveSummary.addEventListener('click', async () => {
-            const driveId = driveSummary.getAttribute('data-drive-id');
-            await listDriveContents(driveId, token);
+            driveSummary.addEventListener('click', async () => {
+                const driveId = driveSummary.getAttribute('data-drive-id');
+                await listDriveContents(driveId, token);
+            });
         });
-    });
     } catch (error) {
         driveList.innerHTML = `Error fetching SharePoint drives: ${error.message}`;
     }
@@ -993,7 +1330,7 @@ async function listDriveContents(driveId, token) {
 
         driveContentsData.value.forEach(item => {
             const itemSummary = `
-                <div class="item-summary" data-item-id="${item.id}" data-item-type="${item.folder ? 'folder' : 'file'}">
+                <div class="sharepoint-item-summary" data-item-id="${item.id}" data-item-type="${item.folder ? 'folder' : 'file'}">
                     <strong>Name:</strong> ${item.name}<br>
                     <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
                     <strong>Type:</strong> ${item.folder ? 'Folder' : 'File'}<br>
