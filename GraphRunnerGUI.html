@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SkinGRAPHt (Microsoft Graph API GUI)</title>
+    <title>GraphRunner</title>
     <style>
         body {
             font-family: Courier, sans-serif;
@@ -22,7 +22,12 @@
         h1 {
             text-align: center;
             margin-bottom: 20px;
-            color: #00FF00;
+            color: #C9DFEC;
+        }
+        h3 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #C9DFEC;
         }
         label {
             font-weight: bold;
@@ -50,14 +55,14 @@
         }
         button {
             padding: 10px 20px;
-            background-color: #00FF00;
+            background-color: #357EC7;
             color: #000;
             border: none;
             border-radius: 4px;
             cursor: pointer;
         }
         button:hover {
-            background-color: #64E986;
+            background-color: #B4CFEC;
         }
         .response {
             border: 1px solid #ccc;
@@ -139,7 +144,7 @@
 
 .search-button {
     padding: 10px 20px;
-    background-color: #00FF00;
+    background-color: #357EC7;
     color: #000;
     border: none;
     border-radius: 4px;
@@ -147,7 +152,7 @@
 }
 
 .search-button:hover {
-    background-color: #0056b3;
+    background-color: #B4CFEC;
 }
 
 .email-list {
@@ -195,7 +200,7 @@
 }
 
 .email-detail a {
-    color: #00ff00;
+    color: #B0E0E6;
     text-decoration: none;
     transition: color 0.2s ease-in-out;
 }
@@ -348,8 +353,8 @@ select#httpMethod {
 </head>
 <body>
     <div class="container">
-    <h1>SkinGRAPHt (Microsoft Graph API GUI)</h1>
-    
+    <h1>GraphRunner</h1>
+    <h3>A GUI for the Microsoft Graph API</h3>
     <!-- Token Input -->
     <label for="token">Access Token:</label>
     <input type="text" id="token" name="token" required>
