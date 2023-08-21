@@ -22,12 +22,12 @@
         h1 {
             text-align: center;
             margin-bottom: 20px;
-            color: #C9DFEC;
+            color: #FFFFFF;
         }
         h3 {
             text-align: center;
             margin-bottom: 20px;
-            color: #C9DFEC;
+            color: #FFFFFF;
         }
         label {
             font-weight: bold;
@@ -358,6 +358,10 @@ select#httpMethod {
     <!-- Token Input -->
     <label for="token">Access Token:</label>
     <input type="text" id="token" name="token" required>
+    <button id="parseTokenButton">Parse Token</button>
+    <pre class="response" id="jwtFields"></pre>
+    
+
     <hr>
 
     <!-- API Request Form -->
@@ -386,7 +390,7 @@ select#httpMethod {
     <hr>
 
     <!-- List All Users Button -->
-    <h2>List All Users</h2>
+    <h2>Directory</h2>
     <button id="listUsersButton">List Users</button>
     <button id="exportUsersButton">Export</button> 
     <pre class="response" id="listUsersResponse"></pre>
@@ -406,7 +410,7 @@ select#httpMethod {
     <div class="email-detail" id="emailDetail"></div>
     <hr>
 
-	<!-- Other User Email Viewer -->
+    <!-- Other User Email Viewer -->
     <h2>Email Viewer (Other Users)</h2>
     <form id="customEmailViewerForm">
         <label for="customUserId">User ID:</label>
@@ -439,9 +443,9 @@ select#httpMethod {
     <pre class="response" id="sendEmailResponse"></pre>
     <hr>
 
-	<!-- Button to Fetch Teams Chats -->
-	<h2>Teams Chat</h2>
-	<div id="chatViewer">
+    <!-- Button to Fetch Teams Chats -->
+    <h2>Teams Chat Viewer (Direct Messages and Group Chat)</h2>
+    <div id="chatViewer">
     <!-- Fetch Chats Button -->
     <button id="fetchChatsButton">Fetch Teams Chats</button>
     <!-- Chat List -->
@@ -449,14 +453,14 @@ select#httpMethod {
     <!-- Chat Messages -->
     <div id="chatMessages" class="item-list"></div>
     <!-- Send Message Form -->
-    <h3>Send Message</h3>
+    <h4>Send Message to Teams Chat:</h4>
     <input type="text" id="messageTextBox" placeholder="Type your message...">
     <button id="sendMessageButton">Send Message</button>
     </div>
     <hr>
 
     <!-- List Public Teams Chats -->
-    <h2>Public Teams Chat</h2>
+    <h2>Teams Chat Viewer (Org Teams)</h2>
     <button id="listPublicChatsButton">List Public Chats</button>
     <div id="publicChatList"></div>
     <!-- Chat Messages -->
@@ -465,11 +469,17 @@ select#httpMethod {
 
 
     <!-- List OneDrive Files and Folders -->
-    <h2>OneDrive</h2>
+    <h2>OneDrive My Files</h2>
     <button id="listFilesButton">List Files</button>
     <div id="fileList"></div>
     <hr>
     
+    <!-- List OneDrive Shared Files -->
+    <h2>OneDrive Shared Files</h2>
+    <button id="listSharedFilesButton">List Shared Files</button>
+    <div id="sharedFileList"></div>
+    <hr>
+
 
     <!-- List SharePoint Files and Folders -->
     <h2>SharePoint</h2>
@@ -712,18 +722,12 @@ select#httpMethod {
     // List Users
     listUsersButton.addEventListener('click', async function() {
     const token = tokenInput.value;
-    const apiEndpoint = 'https://graph.microsoft.com/v1.0/users';
-
-    const headers = {
-        'Authorization': `Bearer ${token}`
-    };
 
     try {
-        const response = await fetch(apiEndpoint, { headers });
-        const data = await response.json();
-
+        const allUsers = await fetchAllUsers(token);
+        
         // Display userPrincipalName fields only
-        const userPrincipalNames = data.value.map(user => user.userPrincipalName);
+        const userPrincipalNames = allUsers.map(user => user.userPrincipalName);
         listUsersResponse.textContent = userPrincipalNames.join('\n');
 
         // Store userPrincipalNames for exporting
@@ -731,7 +735,34 @@ select#httpMethod {
     } catch (error) {
         listUsersResponse.textContent = 'Error: ' + error.message;
     }
-    });
+});
+
+    // Function to fetch all users using pagination
+    async function fetchAllUsers(token) {
+    const initialUrl = 'https://graph.microsoft.com/v1.0/users';
+
+    let allUsers = [];
+
+    let url = initialUrl;
+
+    while (url) {
+        const response = await fetch(url, {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.value) {
+            allUsers = allUsers.concat(data.value);
+        }
+
+        url = data['@odata.nextLink'];
+    }
+
+    return allUsers;
+}
 
     // Export Users
     exportUsersButton.addEventListener('click', function() {
@@ -1262,6 +1293,59 @@ async function fetchAndDisplayFolderContents(folderId, headers) {
     }
 }
 
+// ONEDRIVE SHARED FILES
+const listSharedFilesButton = document.getElementById('listSharedFilesButton');
+const sharedFileList = document.getElementById('sharedFileList');
+
+listSharedFilesButton.addEventListener('click', async function () {
+    const token = tokenInput.value;
+    const sharedFilesEndpoint = 'https://graph.microsoft.com/v1.0/me/drive/sharedWithMe';
+
+    const headers = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const response = await fetch(sharedFilesEndpoint, { headers });
+        const data = await response.json();
+
+        sharedFileList.innerHTML = '';
+
+        data.value.forEach(file => {
+            const fileCard = document.createElement('div');
+            fileCard.classList.add('file-card');
+
+            const fileName = document.createElement('div');
+            fileName.classList.add('file-name');
+            fileName.textContent = file.name;
+            fileCard.appendChild(fileName);
+
+            const fileDetails = document.createElement('div');
+            fileDetails.classList.add('file-details');
+            fileDetails.innerHTML = `
+                <p>Size: ${file.size ? `${file.size} bytes` : 'N/A'}</p>
+                <p>Type: ${file.file ? 'File' : 'Folder'}</p>
+                ${file.file ? `<a href="#" class="download-link" data-id="${file.id}">Download</a>` : ''}
+            `;
+            fileCard.appendChild(fileDetails);
+
+            sharedFileList.appendChild(fileCard);
+
+            if (file.file) {
+                const downloadLink = fileDetails.querySelector('.download-link');
+                downloadLink.addEventListener('click', async (event) => {
+                    event.preventDefault();
+                    const itemId = downloadLink.getAttribute('data-id');
+                    await downloadFile(itemId, headers);
+                });
+            }
+        });
+    } catch (error) {
+        sharedFileList.innerHTML = `Error fetching shared files: ${error.message}`;
+    }
+});
+
+
 // SHAREPOINT
 const listDrivesButton = document.getElementById('listDrivesButton');
 listDrivesButton.addEventListener('click', listSharePointDrives);
@@ -1440,6 +1524,49 @@ function readFileAsBase64(file) {
         reader.onerror = reject;
         reader.readAsDataURL(file);
     });
+}
+
+// Add an event listener to the parseTokenButton
+const parseTokenButton = document.getElementById('parseTokenButton');
+parseTokenButton.addEventListener('click', parseAndDisplayToken);
+
+// Function to parse the JWT and display the extracted fields
+function parseAndDisplayToken() {
+    const tokenInput = document.getElementById('token');
+    const jwt = tokenInput.value;
+
+    try {
+        // Parse the JWT payload (second part of the JWT)
+        const payloadBase64 = jwt.split('.')[1];
+        const decodedPayload = atob(payloadBase64);
+        const payload = JSON.parse(decodedPayload);
+
+        // Extract the desired fields
+        const extractedFields = {
+            Audience: payload.aud,
+            Issuer: payload.iss,
+            ExpirationTime: new Date(payload.exp * 1000).toLocaleString(),
+            AppDisplayName: payload.app_displayname,
+            AppID: payload.appid,
+            Name: payload.name,
+            UserPrincipalName: payload.upn,
+            Scope: payload.scp,
+            TenantID: payload.tid
+        };
+
+        // Display the extracted fields
+        const jwtFieldsContainer = document.getElementById('jwtFields');
+        jwtFieldsContainer.innerHTML = '';
+        for (const field in extractedFields) {
+            const fieldDetail = `
+                ${field}: ${extractedFields[field]}
+            `;
+            jwtFieldsContainer.innerHTML += fieldDetail;
+        }
+    } catch (error) {
+        const jwtFieldsContainer = document.getElementById('jwtFields');
+        jwtFieldsContainer.innerHTML = `Error parsing and displaying JWT: ${error.message}`;
+    }
 }
 
 </script>
