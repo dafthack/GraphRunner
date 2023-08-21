@@ -73,7 +73,7 @@ else{
     Write-Host -ForegroundColor yellow "[*] First you need to login as the user you want to deploy the app as."
 
     $body = @{
-        "client_id" =     "1950a258-227b-4e31-a9cf-717495945fc2"
+        "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
         "resource" =      "https://graph.microsoft.com"
     }
     $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
@@ -92,7 +92,7 @@ else{
             {
     
         $body=@{
-            "client_id" =  "1950a258-227b-4e31-a9cf-717495945fc2"
+            "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
             "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
             "code" =       $authResponse.device_code
         }
