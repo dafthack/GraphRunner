@@ -390,11 +390,21 @@ select#httpMethod {
     <hr>
 
     <!-- List All Users Button -->
-    <h2>Directory</h2>
+    <h2>Directory - Users</h2>
     <button id="listUsersButton">List Users</button>
     <button id="exportUsersButton">Export</button> 
     <pre class="response" id="listUsersResponse"></pre>
     <hr>
+
+    <div id="groupExplorerContainer" class="group-explorer">
+    <div class="group-explorer-header">
+        <h2>Directory - Groups</h2>
+        <button id="listGroupsButton">List Groups</button>
+        <button id="exportButton">Export</button>
+    </div>
+    <div id="groupList" class="group-list"></div>
+    <div id="groupMembers" class="group-members"></div>
+</div>
 
     <!-- Email Viewer -->
     <h2>Email Viewer (Current User)</h2>
@@ -772,6 +782,139 @@ select#httpMethod {
         alert('No user data available for export.');
     }
     });
+
+
+// DIRECTORY GROUPS
+const groupApiEndpoint = 'https://graph.microsoft.com/v1.0/groups';
+
+// Function to list groups
+async function listGroups(token) {
+    const headers = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const response = await fetch(groupApiEndpoint, { headers });
+        const data = await response.json();
+        return data.value;
+    } catch (error) {
+        console.error('Error listing groups:', error);
+        return [];
+    }
+}
+
+// Function to generate group list
+function generateGroupList(parentNode, groups) {
+    const ul = document.createElement('ul');
+    parentNode.appendChild(ul);
+
+    groups.forEach(group => {
+        const li = document.createElement('li');
+        ul.appendChild(li);
+
+        const groupNode = document.createElement('div');
+        groupNode.classList.add('group-node');
+        groupNode.textContent = group.displayName;
+        li.appendChild(groupNode);
+
+        groupNode.addEventListener('click', async () => {
+            const members = await fetchGroupMembers(group.id, tokenInput.value);
+            showGroupMembers(members);
+        });
+    });
+}
+
+// Function to fetch group members
+async function fetchGroupMembers(groupId, token) {
+    const membersApiEndpoint = `https://graph.microsoft.com/v1.0/groups/${groupId}/members`;
+
+    const headers = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const response = await fetch(membersApiEndpoint, { headers });
+        const data = await response.json();
+        return data.value;
+    } catch (error) {
+        console.error('Error fetching group members:', error);
+        return [];
+    }
+}
+
+// Function to display group members
+function showGroupMembers(members) {
+    const groupMembersContainer = document.getElementById('groupMembers');
+    groupMembersContainer.innerHTML = '';
+
+    const membersList = document.createElement('ul');
+    groupMembersContainer.appendChild(membersList);
+
+    members.forEach(member => {
+        const memberItem = document.createElement('li');
+        memberItem.innerHTML = `<strong>Name:</strong> ${member.displayName}<br><strong>Email:</strong> ${member.userPrincipalName}<br><strong>ID:</strong> ${member.id}`;
+        membersList.appendChild(memberItem);
+    });
+}
+
+// List Groups button click event
+const listGroupsButton = document.getElementById('listGroupsButton');
+const groupList = document.getElementById('groupList');
+
+listGroupsButton.addEventListener('click', async () => {
+    groupList.innerHTML = ''; // Clear existing content
+    const groups = await listGroups(tokenInput.value); // Replace with your token retrieval logic
+    generateGroupList(groupList, groups);
+});
+
+
+function exportGroupMembersToCSV(members) {
+    // Create CSV content
+    let csvContent = "ID,Name,Email\n";
+    members.forEach(member => {
+        csvContent += `${member.id},${member.displayName},${member.userPrincipalName}\n`;
+    });
+
+    // Create a Blob containing the CSV content
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+
+    // Create a download link for the Blob
+    const downloadLink = document.createElement('a');
+    downloadLink.href = URL.createObjectURL(blob);
+    downloadLink.download = 'group_members.csv';
+    downloadLink.click();
+}
+
+// Attach export button click event
+const exportButton = document.getElementById('exportButton');
+    exportButton.addEventListener('click', async function () {
+    const displayedGroupMembers = await fetchDisplayedGroupMembers();
+    if (displayedGroupMembers.length > 0) {
+        exportGroupMembersToCSV(displayedGroupMembers);
+    } else {
+        alert('No group members data available for export.');
+    }
+});
+
+    // Function to fetch the currently displayed group's members
+    async function fetchDisplayedGroupMembers() {
+    const groupMembersContainer = document.getElementById('groupMembers');
+    const memberItems = groupMembersContainer.getElementsByTagName('li');
+    const token = tokenInput.value;
+
+    const members = [];
+    for (const memberItem of memberItems) {
+        const name = memberItem.querySelector('strong:nth-child(1)').textContent.split(':')[1].trim();
+        const email = memberItem.querySelector('strong:nth-child(2)').textContent.split(':')[1].trim();
+        const id = memberItem.querySelector('strong:nth-child(3)').textContent.split(':')[1].trim();
+
+        members.push({ id, displayName: name, userPrincipalName: email });
+    }
+
+    return members;
+}
+
+
 
     // MAIL - CUSTOM EMAIL VIEWER
     const customEmailViewerForm = document.getElementById('customEmailViewerForm');
