@@ -743,7 +743,13 @@ function ResolveGUID($guid,$HeadersAuth) {
 
 
 Function Invoke-DumpApps{
+Param(
 
+    [Parameter(Position = 0, Mandatory = $True)]
+    [string]
+    $Domain = ""
+
+  )
 
 Write-Host -ForegroundColor yellow "[*] First you need to login"
 
@@ -783,13 +789,13 @@ Write-Host -ForegroundColor yellow "[*] First you need to login"
             {
                 write-host -ForegroundColor Yellow '[*] Successful Auth! Access and refresh tokens are accessible in the $tokens variable.'
                 $accesstoken = $tokens.access_token
+                $refreshToken = $tokens.refresh_token
                 break
             }
         Start-Sleep -Seconds 3
     }    
 
-
-
+   
 Write-Host -ForegroundColor yellow "[*] Getting Microsoft Graph Object ID"
 
 # Get full service principal list
@@ -898,22 +904,76 @@ foreach ($app in $appRegistrations.value) {
             Write-Host ("=" * 80) 
 } 
 
-Write-Host "[*] Now looking for external apps"
-Write-Host ("=" * 80) 
+        Write-Host -ForegroundColor yellow "[*] Now looking for external apps. Any apps displayed below are not owned by the current tenant or Microsoft's main app tenant."
+        Write-Host ("=" * 80) 
 
-$orginfo = Invoke-RestMethod -Uri "$graphApiUrl/organization" -Headers $headers
-$tenantid = $orginfo.value.id
+        $orginfo = Invoke-RestMethod -Uri "$graphApiUrl/organization" -Headers $headers
+        $tenantid = $orginfo.value.id
 
-foreach ($serviceprincipal in $allData){
-    # Filter out Microsoft Tenant service principals like Kaizala, Teams, etc... MS Tenant = f8cdef31-a31e-4b4a-93e4-5f571e91255a
-    if ($serviceprincipal.AppOwnerOrganizationId -ne "f8cdef31-a31e-4b4a-93e4-5f571e91255a" -and $serviceprincipal.AppOwnerOrganizationId -ne $tenantid)
-    {
-       Write-Host ("External App: " + $serviceprincipal.displayName)
-       Write-Host ("AppId: " + $serviceprincipal.AppId)
-       Write-Host ("Object ID: " + $serviceprincipal.Id)
-       Write-Host ("appOwnerOrganizationId: " + $serviceprincipal.appOwnerOrganizationId)
-       Write-Host ("Creation Date: " + $serviceprincipal.createdDateTime)
-       Write-Host ("=" * 80) 
+        $authUrl = "https://login.microsoftonline.com/$domain"
+        $unsupurl = "https://main.iam.ad.ext.azure.com"
+
+        $unsupbody = @{
+                "resource" = "74658136-14ec-4630-ad9b-26e160ff0fc6"
+                "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+                "grant_type" =    "refresh_token"
+                "refresh_token" = $refreshToken
+                "scope"=         "openid"
+            }
+
+        $unsuptokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Headers $Headers -Body $unsupbody
+        $unsupaccesstoken = $unsuptokens.access_token
+
+    foreach ($serviceprincipal in $allData){
+        $EntAppsScope = ""
+        # Filter out Microsoft Tenant service principals like Kaizala, Teams, etc... MS Tenant = f8cdef31-a31e-4b4a-93e4-5f571e91255a
+        if ($serviceprincipal.AppOwnerOrganizationId -ne "f8cdef31-a31e-4b4a-93e4-5f571e91255a" -and $serviceprincipal.AppOwnerOrganizationId -ne $tenantid)
+        {
+           $body = @{
+            "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+            "resource" =      "74658136-14ec-4630-ad9b-26e160ff0fc6"
+        }
+            $unsupheaders = @{
+                "Authorization"          = "Bearer " + $unsupaccesstoken
+                "Content-type"           = "application/json"
+                "X-Requested-With"       = "XMLHttpRequest"
+                "x-ms-client-request-id" = [guid]::NewGuid()
+                "x-ms-correlation-id"    = [guid]::NewGuid()
+            }
+
+            $unsupfullurl = ($unsupurl + "/api/EnterpriseApplications/" + $serviceprincipal.Id + "/ServicePrincipalPermissions?consentType=User&userObjectId=")
+            $EntAppsScope = Invoke-RestMethod -Method GET -Uri $unsupfullurl -Headers $unsupheaders
+
+            $unsupAdminfullurl = ($unsupurl + "/api/EnterpriseApplications/" + $serviceprincipal.Id + "/ServicePrincipalPermissions?consentType=Admin&userObjectId=")
+            $EntAppsAdminScope = Invoke-RestMethod -Method GET -Uri $unsupAdminfullurl -Headers $unsupheaders
+            
+            
+
+            Write-Host ("External App: " + $serviceprincipal.displayName)
+            Write-Host ("AppId: " + $serviceprincipal.AppId)
+            Write-Host ("Object ID: " + $serviceprincipal.Id)
+            Write-Host ("appOwnerOrganizationId: " + $serviceprincipal.appOwnerOrganizationId)
+            Write-Host ("Creation Date: " + $serviceprincipal.createdDateTime)
+            Write-Host "Scope of Consent:"
+            Foreach ($Entscopeitem in $EntAppsScope){
+            $principals = @()
+            foreach($userorgroup in $Entscopeitem.principalIds){
+                $userobject = Invoke-RestMethod -uri "$($graphApiUrl)/users/$userorgroup" -Headers $headers
+                $principals += $userobject.userPrincipalName
+            }
+            Write-Host ($Entscopeitem.permissionId + ", " + $Entscopeitem.permissionType + ", " + $($principals -join '; '))
+            }
+            Foreach ($Entscopeadminitem in $EntAppsAdminScope){
+            $principals = @()
+            foreach($userorgroup in $Entscopeadminitem.principalIds){
+                $userobject = Invoke-RestMethod -uri "$($graphApiUrl)/users/$userorgroup" -Headers $headers
+                $principals += $userobject.userPrincipalName
+            }
+            Write-Host ($Entscopeadminitem.permissionId + ", " + $Entscopeadminitem.permissionType + ", " + $($principals -join '; '))
+            }
+            Write-Host ""
+            Write-Host ("=" * 80) 
+        }
+        
     }
-}
 }
