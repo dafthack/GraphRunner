@@ -977,3 +977,191 @@ foreach ($app in $appRegistrations.value) {
         
     }
 }
+
+
+
+
+function Get-SecurityGroups{
+param (
+        [string] $AccessToken
+    )
+$headers = @{
+    Authorization = "Bearer $accessToken"
+}
+
+Write-Host -ForegroundColor Yellow "[*] Now getting a list of groups along with members from the directory..."
+
+# Get all groups and group types
+$graphApiUrl = "https://graph.microsoft.com/v1.0"
+$groupsUrl = "$graphApiUrl/groups?$filter=securityEnabled eq true"
+
+$groupsResponse = Invoke-RestMethod -Uri $groupsUrl -Headers $headers -Method Get
+
+$groups = $groupsResponse.value
+
+
+#Get Group Members
+
+$groupsWithMemberIDs = @()
+
+foreach ($group in $groups) {
+    $groupId = $group.id
+    $membersUrl = "$graphApiUrl/groups/$groupId/members"
+
+    $membersResponse = Invoke-RestMethod -Uri $membersUrl -Headers $headers -Method Get
+    $members = $membersResponse.value
+
+    $memberIds = $members | ForEach-Object { $_.id }
+
+    $groupInfo = @{
+        GroupName = $group.displayName
+        MemberIds = $memberIds -join ","
+    }
+    Write-Host ("Group Name: " + $group.displayName + " | Members: " + ($($members.userPrincipalName) -join ', '))
+    Write-Host ""
+    Write-Host ("=" * 80) 
+    $groupsWithMemberIDs += New-Object PSObject -Property $groupInfo
+}
+
+return $groupsWithMemberIDs
+
+}
+
+
+function Create-SecurityGroupWithMembers {
+    param (
+        [string] $AccessToken,
+        [string] $DisplayName,
+        [string[]] $MemberIds
+    )
+
+    $graphApiUrl = "https://graph.microsoft.com/v1.0"
+    $createGroupUrl = "$graphApiUrl/groups"
+
+    $headers = @{
+        Authorization = "Bearer $AccessToken"
+        "Content-Type" = "application/json"
+    }
+
+    $groupProperties = @{
+        displayName = $DisplayName
+        securityEnabled = $true
+        mailEnabled = $false
+        mailNickname = $DisplayName -replace ' ', ''
+        "members@odata.bind" = $MemberIds
+    }
+
+    $groupData = @{
+        displayName = $DisplayName
+        securityEnabled = $true
+        mailEnabled = $false
+        mailNickname = $DisplayName -replace ' ', ''
+        "members@odata.bind" = $MemberIds
+    }
+
+    $groupJson = $groupData | ConvertTo-Json
+
+    $response = Invoke-RestMethod -Uri $createGroupUrl -Headers $headers -Method Post -Body $groupJson
+
+    if ($response -ne $null) {
+        Write-Host -ForegroundColor Green "Security Group '$DisplayName' created successfully."
+    } else {
+        Write-Error "Error creating the security group."
+    }
+}
+
+
+
+function Invoke-SecurityGroupCloner{
+
+
+# Login
+    Write-Host -ForegroundColor yellow "[*] First you need to login as the user you want to clone a group as."
+
+    $body = @{
+        "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+        "resource" =      "https://graph.microsoft.com"
+    }
+    $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+    $Headers=@{}
+    $Headers["User-Agent"] = $UserAgent
+    $authResponse = Invoke-RestMethod `
+        -UseBasicParsing `
+        -Method Post `
+        -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+        -Headers $Headers `
+        -Body $body
+    Write-Host -ForegroundColor yellow $authResponse.Message
+
+    $continue = "authorization_pending"
+    while($continue)
+            {
+    
+        $body=@{
+            "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+            "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+            "code" =       $authResponse.device_code
+        }
+        try{
+        $global:tokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+        }
+        catch{
+        $details=$_.ErrorDetails.Message | ConvertFrom-Json
+        $continue = $details.error -eq "authorization_pending"
+        Write-Output $details.error
+        }
+        if($tokens)
+            {
+                write-host -ForegroundColor yellow '[*] Successful Auth! Access and refresh tokens are accessible in the $tokens variable.'
+                $accesstoken = $tokens.access_token
+                break
+            }
+        Start-Sleep -Seconds 3
+    }    
+
+
+
+$headers = @{
+    Authorization = "Bearer $accessToken"
+}
+
+$secgroups = Get-SecurityGroups -AccessToken $accessToken
+$CloneGroup = ""
+while($CloneGroup -eq ""){
+Write-Host -ForegroundColor Cyan "[*] Enter a group name you want to clone:"
+$CloneGroup = Read-Host 
+
+if ($secgroups.GroupName -contains $CloneGroup) {
+    Write-Host -ForegroundColor yellow ("[*] Found group " + $CloneGroup)
+} else {
+    Write-Output "Invalid group try again."
+    $CloneGroup = ""
+}
+}
+
+$memberIds = @()
+foreach ($group in $secgroups){
+    If ($group.GroupName -eq $cloneGroup){
+        $memberlist = $group.memberIds.split(",")
+        foreach($member in $memberlist){
+            $memberIds += ("https://graph.microsoft.com/v1.0/users/" + $member )
+        }
+    }
+}
+Write-Host -ForegroundColor Cyan "[*] Do you want to add your current user to the cloned group? (Yes/No)"
+$answer = Read-Host 
+$answer = $answer.ToLower()
+if ($answer -eq "yes" -or $answer -eq "y") {
+    Write-Host -ForegroundColor yellow "[*] Adding current user to the cloned group..."
+    $currentuser = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me" -Headers $headers
+    $memberIds += ("https://graph.microsoft.com/v1.0/users/" + $currentuser.Id)
+} elseif ($answer -eq "no" -or $answer -eq "n") {
+    Write-Output "[*] Not adding your user"
+} else {
+    Write-Output "Invalid input. Please enter Yes or No."
+}
+
+$memberIdsUniq = $memberIds | Select-Object -Unique
+
+Create-SecurityGroupWithMembers -AccessToken $accessToken -DisplayName $CloneGroup -MemberIds $memberIdsUniq
+}
