@@ -1165,3 +1165,137 @@ $memberIdsUniq = $memberIds | Select-Object -Unique
 
 Create-SecurityGroupWithMembers -AccessToken $accessToken -DisplayName $CloneGroup -MemberIds $memberIdsUniq
 }
+
+
+
+
+
+function Invite-GuestUser{
+
+    Param(
+
+    [Parameter(Position = 0, Mandatory = $False)]
+    [string]
+    $DisplayName = "",
+
+    [Parameter(Position = 1, Mandatory = $False)]
+    [string]
+    $EmailAddress = "",
+
+    [Parameter(Position = 2, Mandatory = $False)]
+    [string]
+    $RedirectUrl = "",
+
+    [Parameter(Position = 3, Mandatory = $False)]
+    [string]
+    $SendInvitationMessage = "",
+
+    [Parameter(Position = 4, Mandatory = $False)]
+    [string]
+    $CustomMessageBody = ""
+
+    )
+
+    Write-Host -ForegroundColor yellow "[*] First you need to login"
+
+        $body = @{
+            "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+            "resource" =      "https://graph.microsoft.com"
+        }
+        $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+        $Headers=@{}
+        $Headers["User-Agent"] = $UserAgent
+        $authResponse = Invoke-RestMethod `
+            -UseBasicParsing `
+            -Method Post `
+            -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+            -Headers $Headers `
+            -Body $body
+        Write-Host -ForegroundColor yellow $authResponse.Message
+
+        $continue = "authorization_pending"
+        while($continue)
+                {
+    
+            $body=@{
+                "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+                "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+                "code" =       $authResponse.device_code
+            }
+            try{
+            $global:tokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+            }
+            catch{
+            $details=$_.ErrorDetails.Message | ConvertFrom-Json
+            $continue = $details.error -eq "authorization_pending"
+            Write-Output $details.error
+            }
+            if($tokens)
+                {
+                    write-host -ForegroundColor Yellow '[*] Successful Auth! Access and refresh tokens are accessible in the $tokens variable.'
+                    $accesstoken = $tokens.access_token
+                    $refreshToken = $tokens.refresh_token
+                    break
+                }
+            Start-Sleep -Seconds 3
+        }  
+    $headers = @{"Authorization" = "Bearer $accesstoken"}
+    # Construct the Graph API endpoint
+    $graphApiUrl = "https://graph.microsoft.com/v1.0"
+    $orginfo = Invoke-RestMethod -Uri "$graphApiUrl/organization" -Headers $headers
+    $tenantid = $orginfo.value.id
+
+
+    # Prompt user for input
+    if(!$EmailAddress){
+    $EmailAddress = Read-Host "Enter the Email Address to Invite"
+    }
+
+    if(!$DisplayName){
+    $DisplayName = Read-Host "Enter the Display Name"
+    }
+
+    if(!$RedirectUrl){
+    $RedirectUrl = Read-Host "Enter the Redirect URI (leave blank to use the default)"
+    }
+    if($RedirectUrl -eq ""){
+    $RedirectUrl = ("https://myapplications.microsoft.com/?tenantid=" + $tenantid)
+    }
+
+    if(!$SendInvitationMessage){
+    $SendInvitationMessage = Read-Host "Send an Email Invitation? (true/false)"
+    }
+
+    if (!$CustomMessageBody){
+    $CustomMessageBody = Read-Host "Enter a custom message body or leave blank"
+    }
+
+    # Construct the JSON payload
+    $invitationData = @{
+        invitedUserEmailAddress = $EmailAddress
+        invitedUserDisplayname = $Displayname
+        inviteRedirectUrl = $RedirectUrl
+        sendInvitationMessage = [System.Convert]::ToBoolean($SendInvitationMessage)
+        invitedUserMessageInfo = @{
+            customizedMessageBody = $MessageBody
+        }
+    }
+
+    # Convert to JSON format
+    $invitationJson = $invitationData | ConvertTo-Json
+
+
+    # Make the POST request
+    $response = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/invitations" -Method Post -Headers $headers -Body $invitationJson
+
+    # Check the response
+    if ($response -ne $null) {
+        Write-Host -ForegroundColor Green "[*] External user invited sent successfully."
+        Write-Host ("Display Name: " + $response.invitedUserDisplayName)
+        Write-Host ("Email Address: " + $response.invitedUserEmailAddress)
+        Write-Host ("Object ID: " + $response.invitedUser.id)
+        Write-Host ("Invite Redeem URL: " +  $response.inviteRedeemUrl)
+    } else {
+        Write-Error "Error sending invitation."
+    }
+}
