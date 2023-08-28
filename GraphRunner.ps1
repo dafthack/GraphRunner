@@ -1299,3 +1299,229 @@ function Invite-GuestUser{
         Write-Error "Error sending invitation."
     }
 }
+
+
+
+function Invoke-GraphRecon{
+
+
+    # Login
+    Write-Host -ForegroundColor yellow "[*] First you need to login."
+
+    $body = @{
+        "client_id" =     "1b730954-1685-4b74-9bfd-dac224a7b894"
+        "resource" =      "https://graph.windows.net"
+    }
+    $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+    $Headers=@{}
+    $Headers["User-Agent"] = $UserAgent
+    $authResponse = Invoke-RestMethod `
+        -UseBasicParsing `
+        -Method Post `
+        -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+        -Headers $Headers `
+        -Body $body
+    Write-Host -ForegroundColor yellow $authResponse.Message
+
+    $continue = "authorization_pending"
+    while($continue)
+            {
+    
+        $body=@{
+            "client_id" =  "1b730954-1685-4b74-9bfd-dac224a7b894"
+            "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+            "code" =       $authResponse.device_code
+            "scope" = "user_impersonation"
+        }
+        try{
+        $aadtokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+        }
+        catch{
+        $details=$_.ErrorDetails.Message | ConvertFrom-Json
+        $continue = $details.error -eq "authorization_pending"
+        Write-Output $details.error
+        }
+        if($aadtokens)
+            {
+                Write-Host "[*] Successful auth"
+                $access_token = $aadtokens.access_token
+                break
+            }
+        Start-Sleep -Seconds 3
+    }
+
+# Generate unique GUIDs
+$messageId = [guid]::NewGuid()
+$trackingHeader = [guid]::NewGuid()
+$clientId = "50afce61-c917-435b-8c6d-60aa5a8b8aa7"
+
+
+
+$soapRequest = @"
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
+  <s:Header>
+    <a:Action s:mustUnderstand="1">http://provisioning.microsoftonline.com/IProvisioningWebService/MsolConnect</a:Action>
+    <a:MessageID>urn:uuid:$messageId</a:MessageID>
+    <a:ReplyTo>
+      <a:Address>http://www.w3.org/2005/08/addressing/anonymous</a:Address>
+    </a:ReplyTo>
+    <UserIdentityHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+      <BearerToken xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$access_token</BearerToken>
+      <LiveToken i:nil="true" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService"/>
+    </UserIdentityHeader>
+    <ClientVersionHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+      <ClientId xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$clientId</ClientId>
+      <Version xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">1.2.183.57</Version>
+    </ClientVersionHeader>
+    <ContractVersionHeader xmlns="http://becwebservice.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+      <BecVersion xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">Version47</BecVersion>
+    </ContractVersionHeader>
+    <TrackingHeader xmlns="http://becwebservice.microsoftonline.com/">$trackingHeader</TrackingHeader>
+    <a:To s:mustUnderstand="1">https://provisioningapi.microsoftonline.com/provisioningwebservice.svc</a:To>
+  </s:Header>
+  <s:Body>
+    <MsolConnect xmlns="http://provisioning.microsoftonline.com/">
+      <request xmlns:b="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+        <b:BecVersion>Version4</b:BecVersion>
+        <b:TenantId i:nil="true"/>
+        <b:VerifiedDomain i:nil="true"/>
+      </request>
+    </MsolConnect>
+  </s:Body>
+</s:Envelope>
+"@
+
+
+Write-Host -ForegroundColor yellow "[*] Now trying to query the MS provisioning API for organization settings."
+# Send the SOAP request to the provisioningwebservice
+$response = Invoke-WebRequest -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $soapRequest
+
+
+if ($response -match '<DataBlob[^>]*>(.*?)<\/DataBlob>') {
+    $dataBlob = $Matches[1]
+} else {
+    Write-Host "DataBlob not found in the response."
+}
+
+$messageID = [guid]::NewGuid()
+$trackingHeader = [guid]::NewGuid()
+
+$GetCompanyInfoSoapRequest = @"
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
+  <s:Header>
+    <a:Action s:mustUnderstand="1">http://provisioning.microsoftonline.com/IProvisioningWebService/GetCompanyInformation</a:Action>
+    <a:MessageID>$MessageID</a:MessageID>
+    <a:ReplyTo>
+      <a:Address>http://www.w3.org/2005/08/addressing/anonymous</a:Address>
+    </a:ReplyTo>
+    <UserIdentityHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+      <BearerToken xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">Bearer $access_token</BearerToken>
+      <LiveToken i:nil="true" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService"/>
+    </UserIdentityHeader>
+    <BecContext xmlns="http://becwebservice.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+      <DataBlob xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$dataBlob</DataBlob>
+      <PartitionId xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">70</PartitionId>
+    </BecContext>
+    <ClientVersionHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+      <ClientId xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$ClientId</ClientId>
+      <Version xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">1.2.183.57</Version>
+    </ClientVersionHeader>
+    <ContractVersionHeader xmlns="http://becwebservice.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+      <BecVersion xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">Version47</BecVersion>
+    </ContractVersionHeader>
+    <TrackingHeader xmlns="http://becwebservice.microsoftonline.com/">$TrackingHeader</TrackingHeader>
+    <a:To s:mustUnderstand="1">https://provisioningapi.microsoftonline.com/provisioningwebservice.svc</a:To>
+  </s:Header>
+  <s:Body>
+    <GetCompanyInformation xmlns="http://provisioning.microsoftonline.com/">
+      <request xmlns:b="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+        <b:BecVersion>Version16</b:BecVersion>
+        <b:TenantId i:nil="true"/>
+        <b:VerifiedDomain i:nil="true"/>
+      </request>
+    </GetCompanyInformation>
+  </s:Body>
+</s:Envelope>
+"@
+
+$companyinfo = Invoke-WebRequest -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $GetCompanyInfoSoapRequest
+
+
+$xml = [xml]$companyInfo
+
+# Define namespaces
+$ns = New-Object Xml.XmlNamespaceManager($xml.NameTable)
+$ns.AddNamespace("s", "http://www.w3.org/2003/05/soap-envelope")
+$ns.AddNamespace("b", "http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService")
+$ns.AddNamespace("c", "http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration")
+$ns.AddNamespace("d", "http://schemas.microsoft.com/2003/10/Serialization/Arrays")
+$ns.AddNamespace("ns", "http://schemas.microsoft.com/online/serviceextensions/2009/08/ExtensibilitySchema.xsd")
+
+
+# Extract data using XPath
+$displayName = $xml.SelectSingleNode("//c:DisplayName", $ns).InnerText
+$street = $xml.SelectSingleNode("//c:Street", $ns).InnerText
+$city = $xml.SelectSingleNode("//c:City", $ns).InnerText
+$state = $xml.SelectSingleNode("//c:State", $ns).InnerText
+$postalCode = $xml.SelectSingleNode("//c:PostalCode", $ns).InnerText
+$Country = $xml.SelectSingleNode("//c:CountryLetterCode", $ns).InnerText
+$TechnicalContact = $xml.SelectSingleNode("//c:TechnicalNotificationEmails", $ns).InnerText
+$Telephone = $xml.SelectSingleNode("//c:TelephoneNumber", $ns).InnerText
+$InitialDomain = $xml.SelectSingleNode("//c:InitialDomain", $ns).InnerText
+$DirSync = $xml.SelectSingleNode("//c:DirectorySynchronizationEnabled", $ns).InnerText
+$DirSyncStatus = $xml.SelectSingleNode("//c:DirectorySynchronizationStatus", $ns).InnerText
+$DirSyncClientMachine = $xml.SelectSingleNode("//c:DirSyncClientMachineName", $ns).InnerText
+$DirSyncServiceAccount = $xml.SelectSingleNode("//c:DirSyncServiceAccount", $ns).InnerText
+$PasswordSync = $xml.SelectSingleNode("//c:PasswordSynchronizationEnabled", $ns).InnerText
+$PasswordReset = $xml.SelectSingleNode("//c:SelfServePasswordResetEnabled", $ns).InnerText
+$UsersPermToConsent = $xml.SelectSingleNode("//c:UsersPermissionToUserConsentToAppEnabled", $ns).InnerText
+$UsersPermToReadUsers = $xml.SelectSingleNode("//c:UsersPermissionToReadOtherUsersEnabled", $ns).InnerText
+$UsersPermToCreateLOBApps = $xml.SelectSingleNode("//c:UsersPermissionToCreateLOBAppsEnabled", $ns).InnerText
+$UsersPermToCreateGroups = $xml.SelectSingleNode("//c:UsersPermissionToCreateGroupsEnabled", $ns).InnerText
+
+
+Write-Host -ForegroundColor Yellow ("=" * 80) 
+Write-Host -ForegroundColor Yellow "Main Contact Info"
+Write-Host -ForegroundColor Yellow ("=" * 80) 
+# Display the extracted data
+Write-Host "Display Name: $displayName"
+Write-Host "Street: $street"
+Write-Host "City: $city"
+Write-Host "State: $state"
+Write-Host "Postal Code: $postalCode"
+Write-Host "Country: $country"
+Write-Host "Technical Notification Email: $TechnicalContact"
+Write-Host "Telephone Number: $Telephone"
+Write-Host -ForegroundColor Yellow ("=" * 80) 
+Write-Host -ForegroundColor Yellow "Directory Sync Settings"
+Write-Host -ForegroundColor Yellow ("=" * 80) 
+Write-Host "Initial Domain: $initialDomain"
+Write-Host "Directory Sync Enabled: $dirSync"
+Write-Host "Directory Sync Status: $dirSyncStatus"
+Write-Host "Directory Sync Client Machine: $dirSyncClientMachine"
+Write-Host "Directory Sync Service Account: $dirSyncServiceAccount"
+Write-Host "Password Sync Enabled: $passwordSync"
+Write-Host -ForegroundColor Yellow ("=" * 80) 
+Write-Host -ForegroundColor Yellow "User Settings"
+Write-Host -ForegroundColor Yellow ("=" * 80) 
+Write-Host "Self-Service Password Reset Enabled: $passwordReset"
+Write-Host "Users Can Consent to Apps: $UsersPermToConsent"
+Write-Host "Users Can Read Other Users: $UsersPermToReadUsers"
+Write-Host "Users Can Create Apps: $UsersPermToCreateLOBApps"
+Write-Host "Users Can Create Groups: $UsersPermToCreateGroups"
+
+
+# Select the ServiceParameter nodes
+$serviceParameters = $xml.SelectNodes("//ns:ServiceParameter", $ns)
+
+Write-Host -ForegroundColor Yellow ("=" * 80) 
+Write-Host -ForegroundColor Yellow "Additional Service Parameters"
+Write-Host -ForegroundColor Yellow ("=" * 80) 
+# Loop through each ServiceParameter node and extract the Name and Value
+foreach ($parameter in $serviceParameters) {
+    $name = $parameter.Name
+    $value = $parameter.Value
+    Write-Host "$name : $value"
+}
+Write-Host -ForegroundColor Yellow ("=" * 80) 
+}
