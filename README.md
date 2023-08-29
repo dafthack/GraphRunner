@@ -25,3 +25,41 @@ Access tokens typically have an expiration time of one hour so it will be necess
 ```PowerShell
 Refresh-GraphTokens
 ```
+
+#### Get-AzureAppTokens
+
+#### Refresh-AzureAppTokens
+
+#### Check-MSGraphAccess
+
+#### Invoke-AutoOAuthFlow
+
+### Recon & Enumeration Modules
+
+#### Invoke-GraphRecon
+
+#### Invoke-DumpCAPS
+
+#### Invoke-DumpApps
+
+#### Get-AzureADUsers
+
+#### Get-SecurityGroups
+
+#### Invoke-GraphOpenInboxFinder
+
+### Persistence Modules
+
+#### Inject-OAuthApp
+
+#### Invoke-SecurityGroupCloner
+
+#### Invite-GuestUser
+
+### Pillage Modules
+
+#### Get-Inbox
+
+####
+
+
