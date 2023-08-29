@@ -27,39 +27,100 @@ Refresh-GraphTokens
 ```
 
 #### Get-AzureAppTokens
+This module can assist with completing an OAuth flow to obtain access tokens for an Azure App Registration. After obtaining an authorization code it can be utilized with a set of app registration credentials (client id and secret) to complete the flow. 
+```
+--OPTIONS--
+ClientId       - The Client ID (AppID) of the App
+ClientSecret   - The Secret of the App
+RedirectUri    - The Redirect URI used in the authorization request
+Scope          - Permission scope of the app "Mail.Read openid etc"
+AuthCode       - The authorization code retrieved from the request sent to the redirect URI during the OAuth flow
+```
+
+```PowerShell
+Get-AzureAppTokens -ClientId "13483541-1337-4a13-1234-0123456789ABC" -ClientSecret "v-Q8Q~fEXAMPLEEXAMPLEDsmKpQw_Wwd57-albMZ" -RedirectUri "https://YOURREDIRECTWEBSERVER.azurewebsites.net" -scope "openid profile offline_access email User.Read User.ReadBasic.All Mail.Read" -AuthCode "0.AUYAME_74EXAMPLEUZSUBZqrWXZOtU7Jh4..."
+```
 
 #### Refresh-AzureAppTokens
 
+```PowerShell
+
+```
+
 #### Check-MSGraphAccess
 
+```PowerShell
+
+```
+
 #### Invoke-AutoOAuthFlow
+
+```PowerShell
+
+```
 
 ### Recon & Enumeration Modules
 
 #### Invoke-GraphRecon
 
+```PowerShell
+
+```
+
 #### Invoke-DumpCAPS
+
+```PowerShell
+
+```
 
 #### Invoke-DumpApps
 
+```PowerShell
+
+```
+
 #### Get-AzureADUsers
+
+```PowerShell
+
+```
 
 #### Get-SecurityGroups
 
+```PowerShell
+
+```
+
 #### Invoke-GraphOpenInboxFinder
+
+```PowerShell
+
+```
 
 ### Persistence Modules
 
 #### Inject-OAuthApp
 
+```PowerShell
+
+```
+
 #### Invoke-SecurityGroupCloner
 
+```PowerShell
+
+```
+
 #### Invite-GuestUser
+
+```PowerShell
+
+```
 
 ### Pillage Modules
 
 #### Get-Inbox
 
-####
+```PowerShell
 
-
+```
