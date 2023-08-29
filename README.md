@@ -77,39 +77,43 @@ Invoke-AutoOAuthFlow -ClientId "13483541-1337-4a13-1234-0123456789ABC" -ClientSe
 ### Recon & Enumeration Modules
 
 #### Invoke-GraphRecon
-
+This module gathers information about the tenant including the primary contact info, directory sync settings, and user settings such as if users have the ability to create apps, create groups, or consent to apps. 
 ```PowerShell
-
+Invoke-GraphRecon -Tokens $tokens
 ```
 
 #### Invoke-DumpCAPS
-
+A module to dump conditional access policies from a tenant.
+```
+--OPTIONS--
+ResolveGuids   - Resolve any object ID guids found 
+```
 ```PowerShell
-
+Invoke-DumpCAPS -Tokens $tokens -ResolveGuids
 ```
 
 #### Invoke-DumpApps
-
+This module helps identify malicious app registrations. It will dump a list of Azure app registrations from the tenant including permission scopes and users that have consented to the apps. Additionally, it will list external apps that are not owned by the current tenant or by Microsoft's main app tenant. This is a good way to find third-party external apps that users may have consented to. 
 ```PowerShell
-
+Invoke-DumpApps -Tokens $tokens
 ```
 
 #### Get-AzureADUsers
-
+Gather the full list of users from the directory.
 ```PowerShell
-
+Get-AzureADUsers -$Tokens $tokens -OutFile users.txt
 ```
 
 #### Get-SecurityGroups
-
+Create a list of security groups along with their members.
 ```PowerShell
-
+Get-SecurityGroups -AccessToken $tokens.access_token
 ```
 
 #### Invoke-GraphOpenInboxFinder
-
+This module attempts to locate mailboxes in a tenant that have allowed other users to read them. By providing a userlist the module will attempt to access the inbox of each user and display if it was successful. The access token needs to be scoped to Mail.Read.Shared or Mail.ReadWrite.Shared for this to work. 
 ```PowerShell
-
+Invoke-GraphOpenInboxFinder -Tokens $tokens -Userlist users.txt
 ```
 
 ### Persistence Modules
