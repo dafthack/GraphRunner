@@ -4,7 +4,7 @@ A Post-exploitation Toolset for Interacting with the Microsoft Graph API
 
 ## Usage
 
-GraphRunner includes a number of modules to assist with carrying out various attacks during post-exploitation of a Microsoft Azure tenant. Most of the modules rely on having authenticated access tokens. To assist with this there are multiple modules for obtaining and working with both user and application (service principal) tokens. B
+GraphRunner includes a number of modules to assist with carrying out various attacks during post-exploitation of a Microsoft Azure tenant. Most of the modules rely on having authenticated access tokens. To assist with this there are multiple modules for obtaining and working with both user and application (service principal) tokens. 
 
 Import GraphRunner into a new PowerShell session.
 ```PowerShell
