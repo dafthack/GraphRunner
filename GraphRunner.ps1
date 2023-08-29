@@ -1,3 +1,16 @@
+
+Write-Host -ForegroundColor green "
+  ________                     __      _______      by Beau Bullock (@dafthack)                                
+ /_______/___________  ______ |  |____/_______\__ __  ____   ____   ___________ 
+/___\  __\______\____\ \_____\|__|__\|________/__|__\/____\ /____\_/____\______\
+\    \_\  \  | \// __ \|  |_/ |   Y  \    |   \  |  /   |  \   |  \  ___/|  | \/
+ \________/__|  (______/__|   |___|__|____|___/____/|___|__/___|__/\___| >__|   
+                Do service principals dream of electric sheep?
+                       
+For usage information see the wiki here: https://github.com/dafthack/GraphRunner/wiki
+"
+
+
 function Get-GraphTokens{
     
     Write-Host -ForegroundColor yellow "[*] Initiating a device code login."
@@ -120,13 +133,13 @@ function Inject-OAuthApp{
         
         Delegated Microsoft Graph permissions to scope to the app. Example: Mail.Read, User.ReadBasic.All, etc. Scope items need to be comma separated with each item in double quotes like this (-scope "Mail.Read","openid","email","profile","offline_access")
     
-     .PARAMETER AccessToken
+     .PARAMETER Tokens
         
         Provide an already authenticated access token. 
 
     .EXAMPLE
         
-        C:\PS> Inject-OAuthApp -AppName "Win Defend for M365" -Secret "HackThePlanet1337!" -ReplyUrl "https://windefend.azurewebsites.net" -scope "openid","Mail.Read","email","profile","offline_access"
+        C:\PS> Inject-OAuthApp -AppName "Win Defend for M365" -ReplyUrl "https://windefend.azurewebsites.net" -scope "openid","Mail.Read","email","profile","offline_access"
         Description
         -----------
         This command will inject an app registration with the display name of "Win Defend for M365" with a scope of openid, Mail.Read, email, profile, and offline_access
@@ -477,7 +490,7 @@ $out = $request.Content | ConvertFrom-Json
 $out
 }
 
-Function Refresh-AppTokens{
+Function Refresh-AzureAppTokens{
 Param
 (
     [Parameter(Position = 0, Mandatory = $false)]
