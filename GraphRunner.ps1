@@ -1,4 +1,3 @@
-
 Write-Host -ForegroundColor green "
   ________                     __      _______      by Beau Bullock (@dafthack)                                
  /_______/___________  ______ |  |____/_______\__ __  ____   ____   ___________ 
@@ -1947,5 +1946,253 @@ Param(
             break
         }
     } while ($true)
+
+}
+
+Function Invoke-SearchMailbox{
+    param(
+    [Parameter(Position = 0, Mandatory = $false)]
+    [object[]]
+    $Tokens = "",
+    [Parameter(Position = 1, Mandatory = $true)]
+    [string]
+    $searchTerm = "",
+    [Parameter(Position = 2, Mandatory = $false)]
+    [string]
+    $messageCount = "25"
+    )
+
+
+    $access_token = $Tokens.access_token
+
+    $graphApiUrl = "https://graph.microsoft.com/v1.0/search/query"
+
+    # Define the headers with the access token and content type
+    $headers = @{
+    "Authorization" = "Bearer $access_token"
+    "Content-Type" = "application/json"
+    }
+
+    # Define the search query
+    $searchQuery = @{ requests = @( @{
+        entityTypes = @("message")
+        query = @{
+            queryString = $searchTerm
+        }
+        from = 1
+        size = $MessageCount
+        }
+    )
+    }
+
+    # Convert the search query to JSON format
+    $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
+
+    # Perform the HTTP POST request to search emails
+    $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
+
+    # Process the response and display the summary
+    $total = $response.value[0].hitsContainers[0].total
+    Write-Host -ForegroundColor yellow "[*] Found $total matches for search term $searchTerm"
+    foreach ($hit in $response.value[0].hitsContainers[0].hits) {
+    $subject = $hit.resource.subject
+    $sender = $hit.resource.sender.emailAddress.address
+    $receivers = $hit.resource.replyTo | ForEach-Object { $_.emailAddress.Name }
+    $date = $hit.resource.sentDateTime
+    $preview = $hit.resource.bodyPreview
+
+    Write-Output "Subject: $subject | Sender: $sender | Receivers: $($receivers -join ', ') | Date: $date | Message Preview: $preview"
+    Write-Host ("=" * 80) 
+    }
+
+    while($download -notlike "Yes"){
+        Write-Host -ForegroundColor Cyan "[*] Do you want to download these emails and their attachments? (Yes/No)"
+        $answer = Read-Host 
+        $answer = $answer.ToLower()
+        if ($answer -eq "yes" -or $answer -eq "y") {
+            Write-Host -ForegroundColor yellow "[*] Downloading messages..."
+            $download = "Yes"
+        } elseif ($answer -eq "no" -or $answer -eq "n") {
+            Write-Output "[*] Quitting..."
+            break
+        } else {
+            Write-Output "Invalid input. Please enter Yes or No."
+        }
+    }
+
+    if ($download -like "Yes"){
+        $emailFileNames = @()
+        $folderName = "$searchTerm-" + (Get-Date -Format 'yyyyMMddHHmmss')
+        New-Item -Path $folderName -ItemType Directory
+        # Process the response and export email content
+        foreach ($hit in $response.value[0].hitsContainers[0].hits) {
+        $webLink = $hit.resource.webLink
+        $itemId = [regex]::Match($webLink, "ItemID=([^&]+)").Groups[1].Value
+        $subject = $hit.resource.subject
+
+        # Remove special characters and replace spaces with underscores
+        $cleanedSubject = $subject -replace '[^\w\s]', '' -replace '\s', '_'
+        $dateTimeString = $messageDetails.sentDateTime
+        $dateTime = [DateTime]::ParseExact($dateTimeString, "yyyy-MM-ddTHH:mm:ssZ", [System.Globalization.CultureInfo]::InvariantCulture)
+        $numericDate = $dateTime.ToString("yyyyMMddHHmmss")
+        $filename = ($cleanedSubject + "-" + $numericDate +".json")
+        $emailFileNames += $filename
+
+        # Fetch email details using the message ID
+        Write-Host "[*] Downloading $cleanedSubject"
+        $messageDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId" -Headers $headers -Method Get
+
+        # Save email details as a .msg file
+        $messageDetails | ConvertTo-Json | Out-File -FilePath "$folderName\$filename" -Encoding UTF8
+
+        # Fetch and save attachments
+        if ($messageDetails.hasAttachments -like "True") {
+                Write-Host ("[**] " + $messageDetails.subject + " has attachments.")
+                $attachmentDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId/attachments" -Headers $headers -Method Get
+
+                foreach($item in $attachmentDetails.value){
+                $attachmentContentBytes = [System.Convert]::FromBase64String($item.contentBytes)
+                $attachmentFileName = ($CleanedSubject + "-attached-" + $item.name)
+                Write-Host "[***] Downloading attachment $attachmentFileName"
+                $attachmentContentBytes | Set-Content -Path "$folderName\$attachmentFileName" -Encoding Byte
+                }
+        
+        }
+        }
+        # Export the email file names to filelist.json
+        $emailFileNames | ConvertTo-Json | Out-File -FilePath "$folderName\filelist.json" -Encoding UTF8
+        $htmlContent = @"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f7f7f7;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        .app-container {
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            max-width: 1200px;
+        }
+        .email-summary {
+            cursor: pointer;
+            margin: 10px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+        .email-summary:hover {
+            background-color: #f7f7f7;
+        }
+        .email-summary strong {
+            color: #333;
+        }
+        .email-content {
+            max-height: 500px; /* Set the maximum height for the scrollable container */
+            overflow: auto; /* Enable scrolling if content exceeds the maximum height */
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <h1>GraphRunner Email Viewer</h1>
+        <div id="emailList"></div>
+        <div id="emailContainer" class="email-content"></div>
+    </div>
+
+    <script>
+        const emailList = document.getElementById('emailList');
+        const emailContainer = document.getElementById('emailContainer');
+
+        fetchEmailList();
+
+        async function fetchEmailList() {
+            try {
+                const response = await fetch('filelist.json');
+                const fileListContent = await response.text();
+                const fileList = JSON.parse(fileListContent);
+
+                fileList.forEach(async (file) => {
+                    const response = await fetch(file);
+                    const email = await response.json();
+
+                    const emailSummaryDiv = document.createElement('div');
+                    emailSummaryDiv.classList.add('email-summary');
+                    emailSummaryDiv.innerHTML = ``
+                        <strong>Subject:</strong> `${email.subject}<br>
+                        <strong>Sender:</strong> `${email.sender.emailAddress.name}<br>
+                        <strong>From:</strong> `${email.from.emailAddress.name} (`${email.from.emailAddress.address})<br>
+                        <strong>Preview:</strong> `${email.bodyPreview}<br>
+                        <strong>Attachments:</strong> `${email.hasAttachments ? 'Yes' : 'No'}<br>
+                    ``;
+                    
+                    emailSummaryDiv.addEventListener('click', () => loadFullEmail(email));
+                    emailList.appendChild(emailSummaryDiv);
+                });
+            } catch (error) {
+                console.error('Error fetching file list:', error);
+            }
+        }
+
+        function loadFullEmail(email) {
+            emailContainer.innerHTML = email.body.content;
+        }
+    </script>
+</body>
+</html>
+"@
+        
+        $htmlContent | Out-File -FilePath "$folderName\emailviewer.html" -Encoding UTF8
+        Write-Host -ForegroundColor Green "[*] Emails and attachments have been exported to the $folderName directory."
+        Write-Host -ForegroundColor yellow "[*] A simple emailviewer.html has been provided to view the exported emails."
+        Write-Host -ForegroundColor yellow "[*] To use it run the Invoke-HTTPServer module in the $folderName directory and then navigate to http://localhost:8000/emailviewer.html"
+    }
+}
+
+
+
+function Invoke-HTTPServer{
+ param(
+    [Parameter(Position = 0, Mandatory = $false)]
+    [object[]]
+    $port = "8000"
+)
+
+$listener = New-Object System.Net.HttpListener
+$listener.Prefixes.Add("http://localhost:$port/")
+$listener.Start()
+
+Write-Host "Listening for requests on http://localhost:$port/"
+
+while ($listener.IsListening) {
+     $context = $listener.GetContext()
+     $response = $context.Response
+
+     $filename = $context.Request.Url.LocalPath.TrimStart('/')
+     $content = Get-Content -Path $filename -Raw
+
+     $buffer = [System.Text.Encoding]::UTF8.GetBytes($content)
+     $response.ContentLength64 = $buffer.Length
+     $response.OutputStream.Write($buffer, 0, $buffer.Length)
+     $response.OutputStream.Close()
+}
 
 }
