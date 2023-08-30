@@ -5,7 +5,7 @@ Write-Host -ForegroundColor green "
 /___\  __\______\____\ \_____\|__|__\|________/__|__\/____\ /____\_/____\______\
 \    \_\  \  | \// __ \|  |_/ |   Y  \    |   \  |  /   |  \   |  \  ___/|  | \/
  \________/__|  (______/__|   |___|__|____|___/____/|___|__/___|__/\___| >__|   
-                Do service principals dream of electric sheep?
+                 Do service principals dream of electric sheep?
                        
 For usage information see the wiki here: https://github.com/dafthack/GraphRunner/wiki
 "
@@ -613,12 +613,28 @@ Function Get-AzureADUsers{
     $outfile = ""
     )
     $access_token = $tokens.access_token
-$request = Invoke-WebRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users" -Headers @{"Authorization" = "Bearer $access_token"}
-$out = $request.Content | ConvertFrom-Json
+
+    Write-Host "[*] Gathering the users from the tenant."
+    $usersEndpoint = "https://graph.microsoft.com/v1.0/users"
+    $userlist = @()
+    do{
+        $request = Invoke-WebRequest -Method GET -Uri $usersEndpoint -Headers @{"Authorization" = "Bearer $access_token"}
+        $out = $request.Content | ConvertFrom-Json
+        $userlist += $out.value.userPrincipalName 
+        if ($out.'@odata.nextLink') {
+            Write-Host "[*] Gathering more users..."
+            $usersEndpoint = $out.'@odata.nextLink'
+        }
+        else {
+            # No more pages, exit loop
+            break
+        }
+    } while ($true)
 
 Write-Output "---All Azure AD User Principal Names---"
-$out.value.userPrincipalName 
-$out.value.userPrincipalName | Out-File -Encoding ASCII $outfile
+$userlist
+Write-Host -ForegroundColor green ("Discovered " + $userlist.count + " users")
+$userlist | Out-File -Encoding ASCII $outfile
 }
 
 
@@ -1820,4 +1836,116 @@ foreach ($parameter in $serviceParameters) {
     Write-Host "$name : $value"
 }
 Write-Host -ForegroundColor Yellow ("=" * 80) 
+}
+
+
+
+function Invoke-UserAttributeSearch{
+Param(
+
+    [Parameter(Position = 0, Mandatory = $False)]
+    [object[]]
+    $Tokens = "",
+
+    [Parameter(Position = 0, Mandatory = $True)]
+    [string]
+    $SearchTerm = ""
+  )
+
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        $accesstoken = $tokens.access_token
+        $refreshtoken = $tokens.refresh_token
+    }
+    else{
+
+        Write-Host -ForegroundColor yellow "[*] Initiating a device code login"
+
+        $body = @{
+            "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+            "resource" =      "https://graph.microsoft.com"
+        }
+        $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+        $Headers=@{}
+        $Headers["User-Agent"] = $UserAgent
+        $authResponse = Invoke-RestMethod `
+            -UseBasicParsing `
+            -Method Post `
+            -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+            -Headers $Headers `
+            -Body $body
+        Write-Host -ForegroundColor yellow $authResponse.Message
+
+        $continue = "authorization_pending"
+        while($continue)
+                {
+    
+            $body=@{
+                "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+                "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+                "code" =       $authResponse.device_code
+            }
+            try{
+            $tokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+            }
+            catch{
+            $details=$_.ErrorDetails.Message | ConvertFrom-Json
+            $continue = $details.error -eq "authorization_pending"
+            Write-Output $details.error
+            }
+            if($tokens)
+                {
+                    write-host -ForegroundColor Yellow '[*] Successful Auth! Access and refresh tokens are accessible in the $tokens variable.'
+                    $accesstoken = $tokens.access_token
+                    $refreshToken = $tokens.refresh_token
+                    break
+                }
+            Start-Sleep -Seconds 3
+        }
+    }    
+
+    $headers = @{
+        Authorization = "Bearer $accessToken"
+    }
+
+    $usersEndpoint = "https://graph.microsoft.com/v1.0/users"
+    $graphApiUrl = "https://graph.microsoft.com/v1.0"
+    Write-Host "[*] Now searching each user attribute for the term $searchTerm"
+    # Query users
+    Write-Host "[*] Gathering the users from the tenant."
+    do{
+        
+        $usersResponse = Invoke-RestMethod -Uri $usersEndpoint -Headers $headers
+
+        $attributes = '?$select=accountEnabled,ageGroup,assignedLicenses,businessPhones,city,companyName,consentProvidedForMinor,country,createdDateTime,creationType,department,displayName,mail,employeeId,employeeHireDate,employeeOrgData,employeeType,onPremisesExtensionAttributes,externalUserStateChangeDateTime,faxNumber,givenName,imAddresses,identities,externalUserState,jobTitle,surname,lastPasswordChangeDateTime,legalAgeGroupClassification,mailNickname,mobilePhone,id,officeLocation,onPremisesSamAccountName,onPremisesDistinguishedName,onPremisesDomainName,onPremisesImmutableId,onPremisesLastSyncDateTime,onPremisesProvisioningErrors,onPremisesSecurityIdentifier,onPremisesSyncEnabled,onPremisesUserPrincipalName,otherMails,passwordPolicies,passwordProfile,preferredDataLocation,preferredLanguage,proxyAddresses,Comment,Info,Password,Information,Description,login,signin,credential,cred,credentials,data,signInSessionsValidFromDateTime,sponsors,state,streetAddress,usageLocation,userPrincipalName,userType,postalCode&$expand=manager'
+
+        
+        foreach ($user in $usersResponse.value) {
+            $userId = $user.id
+            $uri = ($graphApiUrl + "/users/" + $userId + $attributes)
+            $userAttributesResponse = Invoke-RestMethod -Uri $uri -Headers $headers
+            $upn = $userAttributesResponse.UserPrincipalName
+            # Search through attributes (excluding @odata.context)
+            $propertiesToSearch = $userAttributesResponse.PSObject.Properties | Where-Object { $_.Name -ne "@odata.context" }
+            foreach ($property in $propertiesToSearch) {
+                $propertyName = $property.Name
+                $propertyValue = $property.Value
+
+                if ($propertyValue -is [string] -and $propertyValue -like "*$searchTerm*") {
+                    Write-Host -ForegroundColor green "[*] Found a match! User: $upn in attritube: $propertyName : $propertyValue"
+                }
+
+            }
+     
+        }
+        if ($usersResponse.'@odata.nextLink') {
+            Write-Host "[*] Gathering more users..."
+            $usersEndpoint = $usersResponse.'@odata.nextLink'
+        }
+        else {
+            # No more pages, exit loop
+            break
+        }
+    } while ($true)
+
 }
