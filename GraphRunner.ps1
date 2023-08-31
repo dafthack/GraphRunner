@@ -1839,7 +1839,7 @@ Write-Host -ForegroundColor Yellow ("=" * 80)
 
 
 
-function Invoke-UserAttributeSearch{
+function Invoke-SearchUserAttributes{
 Param(
 
     [Parameter(Position = 0, Mandatory = $False)]
@@ -1956,10 +1956,10 @@ Function Invoke-SearchMailbox{
     $Tokens = "",
     [Parameter(Position = 1, Mandatory = $true)]
     [string]
-    $searchTerm = "",
+    $SearchTerm = "",
     [Parameter(Position = 2, Mandatory = $false)]
     [string]
-    $messageCount = "25"
+    $MessageCount = "25"
     )
 
 
@@ -1981,6 +1981,7 @@ Function Invoke-SearchMailbox{
         }
         from = 1
         size = $MessageCount
+        enableTopResults = "true"
         }
     )
     }
@@ -2032,16 +2033,16 @@ Function Invoke-SearchMailbox{
 
         # Remove special characters and replace spaces with underscores
         $cleanedSubject = $subject -replace '[^\w\s]', '' -replace '\s', '_'
+        
+
+        # Fetch email details using the message ID
+        Write-Host "[*] Downloading $cleanedSubject"
+        $messageDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId" -Headers $headers -Method Get
         $dateTimeString = $messageDetails.sentDateTime
         $dateTime = [DateTime]::ParseExact($dateTimeString, "yyyy-MM-ddTHH:mm:ssZ", [System.Globalization.CultureInfo]::InvariantCulture)
         $numericDate = $dateTime.ToString("yyyyMMddHHmmss")
         $filename = ($cleanedSubject + "-" + $numericDate +".json")
         $emailFileNames += $filename
-
-        # Fetch email details using the message ID
-        Write-Host "[*] Downloading $cleanedSubject"
-        $messageDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId" -Headers $headers -Method Get
-
         # Save email details as a .msg file
         $messageDetails | ConvertTo-Json | Out-File -FilePath "$folderName\$filename" -Encoding UTF8
 
@@ -2161,7 +2162,7 @@ Function Invoke-SearchMailbox{
 "@
         
         $htmlContent | Out-File -FilePath "$folderName\emailviewer.html" -Encoding UTF8
-        Write-Host -ForegroundColor Green "[*] Emails and attachments have been exported to the $folderName directory."
+        Write-Host -ForegroundColor yellow "[*] Emails and attachments have been exported to the folder $folderName."
         Write-Host -ForegroundColor yellow "[*] A simple emailviewer.html has been provided to view the exported emails."
         Write-Host -ForegroundColor yellow "[*] To use it run the Invoke-HTTPServer module in the $folderName directory and then navigate to http://localhost:8000/emailviewer.html"
     }
@@ -2195,4 +2196,137 @@ while ($listener.IsListening) {
      $response.OutputStream.Close()
 }
 
+}
+
+
+function Invoke-SearchSharePointAndOneDrive{
+    param(
+    [Parameter(Position = 0, Mandatory = $false)]
+    [object[]]
+    $Tokens = "",
+    [Parameter(Position = 1, Mandatory = $true)]
+    [string]
+    $SearchTerm = "",
+    [Parameter(Position = 1, Mandatory = $true)]
+    [string]
+    $MessageCount = ""
+
+    )
+
+    $access_token = $Tokens.access_token
+    $graphApiUrl = "https://graph.microsoft.com/v1.0/search/query"
+
+    # Define the headers with the access token and content type
+    $headers = @{
+    "Authorization" = "Bearer $access_token"
+    "Content-Type" = "application/json"
+    }
+
+    # Define the search query
+    $searchQuery = @{ requests = @( @{
+        entityTypes = @("driveItem")
+        query = @{
+            queryString = $SearchTerm
+        }
+        from = 1
+        size = $MessageCount
+        }
+    )
+    }
+
+    # Convert the search query to JSON format
+    $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
+
+    # Perform the HTTP POST request to search emails
+    $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
+
+
+    $resultarray = @()
+    $total = $response.value[0].hitsContainers[0].total
+    Write-Host -ForegroundColor yellow "[*] Found $total matches for search term $searchTerm"
+    if ([int]$total -gt 0){
+        $itemnumber = 0
+        foreach ($hit in $response.value[0].hitsContainers[0].hits) {
+        
+        $filename = $hit.resource.name
+        $CreatedDate = $hit.resource.fileSystemInfo.createdDateTime
+        $LastModifiedDate = $hit.resource.lastModifiedDateTime
+        $sizeInBytes = $hit.resource.size
+            if ($sizeInBytes -lt 1024) {
+                $sizeFormatted = "{0:N0} Bytes" -f $sizeInBytes
+            } elseif ($sizeInBytes -lt 1048576) {
+                $sizeFormatted = "{0:N2} KB" -f ($sizeInBytes / 1024)
+            } elseif ($sizeInBytes -lt 1073741824) {
+                $sizeFormatted = "{0:N2} MB" -f ($sizeInBytes / 1048576)
+            } else {
+                $sizeFormatted = "{0:N2} GB" -f ($sizeInBytes / 1073741824)
+            }
+        $summary = $hit.summary
+        $location = $hit.resource.webUrl
+        $driveid = $hit.resource.parentReference.driveId
+        $itemid = $hit.resource.id
+
+        $resultInfo = @{
+            result = $itemnumber
+            filename = $filename
+            driveitemids = ($driveid + "," + $itemid)
+        }
+        $resultarray += New-Object PSObject -Property $resultInfo
+
+        Write-Host "Result [$itemnumber]"
+        Write-Host "File Name: $filename"
+        Write-Host "Location: $location"
+        Write-Host "Created Date: $CreatedDate"
+        Write-Host "Last Modified Date: $LastModifiedDate"
+        Write-Host "Size: $sizeFormatted"
+        Write-Host "File Preview: $summary"
+        Write-Host "DriveID & Item ID: $driveid,$itemid"
+        Write-Host ("=" * 80) 
+        $itemnumber++
+        }
+
+        while($done -notlike "Yes"){
+            Write-Host -ForegroundColor Cyan "[*] Do you want to download any of these files? (Yes/No)"
+            $answer = Read-Host 
+            $answer = $answer.ToLower()
+            if ($answer -eq "yes" -or $answer -eq "y") {
+                Write-Host -ForegroundColor Cyan '[*] Enter the result number(s) of the file(s) that you want to download. Ex. "0,10,24"'
+                $resulttodownload = Read-Host 
+                $resultstodl = $resulttodownload.split(",")
+                foreach ($res in $resultstodl){
+                    $specificfileinfo = $resultarray[$res]
+                    Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                }
+
+            } elseif ($answer -eq "no" -or $answer -eq "n") {
+                Write-Output "[*] Quitting..."
+                $done = "Yes"
+                break
+            } else {
+                Write-Output "Invalid input. Please enter Yes or No."
+            }
+        }
+    }
+}
+
+function Invoke-DriveFileDownload{
+    param(
+    [Parameter(Position = 0, Mandatory = $false)]
+    [object[]]
+    $Tokens = "",
+    [Parameter(Position = 1, Mandatory = $true)]
+    [string]
+    $DriveItemIDs = "",
+    [Parameter(Position = 2, Mandatory = $true)]
+    [string]
+    $FileName = ""
+    )
+    $access_token = $tokens.access_token
+    $itemarray = $driveitemids.split(",")
+    $downloadUrl = ("https://graph.microsoft.com/v1.0/drives/" + $itemarray[0] + "/items/" + $itemarray[1] + "/content")
+    $downloadheaders = @{
+    "Authorization" = "Bearer $access_token"
+    }
+    Write-Host -ForegroundColor yellow "[*] Now downloading $FileName"
+    Invoke-RestMethod -Uri $downloadUrl -Headers $downloadheaders -OutFile $filename
 }
