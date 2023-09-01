@@ -2139,10 +2139,19 @@ function Invoke-SearchSharePointAndOneDrive{
     [Parameter(Position = 1, Mandatory = $true)]
     [string]
     $SearchTerm = "",
-    [Parameter(Position = 1, Mandatory = $false)]
+    [Parameter(Position = 2, Mandatory = $false)]
     [string]
-    $MessageCount = "25"
-
+    $ResultCount = "25",
+    [Parameter(Position = 3, Mandatory = $false)]
+    [string]
+    $DetectorName = "Custom",
+    [Parameter(Position = 4, Mandatory = $false)]
+    [string]
+    $OutFile = "",
+    [switch]
+    $ReportOnly,
+    [switch]
+    $PageResults
     )
 
     if($Tokens){
@@ -2186,7 +2195,7 @@ function Invoke-SearchSharePointAndOneDrive{
             queryString = $SearchTerm
         }
         from = 0
-        size = $MessageCount
+        size = $ResultCount
         }
     )
     }
@@ -2201,47 +2210,74 @@ function Invoke-SearchSharePointAndOneDrive{
     $resultarray = @()
     $total = $response.value[0].hitsContainers[0].total
     Write-Host -ForegroundColor yellow "[*] Found $total matches for search term $searchTerm"
+
+
     if ([int]$total -gt 0){
         $itemnumber = 0
-        foreach ($hit in $response.value[0].hitsContainers[0].hits) {
-        
-        $filename = $hit.resource.name
-        $CreatedDate = $hit.resource.fileSystemInfo.createdDateTime
-        $LastModifiedDate = $hit.resource.lastModifiedDateTime
-        $sizeInBytes = $hit.resource.size
-            if ($sizeInBytes -lt 1024) {
-                $sizeFormatted = "{0:N0} Bytes" -f $sizeInBytes
-            } elseif ($sizeInBytes -lt 1048576) {
-                $sizeFormatted = "{0:N2} KB" -f ($sizeInBytes / 1024)
-            } elseif ($sizeInBytes -lt 1073741824) {
-                $sizeFormatted = "{0:N2} MB" -f ($sizeInBytes / 1048576)
-            } else {
-                $sizeFormatted = "{0:N2} GB" -f ($sizeInBytes / 1073741824)
+       
+        while ($itemnumber -lt $total) {
+            $resultsList = @()
+            foreach ($hit in $response.value[0].hitsContainers[0].hits) {
+            $filename = $hit.resource.name
+            $CreatedDate = $hit.resource.fileSystemInfo.createdDateTime
+            $LastModifiedDate = $hit.resource.lastModifiedDateTime
+            $sizeInBytes = $hit.resource.size
+                if ($sizeInBytes -lt 1024) {
+                    $sizeFormatted = "{0:N0} Bytes" -f $sizeInBytes
+                } elseif ($sizeInBytes -lt 1048576) {
+                    $sizeFormatted = "{0:N2} KB" -f ($sizeInBytes / 1024)
+                } elseif ($sizeInBytes -lt 1073741824) {
+                    $sizeFormatted = "{0:N2} MB" -f ($sizeInBytes / 1048576)
+                } else {
+                    $sizeFormatted = "{0:N2} GB" -f ($sizeInBytes / 1073741824)
+                }
+            $summary = $hit.summary
+            $location = $hit.resource.webUrl
+            $driveid = $hit.resource.parentReference.driveId
+            $itemid = $hit.resource.id
+
+            $resultInfo = @{
+                result = $itemnumber
+                filename = $filename
+                driveitemids = ($driveid + ":" + $itemid)
             }
-        $summary = $hit.summary
-        $location = $hit.resource.webUrl
-        $driveid = $hit.resource.parentReference.driveId
-        $itemid = $hit.resource.id
-
-        $resultInfo = @{
-            result = $itemnumber
-            filename = $filename
-            driveitemids = ($driveid + "," + $itemid)
+            $LogInfo = @{
+                "Detector Name" = $DetectorName
+                "File Name" = $filename
+                "Size" = $sizeFormatted
+                "Location" = $location
+                "DriveItemID" = ($driveid + ":" + $itemid)
+            }
+            
+            $resultarray += New-Object PSObject -Property $resultInfo
+            $resultsList += New-Object PSObject -Property $LogInfo
+            if(!$ReportOnly){
+                Write-Host "Result [$itemnumber]"
+                Write-Host "File Name: $filename"
+                Write-Host "Location: $location"
+                Write-Host "Created Date: $CreatedDate"
+                Write-Host "Last Modified Date: $LastModifiedDate"
+                Write-Host "Size: $sizeFormatted"
+                Write-Host "File Preview: $summary"
+                Write-Host "DriveID & Item ID: $driveid\:$itemid"
+                Write-Host ("=" * 80) 
+                }
+                $itemnumber++
+            }
+            if($OutFile){
+                Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
+                $resultsList | Export-Csv -Path $OutFile -NoTypeInformation -Append
+            }
+            if ($itemnumber -lt $total -and $PageResults) {
+                $searchQuery.requests[0].from += $ResultCount
+                $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
+                $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
+            }
+            If(!$PageResults){
+                $itemnumber = $total
+            }
         }
-        $resultarray += New-Object PSObject -Property $resultInfo
-
-        Write-Host "Result [$itemnumber]"
-        Write-Host "File Name: $filename"
-        Write-Host "Location: $location"
-        Write-Host "Created Date: $CreatedDate"
-        Write-Host "Last Modified Date: $LastModifiedDate"
-        Write-Host "Size: $sizeFormatted"
-        Write-Host "File Preview: $summary"
-        Write-Host "DriveID & Item ID: $driveid,$itemid"
-        Write-Host ("=" * 80) 
-        $itemnumber++
-        }
-
+        if(!$ReportOnly){
         $done = $false
 
         while ($done -ne $true) {
@@ -2253,8 +2289,11 @@ function Invoke-SearchSharePointAndOneDrive{
                 if ($anotherDownload -eq "yes" -or $anotherDownload -eq "y") {
                     Write-Host -ForegroundColor Cyan '[*] Enter the result number(s) of the file(s) that you want to download. Ex. "0,10,24"'
                     $resulttodownload = Read-Host
-                    $specificfileinfo = $resultarray[$resulttodownload]
-                    Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                    $resultstodl = $resulttodownload.split(",")
+                    foreach ($res in $resultstodl){
+                        $specificfileinfo = $resultarray[$res]
+                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                    }
                 } elseif ($anotherDownload -eq "no" -or $anotherDownload -eq "n") {
                     Write-Output "[*] Quitting..."
                     $done = $true
@@ -2271,8 +2310,11 @@ function Invoke-SearchSharePointAndOneDrive{
                     $done = "yes"  
                     Write-Host -ForegroundColor Cyan '[*] Enter the result number(s) of the file(s) that you want to download. Ex. "0,10,24"'
                     $resulttodownload = Read-Host
-                    $specificfileinfo = $resultarray[$resulttodownload]
-                    Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                    $resultstodl = $resulttodownload.split(",")
+                    foreach ($res in $resultstodl){
+                        $specificfileinfo = $resultarray[$res]
+                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                    }
                 } elseif ($answer -eq "no" -or $answer -eq "n") {
                     Write-Output "[*] Quitting..."
                     $done = $true
@@ -2282,6 +2324,7 @@ function Invoke-SearchSharePointAndOneDrive{
                 }
             }
         }
+        }    
     }
 }
 
@@ -2298,7 +2341,7 @@ function Invoke-DriveFileDownload{
     $FileName = ""
     )
     $access_token = $tokens.access_token
-    $itemarray = $driveitemids.split(",")
+    $itemarray = $driveitemids.split(":")
     $downloadUrl = ("https://graph.microsoft.com/v1.0/drives/" + $itemarray[0] + "/items/" + $itemarray[1] + "/content")
     $downloadheaders = @{
     "Authorization" = "Bearer $access_token"
