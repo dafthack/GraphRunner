@@ -1,10 +1,35 @@
 # GraphRunner
 ![GraphRunner](https://github.com/dafthack/GraphRunner/assets/2296229/46be3309-859c-483b-91fc-f392b81e4fa0)
 
-A Post-exploitation Toolset for Interacting with the Microsoft Graph API
+GraphRunner is a post-exploitation toolset for interacting with the Microsoft Graph API. It provides various tools for performing reconnaissance, persistence, and pillaging of data from a Microsoft Entra ID (Azure AD) account. 
 
+It consists of three separate parts: 
+* A PowerShell script where the majority of modules are located
+* An HTML GUI that can leverage an access token to navigate and pillage a user's account
+* A simple PHP redirector for harvesting authentication codes during an OAuth flow
+
+****
+
+## Main Features
+* Deploy malicious apps
+* Discover misconfigured mailboxes that are exposed
+* Clone security groups to carry out watering hole attacks
+* Search and export email
+* Search and export SharePoint and OneDrive files accessible to a user
+* Search all user attributes for specific terms
+* Leverage a GUI built on the Graph API to pillage a user's account
+* Dump conditional access policies
+* Dump app registrations and external apps including consent and scope to identify potentially malicious apps
+
+****
 ## Usage
 
-GraphRunner includes a number of modules to assist with carrying out various attacks during post-exploitation of a Microsoft Azure tenant. Most of the modules rely on having authenticated access tokens. To assist with this there are multiple modules for obtaining and working with both user and application (service principal) tokens. 
+As GraphRunner is a post-exploitation tool most of the modules rely on having authenticated access tokens. To assist with this there are multiple modules for obtaining and working with both user and application (service principal) tokens. 
 
-Check out the [wiki](https://github.com/dafthack/GraphRunner/wiki) for the user guide. 
+A good starting place is to import the PowerShell script and run the Get-GraphTokens module.
+
+```PowerShell
+Import-Module .\GraphRunner.ps1
+Get-GraphTokens
+```
+Next, check out the [wiki](https://github.com/dafthack/GraphRunner/wiki) for the full user guide and information about individual modules. 
