@@ -1,0 +1,124 @@
+{
+  	"Detectors":[
+		{
+		"DetectorName": "AWS Keys",
+  		"SearchQuery": "(filetype:credentials OR filetype:txt OR filetype:config OR filetype:sh OR filetype:bashrc OR filetype:bash_profile OR filetype:env OR filetype:ps1 OR filetype:py OR filetype:java OR filetype:js OR filetype:json OR filetype:yaml OR filetype:xml OR filetype:toml OR filetype:yml OR filetype:ini OR filetype:conf OR filetype:sql OR filetype:sqlite3 OR filetype:sqlite OR filetype:log OR filetype:properties OR filetype:ts OR filetype:php OR filetype:psd1 OR filetype:psm1 OR filetype:rb OR filetype:exports OR filetype:functions OR filetype:profile OR filetype:zsh_history OR filetype:doc OR filetype:docx OR filetype:xls OR filetype:xlsx OR filetype:pdf) AND (content:\"AWS_ACCESS_KEY_ID\" OR content:\"AWS_SECRET_ACCESS_KEY\")"
+		},
+		{
+		"DetectorName": "Private Keys",
+		"SearchQuery": "(filetype:pem OR filetype:ppk OR filetype:key OR filetype:asc OR filetype:txt OR filetype:config OR filetype:xml OR filetype:py) AND (content:\"BEGIN RSA PRIVATE KEY\" OR content:\"BEGIN DSA PRIVATE KEY\" OR content:\"BEGIN EC PRIVATE KEY\")"
+		},
+		{
+		"DetectorName": "Private Key Found In Non-Standard Key File",
+		"SearchQuery": "(filetype:credentials OR filetype:txt OR filetype:config OR filetype:sh OR filetype:bashrc OR filetype:bash_profile OR filetype:env OR filetype:ps1 OR filetype:py OR filetype:java OR filetype:js OR filetype:json OR filetype:yaml OR filetype:xml OR filetype:toml OR filetype:yml OR filetype:ini OR filetype:conf OR filetype:sql OR filetype:sqlite3 OR filetype:sqlite OR filetype:log OR filetype:properties OR filetype:ts OR filetype:php OR filetype:psd1 OR filetype:psm1 OR filetype:rb OR filetype:exports OR filetype:functions OR filetype:profile OR filetype:zsh_history OR filetype:doc OR filetype:docx OR filetype:xls OR filetype:xlsx OR filetype:pdf) AND (begin NEAR(n=1) (RSA OR OPENSSH OR DSA OR EC OR PGP) NEAR(n=1) KEY)"
+		},
+		{
+		"DetectorName": "Database Connection Strings",
+		"SearchQuery": "((content:\"datasource\" NEAR(n=50) content:\"password\") OR (content:\"connectionstring\" NEAR(n=50) content:\"passw*\"))"
+		},
+		{
+		"DetectorName": "Image Deployment",
+		"SearchQuery": "(filetype:wim OR filetype:ova OR filetype:ovf)"
+		},
+		{
+		"DetectorName": "Domain Join Creds (customsettings)",
+		"SearchQuery": "filename:customsettings.ini"
+		},
+		{
+		"DetectorName": "FTP Client Config",
+		"SearchQuery": "filename:recentservers.xml OR filename:sftp-config.json"
+		},
+		{
+		"DetectorName": "FTP Server Config",
+		"SearchQuery": "filename:proftpdpasswd OR filename:filezilla.xml"
+		},
+		{
+		"DetectorName": "Git Credentials",
+		"SearchQuery": "filetype:.git-credentials"
+		},
+		{
+		"DetectorName": "Infrastructure As Code",
+		"SearchQuery": "(filetype:tf OR filetype:tfstate OR filetype:tfstate.backup OR filetype:tfplan OR filetype:yaml OR filetype:jinja OR filetype:yml OR filetype:pp OR filetype:bicep OR filetype:hot)"
+		},
+		{
+		"DetectorName": "Java DB Connection Strings",
+		"SearchQuery": "(filetype:jsp OR filetype:do OR filetype:java OR filetype:cfm) AND (getConnection NEAR(n=2) jdbc:)"
+		},
+		{
+		"DetectorName": "Jenkins",
+		"SearchQuery": "filename:credentials.xml OR filename:jenkins.plugins.publish_over_ssh.BapSshPublisherPlugin.xml"
+		},
+		{
+		"DetectorName": "Memory Dump",
+		"SearchQuery": "filetype:dmp"
+		},
+		{
+		"DetectorName": "Net Config",
+		"SearchQuery": "filename:\"running-config.cfg\" OR filename:\"startup-config.cfg\" OR filename:\"running-config\" or filename:\"startup-config\""
+		},
+		{
+		"DetectorName": "PHP Connection Strings",
+		"SearchQuery": "(filetype:php OR filetype:phtml OR filetype:inc OR filetype:php3 OR filetype:php5 OR filetype:php7) AND (mysql_connect OR mysql_pconnect OR mysql_change_user OR pg_connect OR pg_pconnect)"
+		},
+		{
+		"DetectorName": "Password Manager",
+		"SearchQuery": "filetype:kdbx OR filetype:kdb OR filetype:psafe3 OR filetype:kwallet OR filetype:keychain OR filetype:agilekeychain OR filetype:cred"
+		},
+		{
+		"DetectorName": "Packet Capture",
+		"SearchQuery": "filetype:pcap OR filetype:pcapng OR filetype:cap"
+		},
+		{
+		"DetectorName": "PowerShell Credentials",
+		"SearchQuery": "(\"-SecureString\" OR \"-AsPlainText\" OR \"Net.NetworkCredential\") AND (filetype:ps1 OR filetype:psd1 OR filetype:psm1 OR filetype:txt OR filetype:env)"
+		},
+		{
+		"DetectorName": "Python DB Connection Strings",
+		"SearchQuery": "(filetype:py) AND (mysql.connector.connect OR psycopg2.connect)"
+		},
+		{
+		"DetectorName": "RDP Passwords",
+		"SearchQuery": "(filetype:rdp) AND (password)"
+		},
+		{
+		"DetectorName": "Remote Access",
+		"SearchQuery": "filetype:rdg OR filetype:rtsz OR filetype:rtsx OR filetype:ovpn OR filetype:vpn OR filetype:RDP"
+		},
+		{
+		"DetectorName": "Ruby Config",
+		"SearchQuery": "\"database.yml\" OR \".secret_token.rb\" OR \"knife.rb\" OR \"carrerwave.rb\" OR \"omiauth.rb\""
+		},
+		{
+		"DetectorName": "Ruby DB Connection String",
+		"SearchQuery": "(filetype:rb) AND (DBI.connect)"
+		},
+		{
+		"DetectorName": "SSH Keys",
+		"SearchQuery": "filename:id_rsa OR filename:id_dsa OR filename:id_ecdsa OR filename:id_ed25519"
+		},
+		{
+		"DetectorName": "Shell History",
+		"SearchQuery": "filename:.bash_history OR filename:.zsh_history OR filename:.sh_history OR filename:zhistory OR filename:.irb_history OR filename:ConsoleHost_History.txt"
+		},
+		{
+		"DetectorName": "Unattend Install",
+		"SearchQuery": "(filename:unattend.xml OR filename:autounattend.xml OR filename:sysprep.inf)"
+		},
+		{
+		"DetectorName": "NTDS",
+		"SearchQuery": "filename:\"NTDS.dit\""
+		},
+		{
+		"DetectorName": "Hashfile",
+		"SearchQuery": "filename:pot"
+		},
+		{
+		"DetectorName": "Browser Creds",
+		"SearchQuery": "filename:logins.json"
+		},
+		{
+		"DetectorName": "Azure App Creds",
+		"SearchQuery": "(filetype:credentials OR filetype:txt OR filetype:config OR filetype:sh OR filetype:bashrc OR filetype:bash_profile OR filetype:env OR filetype:ps1 OR filetype:py OR filetype:java OR filetype:js OR filetype:json OR filetype:yaml OR filetype:xml OR filetype:toml OR filetype:yml OR filetype:ini OR filetype:conf OR filetype:sql OR filetype:sqlite3 OR filetype:sqlite OR filetype:log OR filetype:properties OR filetype:ts OR filetype:php OR filetype:psd1 OR filetype:psm1 OR filetype:rb OR filetype:exports OR filetype:functions OR filetype:profile OR filetype:zsh_history OR filetype:xls OR filetype:xlsx) AND ((client_id OR clientID) AND (tenant) AND (secret))"
+		}
+	]
+}
