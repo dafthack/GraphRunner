@@ -1890,12 +1890,24 @@ Function Invoke-SearchMailbox{
     $SearchTerm = "",
     [Parameter(Position = 2, Mandatory = $false)]
     [string]
-    $MessageCount = "25"
+    $MessageCount = "25",
+    [Parameter(Position = 3, Mandatory = $false)]
+    [string]
+    $OutFile = "",
+    [Parameter(Position = 4, Mandatory = $false)]
+    [string]
+    $DetectorName = "Custom",
+    [switch]
+    $GraphRun,
+    [switch]
+    $PageResults
     )
 
 
     if($Tokens){
-        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        if(!$GraphRun){
+            Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        }
     }
     else{
          # Login
@@ -1934,7 +1946,7 @@ Function Invoke-SearchMailbox{
         query = @{
             queryString = $searchTerm
         }
-        from = 1
+        from = 0
         size = $MessageCount
         enableTopResults = "true"
         }
@@ -1946,80 +1958,123 @@ Function Invoke-SearchMailbox{
 
     # Perform the HTTP POST request to search emails
     $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
-
+    
     # Process the response and display the summary
     $total = $response.value[0].hitsContainers[0].total
-    Write-Host -ForegroundColor yellow "[*] Found $total matches for search term $searchTerm"
-    
+    if(!$GraphRun){
+        Write-Host -ForegroundColor yellow "[*] Found $total matches for search term $searchTerm"
+    }
+    else{
+        if([int]$total -gt 0){
+            Write-Host -ForegroundColor yellow "[*] Found $total matches for detector: $DetectorName"
+        }
+    }
+        
     if ($total -eq 0){return}
-    foreach ($hit in $response.value[0].hitsContainers[0].hits) {
-    $subject = $hit.resource.subject
-    $sender = $hit.resource.sender.emailAddress.address
-    $receivers = $hit.resource.replyTo | ForEach-Object { $_.emailAddress.Name }
-    $date = $hit.resource.sentDateTime
-    $preview = $hit.resource.bodyPreview
-
-    Write-Output "Subject: $subject | Sender: $sender | Receivers: $($receivers -join ', ') | Date: $date | Message Preview: $preview"
-    Write-Host ("=" * 80) 
-    }
-
-    while($download -notlike "Yes"){
-        Write-Host -ForegroundColor Cyan "[*] Do you want to download these emails and their attachments? (Yes/No)"
-        $answer = Read-Host 
-        $answer = $answer.ToLower()
-        if ($answer -eq "yes" -or $answer -eq "y") {
-            Write-Host -ForegroundColor yellow "[*] Downloading messages..."
-            $download = "Yes"
-        } elseif ($answer -eq "no" -or $answer -eq "n") {
-            Write-Output "[*] Quitting..."
-            break
-        } else {
-            Write-Output "Invalid input. Please enter Yes or No."
-        }
-    }
-
-    if ($download -like "Yes"){
-        $emailFileNames = @()
-        $folderName = "$searchTerm-" + (Get-Date -Format 'yyyyMMddHHmmss')
-        New-Item -Path $folderName -ItemType Directory
-        # Process the response and export email content
-        foreach ($hit in $response.value[0].hitsContainers[0].hits) {
-        $webLink = $hit.resource.webLink
-        $itemId = [regex]::Match($webLink, "ItemID=([^&]+)").Groups[1].Value
-        $subject = $hit.resource.subject
-
-        # Remove special characters and replace spaces with underscores
-        $cleanedSubject = $subject -replace '[^\w\s]', '' -replace '\s', '_'
         
+        $moreresults = "True"
+        while ($moreresults -like "True") {
+            $moreresults = $response.value[0].hitsContainers[0].moreResultsAvailable
+            $resultsList = @()
+            foreach ($hit in $response.value[0].hitsContainers[0].hits) {
+            $subject = $hit.resource.subject
+            $sender = $hit.resource.sender.emailAddress.address
+            $receivers = $hit.resource.replyTo | ForEach-Object { $_.emailAddress.Name }
+            $date = $hit.resource.sentDateTime
+            $preview = $hit.resource.bodyPreview
 
-        # Fetch email details using the message ID
-        Write-Host "[*] Downloading $cleanedSubject"
-        $messageDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId" -Headers $headers -Method Get
-        $dateTimeString = $messageDetails.sentDateTime
-        $dateTime = [DateTime]::ParseExact($dateTimeString, "yyyy-MM-ddTHH:mm:ssZ", [System.Globalization.CultureInfo]::InvariantCulture)
-        $numericDate = $dateTime.ToString("yyyyMMddHHmmss")
-        $filename = ($cleanedSubject + "-" + $numericDate +".json")
-        $emailFileNames += $filename
-        # Save email details as a .msg file
-        $messageDetails | ConvertTo-Json | Out-File -FilePath "$folderName\$filename" -Encoding UTF8
+            $LogInfo = @{
+                        "Detector Name" = $DetectorName
+                        "Subject" = $subject
+                        "Sender" = $sender
+                        "Receivers" = $receivers
+                        "Date" = $date
+                        "Preview" = $preview
+                    }
 
-        # Fetch and save attachments
-        if ($messageDetails.hasAttachments -like "True") {
-                Write-Host ("[**] " + $messageDetails.subject + " has attachments.")
-                $attachmentDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId/attachments" -Headers $headers -Method Get
+            $resultsList += New-Object PSObject -Property $LogInfo
 
-                foreach($item in $attachmentDetails.value){
-                $attachmentContentBytes = [System.Convert]::FromBase64String($item.contentBytes)
-                $attachmentFileName = ($CleanedSubject + "-attached-" + $item.name)
-                Write-Host "[***] Downloading attachment $attachmentFileName"
-                $attachmentContentBytes | Set-Content -Path "$folderName\$attachmentFileName" -Encoding Byte
+            if(!$GraphRun){
+
+            Write-Output "Subject: $subject | Sender: $sender | Receivers: $($receivers -join ', ') | Date: $date | Message Preview: $preview"
+            Write-Host ("=" * 80) 
+            }
+            }
+            if($OutFile){
+                if(!$GraphRun){
+                    Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
                 }
+                $resultsList | Export-Csv -Path $OutFile -NoTypeInformation -Append
+            }
+
+            if(!$GraphRun){
+            while($download -notlike "Yes"){
+                Write-Host -ForegroundColor Cyan "[*] Do you want to download these emails and their attachments? (Yes/No)"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Downloading messages..."
+                    $download = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    if(!$PageResults){
+                        Write-Output "[*] Quitting..."
+                    }
+                    else{
+                        if($moreresults -like "False"){
+                            Write-Host -ForegroundColor Yellow "[*] No more results. Quitting..."
+                        }
+                        else{
+                            Write-Host -ForegroundColor yellow "[*] Trying to get next page..."
+                        }
+                    }
+                    break
+                } else {
+                    Write-Output "Invalid input. Please enter Yes or No."
+                }
+            }
+
+            if ($download -like "Yes"){
+                $emailFileNames = @()
+                $folderName = "mailsearch-" + (Get-Date -Format 'yyyyMMddHHmmss')
+                New-Item -Path $folderName -ItemType Directory | Out-Null
+                # Process the response and export email content
+                foreach ($hit in $response.value[0].hitsContainers[0].hits) {
+                $webLink = $hit.resource.webLink
+                $itemId = [regex]::Match($webLink, "ItemID=([^&]+)").Groups[1].Value
+                $subject = $hit.resource.subject
+
+                # Remove special characters and replace spaces with underscores
+                $cleanedSubject = $subject -replace '[^\w\s]', '' -replace '\s', '_'
         
-        }
-        }
-        # Export the email file names to filelist.json
-        $emailFileNames | ConvertTo-Json | Out-File -FilePath "$folderName\filelist.json" -Encoding UTF8
-        $htmlContent = @"
+
+                # Fetch email details using the message ID
+                Write-Host "[*] Downloading $cleanedSubject"
+                $messageDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId" -Headers $headers -Method Get
+                $dateTimeString = $messageDetails.sentDateTime
+                $dateTime = [DateTime]::ParseExact($dateTimeString, "yyyy-MM-ddTHH:mm:ssZ", [System.Globalization.CultureInfo]::InvariantCulture)
+                $numericDate = $dateTime.ToString("yyyyMMddHHmmss")
+                $filename = ($cleanedSubject + "-" + $numericDate +".json")
+                $emailFileNames += $filename
+                # Save email details as a .msg file
+                $messageDetails | ConvertTo-Json | Out-File -FilePath "$folderName\$filename" -Encoding UTF8
+
+                # Fetch and save attachments
+                if ($messageDetails.hasAttachments -like "True") {
+                        Write-Host ("[**] " + $messageDetails.subject + " has attachments.")
+                        $attachmentDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId/attachments" -Headers $headers -Method Get
+
+                        foreach($item in $attachmentDetails.value){
+                        $attachmentContentBytes = [System.Convert]::FromBase64String($item.contentBytes)
+                        $attachmentFileName = ($CleanedSubject + "-attached-" + $item.name)
+                        Write-Host "[***] Downloading attachment $attachmentFileName"
+                        $attachmentContentBytes | Set-Content -Path "$folderName\$attachmentFileName" -Encoding Byte
+                        }
+        
+                }
+                }
+                # Export the email file names to filelist.json
+                $emailFileNames | ConvertTo-Json | Out-File -FilePath "$folderName\filelist.json" -Encoding UTF8
+                $htmlContent = @"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2118,11 +2173,24 @@ Function Invoke-SearchMailbox{
 </html>
 "@
         
-        $htmlContent | Out-File -FilePath "$folderName\emailviewer.html" -Encoding UTF8
-        Write-Host -ForegroundColor yellow "[*] Emails and attachments have been exported to the folder $folderName."
-        Write-Host -ForegroundColor yellow "[*] A simple emailviewer.html has been provided to view the exported emails."
-        Write-Host -ForegroundColor yellow "[*] To use it run the Invoke-HTTPServer module in the $folderName directory and then navigate to http://localhost:8000/emailviewer.html"
+            $htmlContent | Out-File -FilePath "$folderName\emailviewer.html" -Encoding UTF8
+            Write-Host -ForegroundColor yellow "[*] Emails and attachments have been exported to the folder $folderName."
+            Write-Host -ForegroundColor yellow "[*] A simple emailviewer.html has been provided to view the exported emails."
+            Write-Host -ForegroundColor yellow "[*] To use it run the Invoke-HTTPServer module in the $folderName directory and then navigate to http://localhost:8000/emailviewer.html"
+        }
+        }
+        
+        
+        If(!$PageResults){
+            $moreresults = "False"
+        }
+        if ($PageResults -and ($moreresults -like "True")) {
+            $searchQuery.requests[0].from += $MessageCount
+            $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
+            $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
+        }
     }
+        
 }
 
 
@@ -2297,7 +2365,7 @@ function Invoke-SearchSharePointAndOneDrive{
                 Write-Host "DriveID & Item ID: $driveid\:$itemid"
                 Write-Host ("=" * 80) 
                 }
-                $itemnumber++
+            $itemnumber++
             }
             if($OutFile){
                 if(!$GraphRun){
@@ -2447,7 +2515,12 @@ param(
 
 
     # Email
+    $mailout = "$folderName\interesting-mail.csv"
 
+    Write-Host -ForegroundColor yellow "[*] Now searching SharePoint and OneDrive using detector file $DetectorFile. Results will be written to $folderName."
+    foreach($detect in $detector.Detectors){
+        Invoke-SearchMailbox -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -MessageCount 500 -OutFile $mailout -GraphRun -PageResults
+    }
 
     # SharePoint and OneDrive Tests
     $spout = "$folderName\interesting-files.csv"
