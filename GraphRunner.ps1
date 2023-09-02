@@ -388,6 +388,32 @@ $resources = @"
 }
 
 
+function Invoke-DeleteOAuthApp{
+    param(
+        [Parameter(Position = 0, Mandatory = $True)]
+        [object[]]
+        $Tokens = "",
+        [Parameter(Position = 0, Mandatory = $True)]
+        [string]
+        $ObjectID = ""
+    )
+    $accessToken = $tokens.access_token
+    $deleteUrl = "https://graph.microsoft.com/v1.0/applications/$ObjectID"
+    $headers = @{
+        Authorization = "Bearer $accessToken"
+    }
+
+
+    $response = Invoke-RestMethod -Uri $deleteUrl -Headers $headers -Method Delete
+
+    if ($response -ne $null) {
+        Write-Output "App registration with ID $appId deleted successfully."
+    } else {
+        Write-Error "Error deleting app registration."
+    }
+
+}
+
 Function Invoke-GraphOpenInboxFinder{
     param(
     [Parameter(Position = 0, Mandatory = $true)]
@@ -435,8 +461,7 @@ Function Invoke-GraphOpenInboxFinder{
     }
 }
 
-## A few tools for working with Azure OAuth2 Authentication Codes and access_tokens for Azure App Registrations
-## By Beau Bullock @dafthack
+
 
 Function Get-AzureAppTokens{
 
@@ -1495,28 +1520,28 @@ function Invoke-InviteGuest{
 
 function Invoke-GraphRecon{
 
-<#
-    .SYNOPSIS
-        PowerShell module to perform general recon via the Azure AD Graph API.
-        Author: Beau Bullock (@dafthack)
-        License: MIT
-        Required Dependencies: None
-        Optional Dependencies: None
+    <#
+        .SYNOPSIS
+            PowerShell module to perform general recon via the Azure AD Graph API.
+            Author: Beau Bullock (@dafthack)
+            License: MIT
+            Required Dependencies: None
+            Optional Dependencies: None
 
-    .DESCRIPTION
+        .DESCRIPTION
         
-       PowerShell module to perform general recon via the Azure AD Graph API.
+           PowerShell module to perform general recon via the Azure AD Graph API.
 
-    .EXAMPLES      
+        .EXAMPLES      
         
-        C:\PS> Invoke-GraphRecon -Tokens $tokens
-#>
+            C:\PS> Invoke-GraphRecon -Tokens $tokens
+    #>
 
-param(
-    [Parameter(Position = 0, Mandatory = $False)]
-    [object[]]
-    $Tokens = ""
-)
+    param(
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens = ""
+    )
     if($Tokens){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
         $accesstoken = $tokens.access_token
@@ -2151,11 +2176,16 @@ function Invoke-SearchSharePointAndOneDrive{
     [switch]
     $ReportOnly,
     [switch]
-    $PageResults
+    $PageResults,
+    [switch]
+    $GraphRun
     )
 
     if($Tokens){
-        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        #Suppressing output if GraphRun module is used
+        if (!$GraphRun){
+            Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        }
     }
     else{
          # Login
@@ -2209,9 +2239,14 @@ function Invoke-SearchSharePointAndOneDrive{
 
     $resultarray = @()
     $total = $response.value[0].hitsContainers[0].total
-    Write-Host -ForegroundColor yellow "[*] Found $total matches for search term $searchTerm"
-
-
+    if(!$GraphRun){
+        Write-Host -ForegroundColor yellow "[*] Found $total matches for search term $searchTerm"
+    }
+    else{
+        if([int]$total -gt 0){
+            Write-Host -ForegroundColor yellow "[*] Found $total matches for detector: $DetectorName"
+        }
+    }
     if ([int]$total -gt 0){
         $itemnumber = 0
        
@@ -2265,7 +2300,9 @@ function Invoke-SearchSharePointAndOneDrive{
                 $itemnumber++
             }
             if($OutFile){
-                Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
+                if(!$GraphRun){
+                    Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
+                }
                 $resultsList | Export-Csv -Path $OutFile -NoTypeInformation -Append
             }
             if ($itemnumber -lt $total -and $PageResults) {
@@ -2348,4 +2385,80 @@ function Invoke-DriveFileDownload{
     }
     Write-Host -ForegroundColor yellow "[*] Now downloading $FileName"
     Invoke-RestMethod -Uri $downloadUrl -Headers $downloadheaders -OutFile $filename
+}
+
+
+function Invoke-GraphRunner{
+
+param(
+    [Parameter(Position = 0, Mandatory = $false)]
+    [object[]]
+    $Tokens = "",
+    [Parameter(Position = 1, Mandatory = $false)]
+    [string]
+    $DetectorFile = ".\default_detectors.json"
+    )
+    
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    }
+    else{
+         # Login
+         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+         while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+    }
+    $access_token = $tokens.access_token   
+    [string]$refresh_token = $tokens.refresh_token 
+    
+    $detectors = Get-Content $DetectorFile
+    $detector = $detectors |ConvertFrom-Json
+
+    $folderName = "GraphRunner-" + (Get-Date -Format 'yyyyMMddHHmmss')
+    New-Item -Path $folderName -ItemType Directory | Out-Null
+
+    # GraphRecon
+
+
+    # Users
+
+
+    # Groups
+
+
+    # CAPS
+
+
+    # Apps
+
+
+    # Email
+
+
+    # SharePoint and OneDrive Tests
+    $spout = "$folderName\interesting-files.csv"
+
+    Write-Host -ForegroundColor yellow "[*] Now searching SharePoint and OneDrive using detector file $DetectorFile. Results will be written to $folderName."
+    foreach($detect in $detector.Detectors){
+        Invoke-SearchSharePointAndOneDrive  -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -PageResults -ResultCount 500 -ReportOnly -OutFile $spout -GraphRun
+    }
+
+
+    # Teams
+
+    Write-Host -ForegroundColor yellow "[*] Results have been written to $folderName"
 }
