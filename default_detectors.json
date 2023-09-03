@@ -2,11 +2,11 @@
   	"Detectors":[
 		{
 		"DetectorName": "AWS Keys",
-  		"SearchQuery": "(filetype:credentials OR filetype:txt OR filetype:config OR filetype:sh OR filetype:bashrc OR filetype:bash_profile OR filetype:env OR filetype:ps1 OR filetype:py OR filetype:java OR filetype:js OR filetype:json OR filetype:yaml OR filetype:xml OR filetype:toml OR filetype:yml OR filetype:ini OR filetype:conf OR filetype:sql OR filetype:sqlite3 OR filetype:sqlite OR filetype:log OR filetype:properties OR filetype:ts OR filetype:php OR filetype:psd1 OR filetype:psm1 OR filetype:rb OR filetype:exports OR filetype:functions OR filetype:profile OR filetype:zsh_history OR filetype:doc OR filetype:docx OR filetype:xls OR filetype:xlsx OR filetype:pdf) AND (content:\"AWS_ACCESS_KEY_ID\" OR content:\"AWS_SECRET_ACCESS_KEY\")"
+  		"SearchQuery": "(filetype:credentials OR filetype:txt OR filetype:config OR filetype:sh OR filetype:bashrc OR filetype:bash_profile OR filetype:env OR filetype:ps1 OR filetype:py OR filetype:java OR filetype:js OR filetype:json OR filetype:yaml OR filetype:xml OR filetype:toml OR filetype:yml OR filetype:ini OR filetype:conf OR filetype:sql OR filetype:sqlite3 OR filetype:sqlite OR filetype:log OR filetype:properties OR filetype:ts OR filetype:php OR filetype:psd1 OR filetype:psm1 OR filetype:rb OR filetype:exports OR filetype:functions OR filetype:profile OR filetype:zsh_history OR filetype:doc OR filetype:docx OR filetype:xls OR filetype:xlsx OR filetype:pdf) AND (\"AWS_ACCESS_KEY_ID\" OR \"AWS_SECRET_ACCESS_KEY\")"
 		},
 		{
 		"DetectorName": "Private Keys",
-		"SearchQuery": "(filetype:pem OR filetype:ppk OR filetype:key OR filetype:asc OR filetype:txt OR filetype:config OR filetype:xml OR filetype:py) AND (content:\"BEGIN RSA PRIVATE KEY\" OR content:\"BEGIN DSA PRIVATE KEY\" OR content:\"BEGIN EC PRIVATE KEY\")"
+		"SearchQuery": "(filetype:pem OR filetype:ppk OR filetype:key OR filetype:asc OR filetype:txt OR filetype:config OR filetype:xml OR filetype:py) AND (\"BEGIN RSA PRIVATE KEY\" OR \"BEGIN DSA PRIVATE KEY\" OR \"BEGIN EC PRIVATE KEY\")"
 		},
 		{
 		"DetectorName": "Private Key Found In Non-Standard Key File",
@@ -14,7 +14,7 @@
 		},
 		{
 		"DetectorName": "Database Connection Strings",
-		"SearchQuery": "((content:\"datasource\" NEAR(n=50) content:\"password\") OR (content:\"connectionstring\" NEAR(n=50) content:\"passw*\"))"
+		"SearchQuery": "((\"datasource\" NEAR(n=50) \"password\") OR (\"connectionstring\" NEAR(n=50) \"passw*\"))"
 		},
 		{
 		"DetectorName": "Image Deployment",
