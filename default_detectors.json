@@ -50,7 +50,7 @@
 		},
 		{
 		"DetectorName": "Memory Dump",
-		"SearchQuery": "filetype:dmp"
+		"SearchQuery": "filetype:dmp OR filetype:vmem"
 		},
 		{
 		"DetectorName": "Net Config",
