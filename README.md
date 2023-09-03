@@ -11,11 +11,12 @@ It consists of three separate parts:
 ****
 
 ## Main Features
+* Search and export email
+* Search and export SharePoint and OneDrive files accessible to a user
+* Search all Teams chats and channels visible to the user
 * Deploy malicious apps
 * Discover misconfigured mailboxes that are exposed
 * Clone security groups to carry out watering hole attacks
-* Search and export email
-* Search and export SharePoint and OneDrive files accessible to a user
 * Search all user attributes for specific terms
 * Leverage a GUI built on the Graph API to pillage a user's account
 * Dump conditional access policies
