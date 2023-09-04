@@ -21,6 +21,8 @@ It consists of three separate parts:
 * Leverage a GUI built on the Graph API to pillage a user's account
 * Dump conditional access policies
 * Dump app registrations and external apps including consent and scope to identify potentially malicious apps
+* GraphRunner doesn't rely on any third-party libraries or modules
+* Works with Windows and Linux
 
 ****
 ## Usage
