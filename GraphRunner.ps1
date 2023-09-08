@@ -766,7 +766,7 @@ Param
     $apptokens.access_token
     Write-Output "---Here is your refresh token---"
     $apptokens.refresh_token
-
+    Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $apptokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $apptokens)'
 }
 
 
@@ -979,6 +979,175 @@ Function Get-Inbox{
     }
 }
 
+function Get-TeamsChat{
+    <#
+    .SYNOPSIS
+
+        This module downloads full Teams chat conversations. It will prompt to either download all conversations for a particular user or if you want to download individual conversations using a chat ID. This modules requires that you have a token scoped to Chat.ReadBasic, Chat.Read, or Chat.ReadWrite.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       This module downloads full Teams chat conversations. It will prompt to either download all conversations for a particular user or if you want to download individual conversations using a chat ID. This modules requires that you have a token scoped to Chat.ReadBasic, Chat.Read, or Chat.ReadWrite.
+        
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+  
+    .EXAMPLE
+        
+        C:\PS> Get-TeamsChat -Tokens $tokens 
+        -----------
+        This will connect to the specified userid's inbox and pull the latest 50 messages. 
+
+    #>
+
+    param(
+    [Parameter(Position = 0, Mandatory = $false)]
+    [object[]]
+    $Tokens = ""
+    )
+    if($Tokens){
+            Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."   
+    }
+    else{
+        # Login
+        Write-Host -ForegroundColor yellow "[*] This modules requires that you have a token scoped to Chat.ReadBasic, Chat.Read, or Chat.ReadWrite" 
+        Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+        break
+    }
+    $access_token = $tokens.access_token   
+    [string]$refresh_token = $tokens.refresh_token 
+
+
+    # Define the headers with the access token and content type
+    $headers = @{
+    "Authorization" = "Bearer $access_token"
+    "Content-Type" = "application/json"
+    }
+
+
+    $graphBaseUrl = "https://graph.microsoft.com/v1.0"
+    $chatEndpoint = "/me/chats?`$expand=members,lastMessagePreview&orderby=lastMessagePreview/createdDateTime%20desc"
+    $messagesEndpoint = "/chats/{chatId}/messages"
+
+    # Get the list of chats for the authenticated user
+
+    Write-Host -ForegroundColor Yellow "[*] Now getting Teams chat conversations for current user."
+    $chatsResponse = Invoke-RestMethod -Uri "$graphBaseUrl$chatEndpoint" -Headers $headers -Method Get
+
+    $totalchats = $chatsResponse."@odata.count"
+    foreach($chatresult in $chatsResponse.value){
+        # Format the DateTime object as a readable string
+        Write-Output "Last Message Date: $($chatresult.lastMessagePreview.createdDateTime) | Members: $($chatresult.members.email -join ', ') | Message Preview: $($chatresult.lastMessagePreview.body.content) | ChatID: $($chatresult.id)"
+        Write-Host ("=" * 80) 
+    }
+
+    # Process each chat and retrieve its messages
+    if ($chatsResponse.value.Count -gt 0) {
+        Write-Host -ForegroundColor Cyan "[*] A total of $totalchats conversations were found. Do you want to download all of them? (Yes/No)"
+        $answer = Read-Host 
+        $answer = $answer.ToLower()
+        if ($answer -eq "yes" -or $answer -eq "y") {
+            $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+            $folderName = "TeamsLogs-$timestamp"
+            New-Item -ItemType Directory $folderName | Out-Null
+            Write-Host -ForegroundColor yellow "[*] Now writing each conversation to $folderName"
+            foreach ($chat in $chatsResponse.value) {
+                $chatId = $chat.id
+                $resultsList = @()
+                $chatlastupdated = $chat.lastMessagePreview.createdDateTime -replace ":", "-"  # Replace colons with dashes
+
+                # Get the names of chat members and prepare them for the filename
+                $memberNames = ($chat.members.email | ForEach-Object { $_ -replace "\.", "_" }) -join "-"
+
+                # Get messages for the current chat
+                $messagesResponse = Invoke-RestMethod -Uri ($graphBaseUrl + $messagesEndpoint -replace '{chatId}', $chatId) -Headers $headers -Method Get
+
+                # Process and save chat messages to a file
+                if ($messagesResponse.value.Count -gt 0) {
+                    $chatLogFileName = ("TeamsChatLog_" + $chatlastupdated + "_" + $memberNames + ".txt")
+
+                    # Sort messages by createdDateTime
+                    $sortedMessages = $messagesResponse.value | Sort-Object -Property createdDateTime
+
+                    # Create or append to the chat log file
+                    Foreach ($message in $sortedMessages) {
+                        $LogInfo = @{
+                            "Date" = $message.createdDateTime
+                            "Sender" = $message.from.user.displayName
+                            "Message" = $message.body.content
+                        }
+                        $resultsList += New-Object PSObject -Property $LogInfo
+                    }
+                    $resultsList | Export-Csv -Path "$foldername\$chatLogFileName" -NoTypeInformation -Append
+                    Write-Host -ForegroundColor yellow "[*] Downloading coversation: $chatLogFileName."
+                }
+            }
+        } elseif ($answer -eq "no" -or $answer -eq "n") {
+            $downloadMore = $true
+            while ($downloadMore) {
+                # Ask the user if they want to download individual conversations
+                Write-Host -ForegroundColor Cyan "[*] Do you want to download individual chat conversations? (Yes/No)"
+                $individualAnswer = Read-Host
+                $individualAnswer = $individualAnswer.ToLower()
+
+                if ($individualAnswer -eq "yes" -or $individualAnswer -eq "y") {
+                    # Prompt the user to enter the ChatID
+                    $chatIdToDownload = Read-Host "Enter the ChatID of the conversation you want to download:"
+                
+                    # Find the chat with the specified ChatID
+                    $selectedChat = $chatsResponse.value | Where-Object { $_.id -eq $chatIdToDownload }
+
+                    if ($selectedChat) {
+                        $chatlastupdated = $selectedChat.lastMessagePreview.createdDateTime -replace ":", "-"  # Replace colons with dashes
+
+                        # Get the names of chat members and prepare them for the filename
+                        $memberNames = ($selectedChat.members.email | ForEach-Object { $_ -replace "\.", "_" }) -join "-"
+
+                        # Get messages for the selected chat
+                        $messagesResponse = Invoke-RestMethod -Uri ($graphBaseUrl + $messagesEndpoint -replace '{chatId}', $chatIdToDownload) -Headers $headers -Method Get
+
+                        # Process and save chat messages to a file
+                        if ($messagesResponse.value.Count -gt 0) {
+                            $chatLogFileName = ("TeamsChatLog_" + $chatlastupdated + "_" + $memberNames + ".txt")
+
+                            # Sort messages by createdDateTime
+                            $sortedMessages = $messagesResponse.value | Sort-Object -Property createdDateTime
+
+                            # Create or append to the chat log file
+                            $resultsList = @()
+                            Foreach ($message in $sortedMessages) {
+                                $LogInfo = @{
+                                    "Date" = $message.createdDateTime
+                                    "Sender" = $message.from.user.displayName
+                                    "Message" = $message.body.content
+                                }
+                                $resultsList += New-Object PSObject -Property $LogInfo
+                            }
+                            $resultsList | Export-Csv -Path $chatLogFileName -NoTypeInformation -Append
+                            Write-Host -ForegroundColor yellow "[*] Downloading conversation: $chatLogFileName."
+                        } else {
+                            Write-Output "[*] No messages found in the selected conversation."
+                        }
+                    } else {
+                        Write-Output "[*] Chat with ChatID $chatIdToDownload not found."
+                    }
+                } else {
+                    Write-Output "[*] Quitting..."
+                    $downloadMore = $false  # Exit the loop
+                }
+            }
+        } else {
+            Write-Output "Invalid input. Please enter Yes or No."
+        }
+    } else {
+        Write-Host "No chats found for the authenticated user."
+    }
+}
 
 Function Get-AzureADUsers{
     <#
@@ -3507,10 +3676,11 @@ Invoke-SearchMailbox`t`t-`t Has the ability to do deep searches across a user’
 Invoke-SearchTeams`t`t-`t Can search all Teams messages in all channels that are readable by the current user.
 Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory
 Get-Inbox`t`t`t-`t Gets inbox items
+Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
     "
     Write-Host -ForegroundColor green "--------------------- GraphRunner Module ----------------------"
     Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Invoke-GraphRunner`t`t- Runs Invoke-GraphRecon, Get-AzureADUsers, Get-SecurityGroups, Invoke-DumpCAPS, Invoke-DumpApps, and then uses the default_detectors.json file to search with Invoke-SearchMailbox, Invoke-SearchSharePointAndOneDrive, and Invoke-SearchTeams."
+    Write-Host -ForegroundColor green "Invoke-GraphRunner`t`t-`t Runs Invoke-GraphRecon, Get-AzureADUsers, Get-SecurityGroups, Invoke-DumpCAPS, Invoke-DumpApps, and then uses the default_detectors.json file to search with Invoke-SearchMailbox, Invoke-SearchSharePointAndOneDrive, and Invoke-SearchTeams."
 
     Write-Host -ForegroundColor green ("=" * 80)
 
