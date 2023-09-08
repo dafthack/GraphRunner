@@ -763,9 +763,9 @@ Param
     $request = Invoke-WebRequest -Method POST -ContentType "application/x-www-form-urlencoded" -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body
     $global:apptokens = $request.Content | ConvertFrom-Json
     Write-Output "---Here is your access token---"
-    $parsed.access_token
+    $apptokens.access_token
     Write-Output "---Here is your refresh token---"
-    $parsed.refresh_token
+    $apptokens.refresh_token
 
 }
 
