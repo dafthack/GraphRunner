@@ -664,6 +664,8 @@ Function Get-AzureAppTokens{
             Write-Output "---Here is your refresh token---"
             $apptokens.refresh_token
             Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $apptokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $apptokens)'
+            Write-Host -ForegroundColor Green '[*] You can use this command to refresh your tokens:'
+            Write-Host -ForegroundColor Cyan ('Invoke-RefreshAzureAppTokens -ClientId "' + $ClientId + '" -ClientSecret "' + $ClientSecret + '" -RedirectUri "' + $RedirectUri + '" -scope "' + $Scope + '" -RefreshToken "' + $apptokens.refresh_token + '"' )
         }
 }
 
