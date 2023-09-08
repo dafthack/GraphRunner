@@ -13,7 +13,7 @@ It consists of three separate parts:
 ## Main Features
 * Search and export email
 * Search and export SharePoint and OneDrive files accessible to a user
-* Search all Teams chats and channels visible to the user
+* Search all Teams chats and channels visible to the user and export full conversations
 * Deploy malicious apps
 * Discover misconfigured mailboxes that are exposed
 * Clone security groups to carry out watering hole attacks
