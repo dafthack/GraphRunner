@@ -1001,7 +1001,7 @@ function Get-TeamsChat{
         
         C:\PS> Get-TeamsChat -Tokens $tokens 
         -----------
-        This will connect to the specified userid's inbox and pull the latest 50 messages. 
+        This will list out all of the Teams chat conversations for the user and provide an option to download all conversations or just individual chats.
 
     #>
 
