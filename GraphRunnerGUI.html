@@ -455,7 +455,8 @@ select#httpMethod {
         <input type="file" id="attachments" name="attachments" multiple>
         <button type="submit">Send Email</button>
     </form>
-    <pre class="response" id="sendEmailResponse"></pre>
+    <div id="emailSuccessMessage"></div>
+    <div id="emailErrorMessage"></div>
     <hr>
 
     <!-- Button to Fetch Teams Chats -->
@@ -1002,7 +1003,7 @@ const exportButton = document.getElementById('exportButton');
             });
 
     // MAIL SEND - Form
-    sendEmailForm.addEventListener('submit', async function(event) {
+   sendEmailForm.addEventListener('submit', async function(event) {
     event.preventDefault();
 
     const token = tokenInput.value;
@@ -1054,21 +1055,27 @@ const exportButton = document.getElementById('exportButton');
     }
 
     try {
-    // MAIL SEND - Use fetch to send the email and handle the response
-    const sendEmailResponse = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(emailMessage)
-    });
+        // MAIL SEND - Use fetch to send the email and handle the response
+        const sendEmailResponse = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(emailMessage)
+        });
 
-    if (sendEmailResponse.status === 202) {
-        sendEmailResponse.textContent = 'Message Sent Successfully. It is being processed.';
-    } else {
-        sendEmailResponse.textContent = 'Error sending email: Unexpected response.';
+        if (sendEmailResponse.status === 202) {
+            // Email sent successfully
+            const successMessage = document.getElementById('emailSuccessMessage');
+            successMessage.textContent = 'Message Sent Successfully. It is being processed.';
+        } else {
+            // Error sending email
+            const errorMessage = document.getElementById('emailErrorMessage');
+            errorMessage.textContent = 'Error sending email: Unexpected response.';
+        }
+    } catch (error) {
+        // Error in fetch or sending email
+        const errorMessage = document.getElementById('emailErrorMessage');
+        errorMessage.textContent = `Error sending email: ${error.message}`;
     }
-} catch (error) {
-    sendEmailResponse.textContent = `Error sending email: ${error.message}`;
-}
 });
 
 
