@@ -493,8 +493,12 @@ select#httpMethod {
 
     <!-- List SharePoint Files and Folders -->
     <h2>SharePoint</h2>
-    <button id="listDrivesButton">List SharePoint Drives</button>
+    <button id="listDrivesButton">List SharePoint Root Drives</button>
     <div id="driveList"></div>
+    <div id="sharePointDriveFileList"></div>
+    <br>
+    <button id="listSitesButton">List SharePoint Sites</button>
+    <div id="siteList"></div>
     <div id="sharePointfileList"></div>
     <hr>
 
@@ -883,18 +887,21 @@ function exportGroupMembersToCSV(members) {
     downloadLink.href = URL.createObjectURL(blob);
     downloadLink.download = 'group_members.csv';
     downloadLink.click();
+
+    // Revoke the object URL to free up resources
+    URL.revokeObjectURL(downloadLink.href);
 }
 
 // Attach export button click event
 const exportButton = document.getElementById('exportButton');
     exportButton.addEventListener('click', async function () {
-    const displayedGroupMembers = await fetchDisplayedGroupMembers();
-    if (displayedGroupMembers.length > 0) {
-        exportGroupMembersToCSV(displayedGroupMembers);
-    } else {
-        alert('No group members data available for export.');
-    }
-});
+        const displayedGroupMembers = await fetchDisplayedGroupMembers();
+        if (displayedGroupMembers.length > 0) {
+            exportGroupMembersToCSV(displayedGroupMembers);
+        } else {
+            alert('No group members data available for export.');
+        }
+    });
 
     // Function to fetch the currently displayed group's members
     async function fetchDisplayedGroupMembers() {
@@ -1492,6 +1499,9 @@ listSharedFilesButton.addEventListener('click', async function () {
 // SHAREPOINT
 const listDrivesButton = document.getElementById('listDrivesButton');
 listDrivesButton.addEventListener('click', listSharePointDrives);
+const listSitesButton = document.getElementById('listSitesButton');
+listSitesButton.addEventListener('click', listSharePointSites);
+
 
 async function listSharePointDrives() {
     const token = tokenInput.value;
@@ -1557,6 +1567,98 @@ async function listDriveContents(driveId, token) {
         const driveContentsResponse = await fetch(driveContentsApiEndpoint, { headers: driveContentsHeaders });
         const driveContentsData = await driveContentsResponse.json();
 
+        const sharePointDriveFileListContainer = document.getElementById('sharePointDriveFileList');
+        sharePointDriveFileListContainer.innerHTML = '';
+
+        driveContentsData.value.forEach(item => {
+            const itemSummary = `
+                <div class="sharepoint-item-summary" data-item-id="${item.id}" data-item-type="${item.folder ? 'folder' : 'file'}">
+                    <strong>Name:</strong> ${item.name}<br>
+                    <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
+                    <strong>Type:</strong> ${item.folder ? 'Folder' : 'File'}<br>
+                    ${item.folder ? `<a href="#" class="folder-link" data-folder-id="${item.id}">Open Folder</a>` : `<a href="${item['@microsoft.graph.downloadUrl']}" class="sharepoint-download-link">Download</a>`}
+                </div>
+                <hr>
+            `;
+            sharePointDriveFileListContainer.innerHTML += itemSummary;
+        });
+
+        // Event listener to file links
+        const sharePointDownloadLinks = document.querySelectorAll('.sharepoint-download-link');
+        sharePointDownloadLinks.forEach(link => {
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const downloadUrl = link.getAttribute('href');
+                await downloadSharePointFile(downloadUrl);
+            });
+        });
+
+        const spfolderLinks = document.querySelectorAll('.folder-link');
+        spfolderLinks.forEach(link => {
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const folderId = link.getAttribute('data-folder-id');
+                await fetchAndDisplaySharePointDriveContents(driveId, folderId, token, sharePointDriveFileListContainer); // Pass sharePointDriveFileListContainer
+            });
+        });
+    } catch (error) {
+        sharePointDriveFileListContainer.innerHTML = `Error fetching drive contents: ${error.message}`;
+    }
+}
+
+
+async function listSharePointSites() {
+    const token = tokenInput.value;
+    
+     // Step 1: Search for all SharePoint sites
+    const sitesApiEndpoint = 'https://graph.microsoft.com/v1.0/sites?search=*';
+
+    const sitesHeaders = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const sitesResponse = await fetch(sitesApiEndpoint, { headers: sitesHeaders });
+        const sitesData = await sitesResponse.json();
+
+        const siteList = document.getElementById('siteList');
+        siteList.innerHTML = '';
+
+        sitesData.value.forEach(site => {
+            const siteSummary = `
+                <div class="sharepoint-site-summary" data-site-id="${site.id}">
+                    <strong>Display Name:</strong> ${site.displayName}<br>
+                    <strong>Name:</strong> ${site.name}<br>
+                    <strong>URL:</strong> ${site.webUrl}<br>
+                </div>
+                <hr>
+            `;
+            siteList.innerHTML += siteSummary;
+        });
+
+        const siteSummaries = document.querySelectorAll('.sharepoint-site-summary');
+        siteSummaries.forEach(siteSummary => {
+            siteSummary.addEventListener('click', async () => {
+                const siteId = siteSummary.getAttribute('data-site-id');
+                await listSiteContents(siteId, token);
+            });
+        });
+    } catch (error) {
+        siteList.innerHTML = `Error fetching SharePoint sites: ${error.message}`;
+    }
+}
+
+async function listSiteContents(driveId, token) {
+    const driveContentsApiEndpoint = `https://graph.microsoft.com/v1.0/sites/${driveId}/drive/root/children`;
+
+    const driveContentsHeaders = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const driveContentsResponse = await fetch(driveContentsApiEndpoint, { headers: driveContentsHeaders });
+        const driveContentsData = await driveContentsResponse.json();
+
         const sharePointfileListContainer = document.getElementById('sharePointfileList');
         sharePointfileListContainer.innerHTML = '';
 
@@ -1597,8 +1699,50 @@ async function listDriveContents(driveId, token) {
 }
 
 // Function to fetch and display folder contents within SharePoint drive
-async function fetchAndDisplaySharePointFolderContents(driveId, folderId, token, container) {
+
+async function fetchAndDisplaySharePointDriveContents(driveId, folderId, token, container) {
     const folderContentsUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderId}/children`;
+
+    const folderContentsHeaders = {
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const response = await fetch(folderContentsUrl, { headers: folderContentsHeaders });
+        const data = await response.json();
+
+        const sharePointDriveFileListContainer = document.getElementById('sharePointDriveFileList');
+        data.value.forEach(item => {
+            const itemSummary = `
+                <div class="item-summary" data-item-id="${item.id}" data-item-type="${item.folder ? 'folder' : 'file'}">
+                    <strong>Name:</strong> ${item.name}<br>
+                    <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
+                    <strong>Type:</strong> ${item.folder ? 'Folder' : 'File'}<br>
+                    ${item.folder ? `<a href="#" class="folder-link" data-folder-id="${item.id}" onclick="openSharePointFolder(event, '${driveId}', '${item.id}', token)">Open Folder</a>` : `<a href="${item['@microsoft.graph.downloadUrl']}" class="sharepoint-download-link">Download</a>`}
+                </div>
+                <hr>
+            `;
+            sharePointDriveFileListContainer.innerHTML += itemSummary;
+        });
+
+        // Event listener to folder links
+        const spFolderLinks = document.querySelectorAll('.folder-link');
+        spFolderLinks.forEach(link => {
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const driveId = link.parentElement.getAttribute('data-drive-id');
+                const folderId = link.getAttribute('data-folder-id');
+                await fetchAndDisplaySharePointFolderContents(driveId, folderId, token);
+            });
+        });
+    } catch (error) {
+        container.innerHTML = `Error fetching folder contents: ${error.message}`; 
+    }
+}
+
+
+async function fetchAndDisplaySharePointFolderContents(driveId, folderId, token, container) {
+    const folderContentsUrl = `https://graph.microsoft.com/v1.0/sites/${driveId}/drive/items/${folderId}/children`;
 
     const folderContentsHeaders = {
         'Authorization': `Bearer ${token}`
@@ -1615,7 +1759,7 @@ async function fetchAndDisplaySharePointFolderContents(driveId, folderId, token,
                     <strong>Name:</strong> ${item.name}<br>
                     <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
                     <strong>Type:</strong> ${item.folder ? 'Folder' : 'File'}<br>
-                    ${item.folder ? `<a href="#" class="folder-link" data-folder-id="${item.id}" onclick="openSharePointFolder(event, '${driveId}', '${item.id}', token)">Open Folder</a>` : `<a href="${item['@microsoft.graph.downloadUrl']}" class="sharepoint-download-link">Download</a>`}
+                    ${item.folder ? `<a href="#" class="folder-link" data-folder-id="${item.id}" onclick="fetchAndDisplaySharePointFolderContents('${driveId}', '${item.id}', '${token}')">Open Folder</a>` : `<a href="${item['@microsoft.graph.downloadUrl']}" class="sharepoint-download-link">Download</a>`}
                 </div>
                 <hr>
             `;
@@ -1651,9 +1795,8 @@ async function downloadSharePointFile(downloadUrl) {
     }
 }
 
-function openSharePointFolder(event, driveId, folderId, token) {
-    event.preventDefault();
-    fetchAndDisplaySharePointFolderContents(driveId, folderId);
+function openSharePointFolder(driveId, folderId, token) {
+    fetchAndDisplaySharePointFolderContents(driveId, folderId, token);
 }
 
 
