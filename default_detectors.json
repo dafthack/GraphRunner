@@ -110,7 +110,7 @@
 		},
 		{
 		"DetectorName": "Hashfile",
-		"SearchQuery": "filename:pot"
+		"SearchQuery": "filetype:pot"
 		},
 		{
 		"DetectorName": "Browser Creds",
