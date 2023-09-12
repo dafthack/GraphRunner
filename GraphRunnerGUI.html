@@ -391,6 +391,7 @@ select#httpMethod {
 
     <!-- List All Users Button -->
     <h2>Directory - Users</h2>
+    <p><strong>Required Perms:</strong> User.ReadBasic.All, User.Read.All, User.ReadWrite.All, Directory.Read.All, or Directory.ReadWrite.All</p>
     <button id="listUsersButton">List Users</button>
     <button id="exportUsersButton">Export</button> 
     <pre class="response" id="listUsersResponse"></pre>
@@ -398,9 +399,10 @@ select#httpMethod {
 
     <div id="groupExplorerContainer" class="group-explorer">
     <div class="group-explorer-header">
-        <h2>Directory - Groups</h2>
-        <button id="listGroupsButton">List Groups</button>
-        <button id="exportButton">Export</button>
+    <h2>Directory - Groups</h2>
+     <p><strong>Required Perms:</strong> GroupMember.Read.All, Group.Read.All, Directory.Read.All, Group.ReadWrite.All, or Directory.ReadWrite.All</p>
+    <button id="listGroupsButton">List Groups</button>
+    <button id="exportButton">Export</button>
     </div>
     <div id="groupList" class="group-list"></div>
     <div id="groupMembers" class="group-members"></div>
@@ -408,6 +410,7 @@ select#httpMethod {
 
     <!-- Email Viewer -->
     <h2>Email Viewer (Current User)</h2>
+    <p><strong>Required Perms:</strong> Mail.ReadBasic, Mail.Read, or Mail.ReadWrite</p>
     <button id="fetchEmailsButton">Fetch Emails</button>
     <button id="exportEmailsButton">Export</button>
     <button id="searchButton" class="search-button">Search</button>
@@ -422,6 +425,7 @@ select#httpMethod {
 
     <!-- Other User Email Viewer -->
     <h2>Email Viewer (Other Users)</h2>
+    <p><strong>Required Perms:</strong> Mail.Read.Shared or Mail.ReadWrite.Shared</p>
     <form id="customEmailViewerForm">
         <label for="customUserId">User ID:</label>
         <br>
@@ -439,6 +443,7 @@ select#httpMethod {
 
     <!-- Send Email Form -->
     <h2>Send Email</h2>
+    <p><strong>Required Perms:</strong> Mail.Send</p>
     <form id="sendEmailForm">
         <label for="to">To:</label>
         <input type="text" id="to" name="to" required>
@@ -455,6 +460,7 @@ select#httpMethod {
 
     <!-- Button to Fetch Teams Chats -->
     <h2>Teams Chat Viewer (Direct Messages and Group Chat)</h2>
+    <p><strong>Required Perms:</strong> Chat.ReadBasic, Chat.Read, or Chat.ReadWrite</p>
     <div id="chatViewer">
     <!-- Fetch Chats Button -->
     <button id="fetchChatsButton">Fetch Teams Chats</button>
@@ -464,14 +470,16 @@ select#httpMethod {
     <div id="chatMessages" class="item-list"></div>
     <!-- Send Message Form -->
     <h4>Send Message to Teams Chat:</h4>
+    <p><strong>Required Perms:</strong> ChatMessage.Send or Chat.ReadWrite</p>
     <input type="text" id="messageTextBox" placeholder="Type your message...">
     <button id="sendMessageButton">Send Message</button>
     </div>
     <hr>
 
     <!-- List Public Teams Chats -->
-    <h2>Teams Chat Viewer (Org Teams)</h2>
-    <button id="listPublicChatsButton">List Public Chats</button>
+    <h2>Teams Chat Viewer (Org Teams Channels)</h2>
+    <p><strong>Required Perms:</strong> Team.ReadBasic.All, TeamSettings.Read.All, TeamSettings.ReadWrite.All, User.Read.All, or User.ReadWrite.All</p>
+    <button id="listPublicChatsButton">List Channels</button>
     <div id="publicChatList"></div>
     <!-- Chat Messages -->
     <div id="publicChatMessages"></div>
@@ -480,12 +488,14 @@ select#httpMethod {
 
     <!-- List OneDrive Files and Folders -->
     <h2>OneDrive My Files</h2>
+    <p><strong>Required Perms:</strong> Files.Read, Files.ReadWrite, Files.Read.All, Files.ReadWrite.All, Sites.Read.All, or Sites.ReadWrite.All</p>
     <button id="listFilesButton">List Files</button>
     <div id="fileList"></div>
     <hr>
     
     <!-- List OneDrive Shared Files -->
     <h2>OneDrive Shared Files</h2>
+    <p><strong>Required Perms:</strong> Files.Read, Files.ReadWrite, Files.Read.All, Files.ReadWrite.All, Sites.Read.All, or Sites.ReadWrite.All</p>
     <button id="listSharedFilesButton">List Shared Files</button>
     <div id="sharedFileList"></div>
     <hr>
@@ -493,12 +503,17 @@ select#httpMethod {
 
     <!-- List SharePoint Files and Folders -->
     <h2>SharePoint</h2>
+    <p><strong>Required Perms:</strong>Sites.Read.All or Sites.ReadWrite.All AND Files.Read, Files.ReadWrite, Files.Read.All, or Files.ReadWrite.All</p>
     <button id="listDrivesButton">List SharePoint Root Drives</button>
+    <h4>Drive List</h4>
     <div id="driveList"></div>
+    <h4>Files and Folders</h4>
     <div id="sharePointDriveFileList"></div>
     <br>
     <button id="listSitesButton">List SharePoint Sites</button>
+    <h4>Site List</h4>
     <div id="siteList"></div>
+    <h4>Files and Folders</h4>
     <div id="sharePointfileList"></div>
     <hr>
 
@@ -1350,8 +1365,8 @@ listFilesButton.addEventListener('click', async function () {
             const fileDetails = document.createElement('div');
             fileDetails.classList.add('file-details');
             fileDetails.innerHTML = `
-                <p>Size: ${file.size ? `${file.size} bytes` : 'N/A'}</p>
-                <p>Type: ${file.file ? 'File' : 'Folder'}</p>
+                <strong>Size:</strong> ${file.size ? `${file.size} bytes` : 'N/A'}
+                <strong>Type:</strong> ${file.file ? 'File' : 'Folder'}
                 <a href="#" class="${file.file ? 'download-link' : 'folder-link'}" data-id="${file.id}">
                     ${file.file ? 'Download' : 'Open Folder'}
                 </a>
@@ -1417,8 +1432,8 @@ async function fetchAndDisplayFolderContents(folderId, headers) {
             const itemDetails = document.createElement('div');
             itemDetails.classList.add('item-details');
             itemDetails.innerHTML = `
-                <p>Size: ${item.size ? `${item.size} bytes` : 'N/A'}</p>
-                <p>Type: ${item.file ? 'File' : 'Folder'}</p>
+                <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}
+                <strong>Type:</strong> ${item.file ? 'File' : 'Folder'}
                 <a href="#" class="${item.file ? 'download-link' : 'folder-link'}" data-id="${item.id}">
                     ${item.file ? 'Download' : 'Open Folder'}
                 </a>
@@ -1473,8 +1488,8 @@ listSharedFilesButton.addEventListener('click', async function () {
             const fileDetails = document.createElement('div');
             fileDetails.classList.add('file-details');
             fileDetails.innerHTML = `
-                <p>Size: ${file.size ? `${file.size} bytes` : 'N/A'}</p>
-                <p>Type: ${file.file ? 'File' : 'Folder'}</p>
+                <strong>Size:</strong> ${file.size ? `${file.size} bytes` : 'N/A'}
+                <strong>Type:</strong> ${file.file ? 'File' : 'Folder'}
                 ${file.file ? `<a href="#" class="download-link" data-id="${file.id}">Download</a>` : ''}
             `;
             fileCard.appendChild(fileDetails);
@@ -1505,7 +1520,7 @@ listSitesButton.addEventListener('click', listSharePointSites);
 
 async function listSharePointDrives() {
     const token = tokenInput.value;
-    
+
     // Step 1: Get the root SharePoint site
     const siteApiEndpoint = 'https://graph.microsoft.com/v1.0/sites/root';
 
@@ -1533,21 +1548,41 @@ async function listSharePointDrives() {
         driveList.innerHTML = '';
 
         drivesData.value.forEach(drive => {
-            const driveSummary = `
-                <div class="sharepoint-drive-summary" data-drive-id="${drive.id}">
-                    <strong>Drive Name:</strong> ${drive.name}<br>
-                    <strong>Drive Type:</strong> ${drive.driveType}<br>
-                    <strong>Drive ID:</strong> ${drive.id}<br>
-                </div>
-                <hr>
-            `;
-            driveList.innerHTML += driveSummary;
-        });
+            // Create a site card for each SharePoint drive
+            const driveCard = document.createElement('div');
+            driveCard.classList.add('item-card'); // Apply the same card styles
+            driveCard.style.width = '100%'; // Make the card stretch across the window
 
-        const driveSummaries = document.querySelectorAll('.sharepoint-drive-summary');
-        driveSummaries.forEach(driveSummary => {
-            driveSummary.addEventListener('click', async () => {
-                const driveId = driveSummary.getAttribute('data-drive-id');
+            const driveName = document.createElement('div');
+            driveName.classList.add('item-name'); // Apply the same title styles
+            driveName.textContent = `Display Name: ${drive.name}`;
+            driveName.style.color = '#333'; // Set text color to black
+            driveCard.appendChild(driveName);
+
+            const driveDetails = document.createElement('div');
+            driveDetails.classList.add('item-description'); // Apply the same description styles
+            driveDetails.innerHTML = `
+                <strong>Type:</strong> ${drive.driveType}
+                <strong>URL:</strong> ${drive.webUrl}
+            `;
+            driveCard.appendChild(driveDetails);
+
+            driveList.appendChild(driveCard);
+
+            // Add hover effect to the drive card
+            driveCard.addEventListener('mouseenter', () => {
+                driveCard.style.transform = 'translateY(-5px)';
+                driveCard.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
+            });
+
+            driveCard.addEventListener('mouseleave', () => {
+                driveCard.style.transform = 'translateY(0)';
+                driveCard.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+            });
+
+            // Add a click event listener to show drive contents when clicked
+            driveCard.addEventListener('click', async () => {
+                const driveId = drive.id;
                 await listDriveContents(driveId, token);
             });
         });
@@ -1571,16 +1606,51 @@ async function listDriveContents(driveId, token) {
         sharePointDriveFileListContainer.innerHTML = '';
 
         driveContentsData.value.forEach(item => {
-            const itemSummary = `
-                <div class="sharepoint-item-summary" data-item-id="${item.id}" data-item-type="${item.folder ? 'folder' : 'file'}">
-                    <strong>Name:</strong> ${item.name}<br>
-                    <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
-                    <strong>Type:</strong> ${item.folder ? 'Folder' : 'File'}<br>
-                    ${item.folder ? `<a href="#" class="folder-link" data-folder-id="${item.id}">Open Folder</a>` : `<a href="${item['@microsoft.graph.downloadUrl']}" class="sharepoint-download-link">Download</a>`}
-                </div>
-                <hr>
-            `;
-            sharePointDriveFileListContainer.innerHTML += itemSummary;
+            // Create a site content card for each item
+            const itemCard = document.createElement('div');
+            itemCard.classList.add('item-card'); // Apply the same card styles
+            itemCard.style.width = '100%'; // Make the card stretch across the window
+
+            const itemSummary = document.createElement('div');
+            itemSummary.classList.add('item-summary'); // Apply the same summary styles
+
+            const itemName = document.createElement('strong');
+            itemName.textContent = `Name: ${item.name}`;
+            itemName.style.color = '#333'; // Set text color to black
+            itemSummary.appendChild(itemName);
+
+            const itemSize = document.createElement('div');
+            itemSize.textContent = `Size: ${item.size ? `${item.size} bytes` : 'N/A'}`;
+            itemSize.style.color = '#333';
+            itemSummary.appendChild(itemSize);
+
+            const itemType = document.createElement('div');
+            itemType.textContent = `Type: ${item.folder ? 'Folder' : 'File'}`;
+            itemType.style.color = '#333';
+            itemSummary.appendChild(itemType);
+
+            if (item.folder) {
+                const folderLink = document.createElement('a');
+                folderLink.href = '#';
+                folderLink.classList.add('folder-link');
+                folderLink.setAttribute('data-folder-id', item.id);
+                folderLink.textContent = 'Open Folder';
+                folderLink.addEventListener('click', async (event) => {
+                    event.preventDefault();
+                    const folderId = folderLink.getAttribute('data-folder-id');
+                    await fetchAndDisplaySharePointDriveContents(driveId, folderId, token, sharePointDriveFileListContainer);
+                });
+                itemSummary.appendChild(folderLink);
+            } else {
+                const downloadLink = document.createElement('a');
+                downloadLink.href = item['@microsoft.graph.downloadUrl'];
+                downloadLink.classList.add('sharepoint-download-link');
+                downloadLink.textContent = 'Download';
+                itemSummary.appendChild(downloadLink);
+            }
+
+            itemCard.appendChild(itemSummary);
+            sharePointDriveFileListContainer.appendChild(itemCard);
         });
 
         // Event listener to file links
@@ -1598,7 +1668,7 @@ async function listDriveContents(driveId, token) {
             link.addEventListener('click', async (event) => {
                 event.preventDefault();
                 const folderId = link.getAttribute('data-folder-id');
-                await fetchAndDisplaySharePointDriveContents(driveId, folderId, token, sharePointDriveFileListContainer); // Pass sharePointDriveFileListContainer
+                await fetchAndDisplaySharePointDriveContents(driveId, folderId, token, sharePointDriveFileListContainer);
             });
         });
     } catch (error) {
@@ -1609,8 +1679,8 @@ async function listDriveContents(driveId, token) {
 
 async function listSharePointSites() {
     const token = tokenInput.value;
-    
-     // Step 1: Search for all SharePoint sites
+
+    // Step 1: Search for all SharePoint sites
     const sitesApiEndpoint = 'https://graph.microsoft.com/v1.0/sites?search=*';
 
     const sitesHeaders = {
@@ -1625,21 +1695,41 @@ async function listSharePointSites() {
         siteList.innerHTML = '';
 
         sitesData.value.forEach(site => {
-            const siteSummary = `
-                <div class="sharepoint-site-summary" data-site-id="${site.id}">
-                    <strong>Display Name:</strong> ${site.displayName}<br>
-                    <strong>Name:</strong> ${site.name}<br>
-                    <strong>URL:</strong> ${site.webUrl}<br>
-                </div>
-                <hr>
-            `;
-            siteList.innerHTML += siteSummary;
-        });
+            // Create a site card for each SharePoint site
+            const siteCard = document.createElement('div');
+            siteCard.classList.add('item-card'); // Apply the same card styles
+            siteCard.style.width = '100%'; // Make the card stretch across the window
 
-        const siteSummaries = document.querySelectorAll('.sharepoint-site-summary');
-        siteSummaries.forEach(siteSummary => {
-            siteSummary.addEventListener('click', async () => {
-                const siteId = siteSummary.getAttribute('data-site-id');
+            const siteName = document.createElement('div');
+            siteName.classList.add('item-name'); // Apply the same title styles
+            siteName.textContent = `Display Name: ${site.displayName}`;
+            siteName.style.color = '#333'; // Set text color to black
+            siteCard.appendChild(siteName);
+
+            const siteDetails = document.createElement('div');
+            siteDetails.classList.add('item-description'); // Apply the same description styles
+            siteDetails.innerHTML = `
+                <strong>Name:</strong> ${site.name}
+                <strong>URL:</strong> ${site.webUrl}
+            `;
+            siteCard.appendChild(siteDetails);
+
+            siteList.appendChild(siteCard);
+
+            // Add hover effect to the site card
+            siteCard.addEventListener('mouseenter', () => {
+                siteCard.style.transform = 'translateY(-5px)';
+                siteCard.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
+            });
+
+            siteCard.addEventListener('mouseleave', () => {
+                siteCard.style.transform = 'translateY(0)';
+                siteCard.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+            });
+
+            // Add a click event listener to show site contents when clicked
+            siteCard.addEventListener('click', async () => {
+                const siteId = site.id;
                 await listSiteContents(siteId, token);
             });
         });
@@ -1663,34 +1753,46 @@ async function listSiteContents(driveId, token) {
         sharePointfileListContainer.innerHTML = '';
 
         driveContentsData.value.forEach(item => {
-            const itemSummary = `
-                <div class="sharepoint-item-summary" data-item-id="${item.id}" data-item-type="${item.folder ? 'folder' : 'file'}">
-                    <strong>Name:</strong> ${item.name}<br>
-                    <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
-                    <strong>Type:</strong> ${item.folder ? 'Folder' : 'File'}<br>
-                    ${item.folder ? `<a href="#" class="folder-link" data-folder-id="${item.id}">Open Folder</a>` : `<a href="${item['@microsoft.graph.downloadUrl']}" class="sharepoint-download-link">Download</a>`}
-                </div>
-                <hr>
+            // Create a site content card
+            const itemCard = document.createElement('div');
+            itemCard.classList.add('item-card'); // Apply the same card styles
+            itemCard.style.width = '100%'; // Make the card stretch across the window
+
+            const itemName = document.createElement('div');
+            itemName.classList.add('item-name'); // Apply the same title styles
+            itemName.textContent = item.name;
+            itemName.style.color = '#333'; // Set text color to black
+            itemCard.appendChild(itemName);
+
+            const itemDetails = document.createElement('div');
+            itemDetails.classList.add('item-description'); // Apply the same description styles
+            itemDetails.innerHTML = `
+                <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}
+                <strong>Type:</strong> ${item.folder ? 'Folder' : 'File'}
+                <strong>URL:</strong> ${item.webUrl}
+                ${item.folder ? `<a href="#" class="folder-link" data-folder-id="${item.id}">Open Folder</a>` : `<a href="${item['@microsoft.graph.downloadUrl']}" class="download-link">Download</a>`}
             `;
-            sharePointfileListContainer.innerHTML += itemSummary;
-        });
+            itemCard.appendChild(itemDetails);
 
-        // Event listener to file links
-        const sharePointDownloadLinks = document.querySelectorAll('.sharepoint-download-link');
-        sharePointDownloadLinks.forEach(link => {
-            link.addEventListener('click', async (event) => {
-                event.preventDefault();
-                const downloadUrl = link.getAttribute('href');
-                await downloadSharePointFile(downloadUrl);
+            sharePointfileListContainer.appendChild(itemCard);
+
+            // Add hover effect to the item card
+            itemCard.addEventListener('mouseenter', () => {
+                itemCard.style.transform = 'translateY(-5px)';
+                itemCard.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
             });
-        });
 
-        const spfolderLinks = document.querySelectorAll('.folder-link');
-        spfolderLinks.forEach(link => {
-            link.addEventListener('click', async (event) => {
+            itemCard.addEventListener('mouseleave', () => {
+                itemCard.style.transform = 'translateY(0)';
+                itemCard.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+            });
+
+            // Event listener to folder links
+            const folderLink = itemCard.querySelector('.folder-link');
+            folderLink.addEventListener('click', async (event) => {
                 event.preventDefault();
-                const folderId = link.getAttribute('data-folder-id');
-                await fetchAndDisplaySharePointFolderContents(driveId, folderId, token, sharePointfileListContainer); // Pass sharePointfileListContainer
+                const folderId = folderLink.getAttribute('data-folder-id');
+                await fetchAndDisplaySharePointFolderContents(driveId, folderId, token, sharePointfileListContainer);
             });
         });
     } catch (error) {
@@ -1713,33 +1815,56 @@ async function fetchAndDisplaySharePointDriveContents(driveId, folderId, token, 
 
         const sharePointDriveFileListContainer = document.getElementById('sharePointDriveFileList');
         data.value.forEach(item => {
-            const itemSummary = `
-                <div class="item-summary" data-item-id="${item.id}" data-item-type="${item.folder ? 'folder' : 'file'}">
-                    <strong>Name:</strong> ${item.name}<br>
-                    <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
-                    <strong>Type:</strong> ${item.folder ? 'Folder' : 'File'}<br>
-                    ${item.folder ? `<a href="#" class="folder-link" data-folder-id="${item.id}" onclick="openSharePointFolder(event, '${driveId}', '${item.id}', token)">Open Folder</a>` : `<a href="${item['@microsoft.graph.downloadUrl']}" class="sharepoint-download-link">Download</a>`}
-                </div>
-                <hr>
-            `;
-            sharePointDriveFileListContainer.innerHTML += itemSummary;
-        });
+            // Create a site content card
+            const itemCard = document.createElement('div');
+            itemCard.classList.add('item-card'); // Apply the same card styles
+            itemCard.style.width = '100%'; // Make the card stretch across the window
 
-        // Event listener to folder links
-        const spFolderLinks = document.querySelectorAll('.folder-link');
-        spFolderLinks.forEach(link => {
-            link.addEventListener('click', async (event) => {
-                event.preventDefault();
-                const driveId = link.parentElement.getAttribute('data-drive-id');
-                const folderId = link.getAttribute('data-folder-id');
-                await fetchAndDisplaySharePointFolderContents(driveId, folderId, token);
-            });
+            const itemSummary = document.createElement('div');
+            itemSummary.classList.add('item-summary'); // Apply the same summary styles
+
+            const itemName = document.createElement('strong');
+            itemName.textContent = `Name: ${item.name}`;
+            itemName.style.color = '#333'; // Set text color to black
+            itemSummary.appendChild(itemName);
+
+            const itemSize = document.createElement('span');
+            itemSize.textContent = ` | Size: ${item.size ? `${item.size} bytes` : 'N/A'}`;
+            itemSize.style.color = '#333';
+            itemSummary.appendChild(itemSize);
+
+            const itemType = document.createElement('span');
+            itemType.textContent = ` | Type: ${item.folder ? 'Folder | ' : 'File | '}`;
+            itemType.style.color = '#333';
+            itemSummary.appendChild(itemType);
+
+            if (item.folder) {
+                const folderLink = document.createElement('a');
+                folderLink.href = '#';
+                folderLink.classList.add('folder-link');
+                folderLink.setAttribute('data-folder-id', item.id);
+                folderLink.textContent = 'Open Folder';
+                folderLink.addEventListener('click', async (event) => {
+                    event.preventDefault();
+                    const folderId = folderLink.getAttribute('data-folder-id');
+                    await fetchAndDisplaySharePointFolderContents(driveId, folderId, token, sharePointDriveFileListContainer);
+                });
+                itemSummary.appendChild(folderLink);
+            } else {
+                const downloadLink = document.createElement('a');
+                downloadLink.href = item['@microsoft.graph.downloadUrl'];
+                downloadLink.classList.add('sharepoint-download-link');
+                downloadLink.textContent = 'Download';
+                itemSummary.appendChild(downloadLink);
+            }
+
+            itemCard.appendChild(itemSummary);
+            sharePointDriveFileListContainer.appendChild(itemCard);
         });
     } catch (error) {
-        container.innerHTML = `Error fetching folder contents: ${error.message}`; 
+        container.innerHTML = `Error fetching folder contents: ${error.message}`;
     }
 }
-
 
 async function fetchAndDisplaySharePointFolderContents(driveId, folderId, token, container) {
     const folderContentsUrl = `https://graph.microsoft.com/v1.0/sites/${driveId}/drive/items/${folderId}/children`;
@@ -1754,30 +1879,54 @@ async function fetchAndDisplaySharePointFolderContents(driveId, folderId, token,
 
         const sharePointfileListContainer = document.getElementById('sharePointfileList');
         data.value.forEach(item => {
-            const itemSummary = `
-                <div class="item-summary" data-item-id="${item.id}" data-item-type="${item.folder ? 'folder' : 'file'}">
-                    <strong>Name:</strong> ${item.name}<br>
-                    <strong>Size:</strong> ${item.size ? `${item.size} bytes` : 'N/A'}<br>
-                    <strong>Type:</strong> ${item.folder ? 'Folder' : 'File'}<br>
-                    ${item.folder ? `<a href="#" class="folder-link" data-folder-id="${item.id}" onclick="fetchAndDisplaySharePointFolderContents('${driveId}', '${item.id}', '${token}')">Open Folder</a>` : `<a href="${item['@microsoft.graph.downloadUrl']}" class="sharepoint-download-link">Download</a>`}
-                </div>
-                <hr>
-            `;
-            sharePointfileListContainer.innerHTML += itemSummary;
-        });
+            // Create a site content card
+            const itemCard = document.createElement('div');
+            itemCard.classList.add('item-card'); // Apply the same card styles
+            itemCard.style.width = '100%'; // Make the card stretch across the window
 
-        // Event listener to folder links
-        const spFolderLinks = document.querySelectorAll('.folder-link');
-        spFolderLinks.forEach(link => {
-            link.addEventListener('click', async (event) => {
-                event.preventDefault();
-                const driveId = link.parentElement.getAttribute('data-drive-id');
-                const folderId = link.getAttribute('data-folder-id');
-                await fetchAndDisplaySharePointFolderContents(driveId, folderId, token);
-            });
+            const itemSummary = document.createElement('div');
+            itemSummary.classList.add('item-summary'); // Apply the same summary styles
+
+            const itemName = document.createElement('strong');
+            itemName.textContent = `Name: ${item.name}`;
+            itemName.style.color = '#333'; 
+            itemSummary.appendChild(itemName);
+    
+            const itemSize = document.createElement('span');
+            itemSize.textContent = ` | Size: ${item.size ? `${item.size} bytes` : 'N/A'}`;
+            itemSize.style.color = '#333';
+            itemSummary.appendChild(itemSize);
+
+            const itemType = document.createElement('span');
+            itemType.textContent = ` | Type: ${item.folder ? 'Folder | ' : 'File | '}`;
+            itemType.style.color = '#333';
+            itemSummary.appendChild(itemType);
+
+            if (item.folder) {
+                const folderLink = document.createElement('a');
+                folderLink.href = '#';
+                folderLink.classList.add('folder-link');
+                folderLink.setAttribute('data-folder-id', item.id);
+                folderLink.textContent = 'Open Folder';
+                folderLink.addEventListener('click', async (event) => {
+                    event.preventDefault();
+                    const folderId = folderLink.getAttribute('data-folder-id');
+                    await fetchAndDisplaySharePointFolderContents(driveId, folderId, token, sharePointfileListContainer);
+                });
+                itemSummary.appendChild(folderLink);
+            } else {
+                const downloadLink = document.createElement('a');
+                downloadLink.href = item['@microsoft.graph.downloadUrl'];
+                downloadLink.classList.add('sharepoint-download-link');
+                downloadLink.textContent = 'Download';
+                itemSummary.appendChild(downloadLink);
+            }
+
+            itemCard.appendChild(itemSummary);
+            sharePointfileListContainer.appendChild(itemCard);
         });
     } catch (error) {
-        container.innerHTML = `Error fetching folder contents: ${error.message}`; 
+        container.innerHTML = `Error fetching folder contents: ${error.message}`;
     }
 }
 
