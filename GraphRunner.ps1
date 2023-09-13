@@ -1991,6 +1991,124 @@ function Invoke-SecurityGroupCloner{
 }
 
 
+function Get-UpdatableGroups{
+    <#
+        .SYNOPSIS
+            Finds groups that can be updated by the current user. For example, if this reports any updatable groups then it may be possible to add new users to the reported group(s).
+            Author: Beau Bullock (@dafthack)
+            License: MIT
+            Required Dependencies: None
+            Optional Dependencies: None
+
+        .DESCRIPTION
+        
+           Finds groups that can be updated by the current user. For example, if this reports any updatable groups then it may be possible to add new users to the reported group(s).
+
+        .EXAMPLES      
+        
+            C:\PS> Get-UpdatableGroups -Tokens $tokens
+    #>
+
+    Param(
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens = ""
+    )
+
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    }
+    else{
+         # Login
+         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+         while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+    }
+    $accesstoken = $tokens.access_token   
+    [string]$refreshToken = $tokens.refresh_token 
+
+
+    $graphApiEndpoint = "https://graph.microsoft.com/v1.0/groups"
+    $estimateAccessEndpoint = "https://graph.microsoft.com/beta/roleManagement/directory/estimateAccess"
+
+    $headers = @{
+        "Authorization" = "Bearer $accessToken"
+        "Content-Type" = "application/json"
+    }
+
+    Write-Host -ForegroundColor yellow "[*] Now gathering groups and checking if each one is updatable."
+
+    try {
+        $response = Invoke-RestMethod -Uri $graphApiEndpoint -Headers $headers -Method Get
+        $results = @()
+        foreach($group in $response.value){
+        $groupid = ("/" + $group.id)
+        $requestBody = @{
+                resourceActionAuthorizationChecks = @(
+                    @{
+                        directoryScopeId = $groupid
+                        resourceAction = "microsoft.directory/groups/members/update"
+                    }
+                )
+            } | ConvertTo-Json
+
+            try {
+                $estimateresponse = Invoke-RestMethod -Uri $estimateAccessEndpoint -Headers $headers -Method Post -Body $requestBody
+
+               
+                if ($estimateresponse.value.accessDecision -like "allowed"){
+                Write-Host -ForegroundColor green ("[+] Found updatable group: " +$group.displayName)
+                $groupout = $group | ConvertTo-Json
+                $results += [PSCustomObject]@{
+                    "Group Name" = $group.displayName
+                    "Group ID" = $group.id
+                    "Description" = $group.description
+                    "Is Assignable To Role" = $group.isAssignableToRole
+                    "On-Prem Sync Enabled" = $group.onPremisesSyncEnabled
+                    "Mail" = $group.mail
+                    "Created Date" = $group.createdDateTime
+                    "Visibility" = $group.visibility
+                }
+                }
+            }
+            catch {
+                Write-Host "Error estimating access for $directoryScopeId : $_"
+            }
+
+        }
+        if($results.count -gt 0){
+            Write-Host -ForegroundColor Green ("[*] Found " + $results.count + " groups that can be updated.")
+
+            foreach($result in $results){
+                Write-Output ("=" * 80) 
+                Write-Output $result
+                Write-Output ""
+            
+            }
+            Write-Output ("=" * 80) 
+        }
+    }
+    catch {
+        Write-Host "Error fetching Group IDs: $_"
+    }
+
+
+}
+
 
 function Invoke-InviteGuest{
 
@@ -3662,6 +3780,7 @@ Invoke-DumpCAPS`t`t`t-`t Gets conditional access policies
 Invoke-DumpApps`t`t`t-`t Gets app registrations and external enterprise apps along with consent and scope info
 Get-AzureADUsers`t`t-`t Gets user directory
 Get-SecurityGroups`t`t-`t Gets security groups and members
+Get-UpdatableGroups`t`t-`t Gets groups that may be able to be modified by the current user
 Invoke-GraphOpenInboxFinder`t-`t Checks each user’s inbox in a list to see if they are readable
     "
     Write-Host -ForegroundColor green "--------------------- Persistence Modules ---------------------"
