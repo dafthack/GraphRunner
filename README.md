@@ -17,6 +17,7 @@ It consists of three separate parts:
 * Deploy malicious apps
 * Discover misconfigured mailboxes that are exposed
 * Clone security groups to carry out watering hole attacks
+* Find groups that can be modified by your user
 * Search all user attributes for specific terms
 * Leverage a GUI built on the Graph API to pillage a user's account
 * Dump conditional access policies
