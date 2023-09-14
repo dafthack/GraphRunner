@@ -149,14 +149,14 @@ function Invoke-RefreshGraphTokens{
     $RefreshToken,
     [Parameter(Position = 1, Mandatory = $False)]
     [string]
-    $tenantid
+    $tenantid = $global:tenantid
     )
     if(!$RefreshToken){
         if(!$tokens){
             write-host -ForegroundColor red '[*] No tokens found in the $tokens variable. Use the Get-GraphTokens module to authenticate first.'
         break
         } else {
-            $RefreshToken = $token.refresh_token
+            $RefreshToken = $tokens.refresh_token
         }
     }
     Write-Host -ForegroundColor yellow "[*] Refreshing Tokens..."
@@ -193,7 +193,6 @@ function Invoke-RefreshGraphTokens{
                 break
             }
 }
-
 function Invoke-InjectOAuthApp{
 
 
