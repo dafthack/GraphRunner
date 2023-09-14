@@ -2131,6 +2131,93 @@ function Get-UpdatableGroups{
 }
 
 
+function Invoke-AddGroupMember {
+    
+    <#
+    .SYNOPSIS
+        Adds a member obect ID to a group
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        Adds a member obect ID to a group
+
+    .PARAMETER Tokens
+
+        Token object for auth
+
+    .PARAMETER GroupId
+    
+        The object ID of the group you want to modify 
+        
+    .PARAMETER UserId
+    
+        The ID of the object that you want to add to the group
+        
+    .EXAMPLES      
+        
+        C:\PS> Invoke-AddGroupMember -Tokens $tokens -groupID e6a413c2-2aa4-4a80-9c16-88c1687f57d9 -userId 7a3d8bfe-e4c7-46c0-93ec-ef2b1c8a0b4a
+    #>
+    
+    param (
+        [string]
+        $groupId,
+        [string]
+        $userId,
+        [object[]]
+        $Tokens = ""
+    )
+
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    }
+    else{
+         # Login
+         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+         while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+    }
+    $accesstoken = $tokens.access_token   
+    [string]$refreshToken = $tokens.refresh_token 
+
+    $url = ("https://graph.microsoft.com/v1.0/groups/$groupId/members/" + '$ref')
+
+    $headers = @{
+        "Authorization" = "Bearer $accessToken"
+        "User-Agent" = "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.19041.3031"
+        "Content-Type" = "application/json"
+    }
+
+    $body = @{
+        "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$userId"
+    } | ConvertTo-Json
+
+    try {
+        $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Post -Body $body
+        Write-host -ForegroundColor green "[*] Member added successfully."
+    } catch {
+        Write-Error "[*] Failed to add member to the security group: $_"
+    }
+}
+
+
 function Invoke-InviteGuest{
 
 <#
@@ -3079,6 +3166,122 @@ function Invoke-HTTPServer{
 
 }
 
+
+function Get-SharePointSiteURLs{
+
+      <#
+        .SYNOPSIS
+            Uses the Graph Search API to find SharePoint site URLs
+            Author: Beau Bullock (@dafthack)
+            License: MIT
+            Required Dependencies: None
+            Optional Dependencies: None
+
+        .DESCRIPTION
+        
+           Uses the Graph Search API to find SharePoint site URLs
+
+        .EXAMPLES      
+        
+            C:\PS> Get-SharePointSiteURLs -Tokens $tokens
+    #>
+
+    Param(
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens = ""
+    )
+
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    }
+    else{
+         # Login
+         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+         while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+    }
+    $accesstoken = $tokens.access_token   
+    [string]$refreshToken = $tokens.refresh_token 
+
+
+    # Define the base URL and search URL
+    $baseUrl = "https://graph.microsoft.com/v1.0"
+    $searchUrl = "$baseUrl/search/query"
+
+    # Define the initial query
+    $query = "*"
+    $sharepointDrives = @()
+    $seenDriveIds = @()
+
+
+        # Construct the request URL with query parameters
+        $url = "$searchUrl"
+
+        # Define the query request body
+        $requestBody = @{
+            requests = @(
+                @{
+                    entityTypes = @("drive")
+                    query = @{
+                        queryString = $query
+                    }
+                    from = "0"
+                    size = "500"
+                    fields = @("parentReference", "webUrl")
+                }
+            )
+        }
+
+        # Make a request to the Search API
+        $headers = @{
+            "Authorization" = "Bearer $accessToken"
+        }
+        Write-Host -ForegroundColor yellow "[*] Now getting SharePoint site URLs..."
+        $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Post -ContentType "application/json" -Body ($requestBody | ConvertTo-Json -Depth 10)
+
+        # Extract drive IDs and web URLs from the results
+        $newDrives = $response.value
+
+        foreach($hit in $newDrives.hitsContainers){
+            $siteId = $hit.resource.parentReference.siteId
+            $webUrl = $hit.resource.webUrl
+        
+            # Filter out duplicates based on drive ID
+            if ($siteId -notin $seenDriveIds){
+                $sharepointDrives += $hit
+            }
+            else{
+                $seenDriveIds += $hit
+            }
+        
+        }
+
+    $sorted = $sharepointDrives.hits | Sort-Object {$_.resource.webUrl}
+
+    # Display the list of unique drive IDs and web URLs
+    if ($sorted.count -gt 0){
+        Write-Host -ForegroundColor yellow ("[*] Found a total of " + $sorted.count + " site URLs.")
+        foreach ($drive in $sorted) {
+            Write-Output "Web URL: $($drive.resource.webUrl)"
+        }
+    }
+
+}
 
 function Invoke-SearchSharePointAndOneDrive{
     <#
