@@ -4005,6 +4005,7 @@ Invoke-DumpApps`t`t`t-`t Gets app registrations and external enterprise apps alo
 Get-AzureADUsers`t`t-`t Gets user directory
 Get-SecurityGroups`t`t-`t Gets security groups and members
 Get-UpdatableGroups`t`t-`t Gets groups that may be able to be modified by the current user
+Get-SharePointSiteURLs`t`t-`t Gets a list of SharePoint site URLs visible to the current user
 Invoke-GraphOpenInboxFinder`t-`t Checks each user’s inbox in a list to see if they are readable
     "
     Write-Host -ForegroundColor green "--------------------- Persistence Modules ---------------------"
@@ -4012,6 +4013,7 @@ Invoke-GraphOpenInboxFinder`t-`t Checks each user’s inbox in a list to see if 
     Write-Host -ForegroundColor green "Invoke-InjectOAuthApp`t`t-`t Injects an app registration into the tenant
 Invoke-SecurityGroupCloner`t-`t Clones a security group while using an identical name and member list but can inject another user as well
 Invoke-InviteGuest`t`t-`t Invites a guest user to the tenant
+Invoke-AddGroupMember`t`t-`t Adds a member to a group
 Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App
     "
     Write-Host -ForegroundColor green "----------------------- Pillage Modules -----------------------"
