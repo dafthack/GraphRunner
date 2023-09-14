@@ -125,6 +125,14 @@ function Invoke-RefreshGraphTokens{
         
        Access tokens typically have an expiration time of one hour so it will be necessary to refresh them occasionally. If you have already run the Get-GraphTokens command your refresh tokens will be utilized when you run Invoke-RefreshGraphTokens to obtain a new set of tokens.    
     
+    .PARAMETER RefreshToken
+        
+        Supply a refresh token to re-authenticate.
+
+    .PARAMETER tenantid
+        
+        Supply a tenant domain or ID to authenticate to.
+
     .EXAMPLE
         
         C:\PS> Invoke-RefreshGraphTokens
@@ -134,10 +142,22 @@ function Invoke-RefreshGraphTokens{
     
 
     #>
-
-    if(!$tokens){
-        write-host -ForegroundColor red '[*] No tokens found in the $tokens variable. Use the Get-GraphTokens module to authenticate first.'
-    break
+    [cmdletbinding()]
+    Param(
+    [Parameter(Position = 0, Mandatory = $False)]
+    [string]
+    $RefreshToken,
+    [Parameter(Position = 1, Mandatory = $False)]
+    [string]
+    $tenantid = $global:tenantid
+    )
+    if(!$RefreshToken){
+        if(!$tokens){
+            write-host -ForegroundColor red '[*] No tokens found in the $tokens variable. Use the Get-GraphTokens module to authenticate first.'
+        break
+        } else {
+            $RefreshToken = $tokens.refresh_token
+        }
     }
     Write-Host -ForegroundColor yellow "[*] Refreshing Tokens..."
     $authUrl = "https://login.microsoftonline.com/$tenantid"
@@ -145,16 +165,18 @@ function Invoke-RefreshGraphTokens{
             "resource" = "https://graph.microsoft.com/"
             "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
             "grant_type" =    "refresh_token"
-            "refresh_token" = $tokens.refresh_token
+            "refresh_token" = $RefreshToken
             "scope"=         "openid"
         }
-
-    try{
-    $reftokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Headers $Headers -Body $refreshbody
+    $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+    $Headers=@{}
+    $Headers["User-Agent"] = $UserAgent
+    try {
+        $reftokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Headers $Headers -Body $refreshbody
     }
-    catch{
-    $details=$_.ErrorDetails.Message | ConvertFrom-Json
-    Write-Output $details.error
+    catch {
+        $details=$_.ErrorDetails.Message | ConvertFrom-Json
+        Write-Output $details.error
     } 
     if($reftokens)
             {
@@ -171,7 +193,6 @@ function Invoke-RefreshGraphTokens{
                 break
             }
 }
-
 function Invoke-InjectOAuthApp{
 
 
