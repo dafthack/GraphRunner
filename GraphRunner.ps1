@@ -2131,6 +2131,121 @@ function Get-UpdatableGroups{
 }
 
 
+function Get-DynamicGroups{
+    <#
+        .SYNOPSIS
+            Finds groups that use dynamic membership.
+            Author: Beau Bullock (@dafthack)
+            License: MIT
+            Required Dependencies: None
+            Optional Dependencies: None
+
+        .DESCRIPTION
+        
+            Finds groups that use dynamic membership.
+
+        .EXAMPLES      
+        
+            C:\PS> Get-DynamicGroups -Tokens $tokens
+    #>
+
+    Param(
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens = ""
+    )
+
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    }
+    else{
+         # Login
+         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+         while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+    }
+    $accesstoken = $tokens.access_token   
+    [string]$refreshToken = $tokens.refresh_token 
+
+
+    $graphApiEndpoint = "https://graph.microsoft.com/v1.0/groups"
+    $estimateAccessEndpoint = "https://graph.microsoft.com/beta/roleManagement/directory/estimateAccess"
+
+    $headers = @{
+        "Authorization" = "Bearer $accessToken"
+        "Content-Type" = "application/json"
+    }
+
+    Write-Host -ForegroundColor yellow "[*] Now gathering groups and checking if each one is updatable."
+
+    try {
+        $response = Invoke-RestMethod -Uri $graphApiEndpoint -Headers $headers -Method Get
+        $results = @()
+        
+        foreach($group in $response.value){
+        $groupid = ("/" + $group.id)
+        $requestBody = @{
+                resourceActionAuthorizationChecks = @(
+                    @{
+                        directoryScopeId = $groupid
+                        resourceAction = "microsoft.directory/groups/members/update"
+                    }
+                )
+            } | ConvertTo-Json
+
+                if($group.membershipRule -ne $null){
+                    Write-Host -ForegroundColor green ("[+] Found dynamic group: " +$group.displayName)
+                    $results += [PSCustomObject]@{
+                        "Group Name" = $group.displayName
+                        "Group ID" = $group.id
+                        "Description" = $group.description
+                        "Is Assignable To Role" = $group.isAssignableToRole
+                        "On-Prem Sync Enabled" = $group.onPremisesSyncEnabled
+                        "Mail" = $group.mail
+                        "Created Date" = $group.createdDateTime
+                        "Visibility" = $group.visibility
+                        "MembershipRule" = $group.membershipRule
+                        "Membership Rule Processing State" = $group.membershipRuleProcessingState
+                    }
+                }
+                
+
+        }
+        if($results.count -gt 0){
+            Write-Host -ForegroundColor Green ("[*] Found " + $results.count + " groups that can be updated.")
+
+            foreach($result in $results){
+                Write-Output ("=" * 80) 
+                Write-Output $result
+                Write-Output ""
+            
+            }
+            Write-Output ("=" * 80) 
+        }
+    }
+    catch {
+        Write-Host "Error fetching Group IDs: $_"
+    }
+
+
+}
+
+
+
 function Invoke-AddGroupMember {
     
     <#
@@ -3995,7 +4110,6 @@ Invoke-RefreshGraphTokens`t-`t Use a refresh token to obtain new access tokens
 Get-AzureAppTokens`t`t-`t Complete OAuth flow as an app to obtain access tokens
 Invoke-RefreshAzureAppTokens`t-`t Use a refresh token and app credentials to refresh a token
 Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow by standing up a web server and listening for auth code
-Invoke-CheckAcces`t`t-`t Check if tokens are valid
     "
     Write-Host -ForegroundColor green "----------------- Recon & Enumeration Modules -----------------"
     Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
@@ -4005,6 +4119,7 @@ Invoke-DumpApps`t`t`t-`t Gets app registrations and external enterprise apps alo
 Get-AzureADUsers`t`t-`t Gets user directory
 Get-SecurityGroups`t`t-`t Gets security groups and members
 Get-UpdatableGroups`t`t-`t Gets groups that may be able to be modified by the current user
+Get-DynamicGroups`t`t-`t Finds dynamic groups and displays membership rules
 Get-SharePointSiteURLs`t`t-`t Gets a list of SharePoint site URLs visible to the current user
 Invoke-GraphOpenInboxFinder`t-`t Checks each user’s inbox in a list to see if they are readable
     "
@@ -4014,7 +4129,6 @@ Invoke-GraphOpenInboxFinder`t-`t Checks each user’s inbox in a list to see if 
 Invoke-SecurityGroupCloner`t-`t Clones a security group while using an identical name and member list but can inject another user as well
 Invoke-InviteGuest`t`t-`t Invites a guest user to the tenant
 Invoke-AddGroupMember`t`t-`t Adds a member to a group
-Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App
     "
     Write-Host -ForegroundColor green "----------------------- Pillage Modules -----------------------"
     Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
@@ -4022,7 +4136,6 @@ Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App
 Invoke-SearchMailbox`t`t-`t Has the ability to do deep searches across a user’s mailbox and can export messages
 Invoke-SearchTeams`t`t-`t Can search all Teams messages in all channels that are readable by the current user.
 Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory
-Invoke-DriveFileDownload`t-`t Has the ability to do download single files from as the current user.
 Get-Inbox`t`t`t-`t Gets inbox items
 Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
     "
@@ -4030,8 +4143,14 @@ Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
     Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
     Write-Host -ForegroundColor green "Invoke-GraphRunner`t`t-`t Runs Invoke-GraphRecon, Get-AzureADUsers, Get-SecurityGroups, Invoke-DumpCAPS, Invoke-DumpApps, and then uses the default_detectors.json file to search with Invoke-SearchMailbox, Invoke-SearchSharePointAndOneDrive, and Invoke-SearchTeams."
 
+    Write-Host -ForegroundColor green "-------------------- Supplemental Modules ---------------------"
+    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor green "Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App
+Invoke-DriveFileDownload`t-`t Has the ability to do download single files from as the current user.
+Invoke-CheckAcces`t`t-`t Check if tokens are valid
+Invoke-HTTPServer`t`t-`t A basic web server to use for accessing the emailviewer that is output from Invoke-SearchMailbox
+    "
     Write-Host -ForegroundColor green ("=" * 80)
-
     Write-Host -ForegroundColor green '[*] For help with individual modules run Get-Help <module name> -detailed'
     Write-Host -ForegroundColor green '[*] Example: Get-Help Invoke-InjectOAuthApp -detailed'
 
