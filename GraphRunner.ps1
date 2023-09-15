@@ -2190,7 +2190,7 @@ function Get-DynamicGroups{
         "Content-Type" = "application/json"
     }
 
-    Write-Host -ForegroundColor yellow "[*] Now gathering groups and checking if each one is updatable."
+    Write-Host -ForegroundColor yellow "[*] Now gathering groups and checking if each one is a dynamic group."
 
     try {
         $response = Invoke-RestMethod -Uri $graphApiEndpoint -Headers $headers -Method Get
@@ -4146,7 +4146,7 @@ Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
     Write-Host -ForegroundColor green "-------------------- Supplemental Modules ---------------------"
     Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
     Write-Host -ForegroundColor green "Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App
-Invoke-DriveFileDownload`t-`t Has the ability to do download single files from as the current user.
+Invoke-DriveFileDownload`t-`t Has the ability to download single files from as the current user.
 Invoke-CheckAcces`t`t-`t Check if tokens are valid
 Invoke-HTTPServer`t`t-`t A basic web server to use for accessing the emailviewer that is output from Invoke-SearchMailbox
     "
