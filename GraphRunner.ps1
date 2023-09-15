@@ -3551,6 +3551,7 @@ function Invoke-SearchSharePointAndOneDrive{
             $location = $hit.resource.webUrl
             $driveid = $hit.resource.parentReference.driveId
             $itemid = $hit.resource.id
+            
 
             $resultInfo = @{
                 result = $itemnumber
@@ -3564,6 +3565,7 @@ function Invoke-SearchSharePointAndOneDrive{
                 "Location" = $location
                 "DriveItemID" = ($driveid + ":" + $itemid)
                 "Preview" = $summary
+                "Last Modified Date" = $LastModifiedDate
             }
             
             $resultarray += New-Object PSObject -Property $resultInfo
