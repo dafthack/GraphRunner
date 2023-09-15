@@ -4022,6 +4022,7 @@ Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App
 Invoke-SearchMailbox`t`t-`t Has the ability to do deep searches across a user’s mailbox and can export messages
 Invoke-SearchTeams`t`t-`t Can search all Teams messages in all channels that are readable by the current user.
 Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory
+Invoke-DriveFileDownload`t-`t Has the ability to do download single files from as the current user.
 Get-Inbox`t`t`t-`t Gets inbox items
 Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
     "
