@@ -457,27 +457,29 @@ $resources = @"
 function Invoke-RefreshToSharePointToken {
     <#
     .DESCRIPTION
-        Generate a Substrate token from a refresh token.
+        Generate a SharePoint token from a refresh token.
     .EXAMPLE
-        Invoke-RefreshToSubstrateToken -domain myclient.org -refreshToken ey....
-        $SubstrateToken.access_token
+        Invoke-RefreshToSharePointToken -domain myclient.org -refreshToken ey....
+        $SharePointToken.access_token
     #>
 
     [cmdletbinding()]
     Param([Parameter(Mandatory=$false)]
     [string]$domain,
     [Parameter(Mandatory=$false)]
-    [String]$ClientId = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+    [String]$ClientId = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+    [Parameter(Position = 3, Mandatory = $True)]
+    [object[]]
+    $Tokens
     )
     
-
     
     $Headers=@{}
     $Headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0)"
     $Resource = "https://$($domain)/"
     $authUrl = "https://login.microsoftonline.com/$($global:tenantid)"
     
-    $refreshToken = $global:tokens.refresh_token
+    $refreshToken = $tokens.refresh_token
     $body = @{
         "resource" =      $Resource
         "client_id" =     $ClientId
@@ -490,7 +492,7 @@ function Invoke-RefreshToSharePointToken {
 
 }
 
-function Invoke-ImmersiveReadFile{
+function Invoke-ImmersiveFileReader{
     <#
      .SYNOPSIS
         Simple module to read a file with the immersive reader.
@@ -534,14 +536,42 @@ function Invoke-ImmersiveReadFile{
         $DriveID,
         [Parameter(Position = 3, Mandatory = $True)]
         [string]
-        $FileID
+        $FileID,
+        [Parameter(Position = 4, Mandatory = $False)]
+        [object[]]
+        $Tokens
     )
+
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    }
+    else{
+         # Login
+         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+         while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+    }
+
     $Headers=@{}
     $Headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0)"
     $Headers["Host"] = 'southcentralus1-mediap.svc.ms'
     $Headers["Accept-Language"] = "en-US"
     
-    Invoke-RefreshToSharePointToken -domain $SharePointDomain -ClientId "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0"
+    Invoke-RefreshToSharePointToken -domain $SharePointDomain -ClientId "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0" -Tokens $tokens
    
     try {
         $request = Invoke-WebRequest -UseBasicParsing -Headers $Headers -Method GET -Uri "https://southcentralus1-mediap.svc.ms/transform/imreader?provider=spo&inputFormat=txt&cs=fFNQTw&docid=https%3A%2F%2F$($SharePointDomain)%3A443%2F_api%2Fv2.0%2Fdrives%2F$($DriveID)%2Fitems%2F$($FileID)%3Fversion%3DPublished&access_token=$($global:SharePointToken.access_token)&nocache=true"
