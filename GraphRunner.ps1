@@ -1953,7 +1953,8 @@ function Get-SecurityGroups{
             GroupName = $group.displayName
             MemberIds = $memberIds -join ","
         }
-        Write-Output ("Group Name: " + $group.displayName + " | Members: " + ($($members.userPrincipalName) -join ', '))
+        Write-Output ("Group Name: " + $group.displayName + " | Group ID: " + $groupid)
+        Write-Output ("Members: " + ($($members.userPrincipalName) -join ', '))
         Write-Output ""
         Write-Output ("=" * 80) 
         $groupsWithMemberIDs += New-Object PSObject -Property $groupInfo
@@ -2000,12 +2001,89 @@ function Create-SecurityGroupWithMembers {
     $response = Invoke-RestMethod -Uri $createGroupUrl -Headers $headers -Method Post -Body $groupJson
 
     if ($response -ne $null) {
+        $groupid = $response.id
         Write-Host -ForegroundColor Green "Security Group '$DisplayName' created successfully."
+        Write-Host -ForegroundColor Green "Group ID: $groupid"
     } else {
         Write-Error "Error creating the security group."
     }
 }
 
+
+function Invoke-DeleteGroup {
+       <#
+    .SYNOPSIS
+        Deletes an Entra ID (AzureAD) group
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        Deletes an Entra ID (AzureAD) group
+
+    .PARAMETER Tokens
+
+        Token object for auth
+
+    .PARAMETER GroupId
+    
+        The object ID of the group you want to delete 
+               
+    .EXAMPLES      
+        
+        C:\PS> Invoke-DeleteGroup -Tokens $tokens -groupID e6a413c2-2aa4-4a80-9c16-88c1687f57d9
+    #>
+    
+    param (
+        [string]
+        $groupId,
+        [object[]]
+        $Tokens = ""
+    )
+
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    }
+    else{
+         # Login
+         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+         while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+    }
+    $accesstoken = $tokens.access_token   
+    [string]$refreshToken = $tokens.refresh_token 
+
+
+    $url = "https://graph.microsoft.com/v1.0/groups/$groupId"
+
+    $headers = @{
+        "Authorization" = "Bearer $accessToken"
+        "Content-Type" = "application/json"
+    }
+
+    try {
+        Invoke-RestMethod -Uri $url -Headers $headers -Method Delete
+        Write-Host -ForegroundColor Green "Group with ID '$groupId' deleted successfully."
+    } catch {
+        Write-Error "Failed to delete group with ID '$groupId': $_"
+    }
+}
 
 
 function Invoke-SecurityGroupCloner{
@@ -2064,7 +2142,7 @@ function Invoke-SecurityGroupCloner{
     }
 
     $secgroups = Get-SecurityGroups -AccessToken $accessToken
-    $secgroups
+    foreach($line in $secgroups){if(!$line.groupname){$Line}}
     $CloneGroup = ""
     while($CloneGroup -eq ""){
     Write-Host -ForegroundColor Cyan "[*] Enter a group name you want to clone:"
@@ -2119,7 +2197,7 @@ function Invoke-SecurityGroupCloner{
         Write-Output "Invalid input. Please enter Yes or No."
     }
 
-    Write-Host -ForegroundColor Cyan "[*] Do you want to change the group name or keep as is? ($CloneGroup)"
+    Write-Host -ForegroundColor Cyan "[*] Do you want to change the group name: ($CloneGroup)? (Yes/No)"
     $groupanswer = Read-Host 
     $groupanswer = $groupanswer.ToLower()
     if ($groupanswer -eq "yes" -or $groupanswer -eq "y") {
@@ -2455,6 +2533,89 @@ function Invoke-AddGroupMember {
         Write-host -ForegroundColor green "[*] Member added successfully."
     } catch {
         Write-Error "[*] Failed to add member to the security group: $_"
+    }
+}
+
+
+function Invoke-RemoveGroupMember {
+    
+    <#
+    .SYNOPSIS
+        Removes a member obect ID from a group
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        Removes a member obect ID from a group
+
+    .PARAMETER Tokens
+
+        Token object for auth
+
+    .PARAMETER GroupId
+    
+        The object ID of the group you want to modify 
+        
+    .PARAMETER UserId
+    
+        The ID of the object that you want to remove from the group
+        
+    .EXAMPLES      
+        
+        C:\PS> Invoke-RemoveGroupMember -Tokens $tokens -groupID e6a413c2-2aa4-4a80-9c16-88c1687f57d9 -userId 7a3d8bfe-e4c7-46c0-93ec-ef2b1c8a0b4a
+    #>
+    
+    param (
+        [string]
+        $groupId,
+        [string]
+        $userId,
+        [object[]]
+        $Tokens = ""
+    )
+
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    }
+    else{
+         # Login
+         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+         while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+    }
+    $accesstoken = $tokens.access_token   
+    [string]$refreshToken = $tokens.refresh_token 
+
+    $url = ("https://graph.microsoft.com/v1.0/groups/$groupId/members/" + $userid + '/$ref')
+
+    $headers = @{
+        "Authorization" = "Bearer $accessToken"
+        "User-Agent" = "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.19041.3031"
+        "Content-Type" = "application/json"
+    }
+
+    try {
+        $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Delete
+        Write-host -ForegroundColor green "[*] Member removed successfully."
+    } catch {
+        Write-Error "[*] Failed to remove member from the security group: $_"
     }
 }
 
@@ -4274,6 +4435,8 @@ Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
     Write-Host -ForegroundColor green "-------------------- Supplemental Modules ---------------------"
     Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
     Write-Host -ForegroundColor green "Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App
+Invoke-DeleteGroup`t`t-`t Delete a group
+Invoke-RemoveGroupMember`t-`t Module for removing users/members from groups
 Invoke-DriveFileDownload`t-`t Has the ability to download single files from as the current user.
 Invoke-CheckAcces`t`t-`t Check if tokens are valid
 Invoke-HTTPServer`t`t-`t A basic web server to use for accessing the emailviewer that is output from Invoke-SearchMailbox
