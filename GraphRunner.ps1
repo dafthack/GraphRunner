@@ -24,6 +24,10 @@ function Get-GraphTokens{
         
        Get-GraphTokens is the main user authentication module for GraphRunner. Upon authenticating it will store your tokens in the global $tokens variable as well as the tenant ID in $tenantid. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)     
     
+    .PARAMETER UserPasswordAuth
+        
+        Provide a username and password for authentication instead of using a device code auth.
+
     .EXAMPLE
         
         C:\PS> Get-GraphTokens
@@ -33,54 +37,28 @@ function Get-GraphTokens{
      #>
 
     param(
-        [switch]$ExternalCall
+        [switch]$ExternalCall,
+        [switch]$UserPasswordAuth
     )
+    if($UserPasswordAuth){
+        Write-Host -ForegroundColor Yellow "[*] Initiating the User/Password authentication flow"
+        $username = Read-Host -Prompt "Enter username"
+        $password = Read-Host -Prompt "Enter password" -AsSecureString
 
-    If($tokens){
-        $newtokens = $null
-        while($newtokens -notlike "Yes"){
-            Write-Host -ForegroundColor cyan "[*] It looks like you already tokens set in your `$tokens variable. Are you sure you want to authenticate again?"
-            $answer = Read-Host 
-            $answer = $answer.ToLower()
-            if ($answer -eq "yes" -or $answer -eq "y") {
-                Write-Host -ForegroundColor yellow "[*] Initiating device code login..."
-                $global:tokens = ""
-                $newtokens = "Yes"
-            } elseif ($answer -eq "no" -or $answer -eq "n") {
-                Write-Host -ForegroundColor Yellow "[*] Quitting..."
-                return
-            } else {
-                Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
-            }
+        $passwordText = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
+
+        $url = "https://login.microsoft.com/common/oauth2/token"
+        $headers = @{
+            "Accept" = "application/json"
+            "Content-Type" = "application/x-www-form-urlencoded"
+            "User-Agent" = "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.19041.3031"
         }
-    }
+        $body = "grant_type=password&password=$passwordText&client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&username=$username&resource=https%3A%2F%2Fgraph.microsoft.com&client_info=1&scope=openid"
 
-    $body = @{
-        "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-        "resource" =      "https://graph.microsoft.com"
-    }
-    $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
-    $Headers=@{}
-    $Headers["User-Agent"] = $UserAgent
-    $authResponse = Invoke-RestMethod `
-        -UseBasicParsing `
-        -Method Post `
-        -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
-        -Headers $Headers `
-        -Body $body
-    Write-Host -ForegroundColor yellow $authResponse.Message
 
-    $continue = "authorization_pending"
-    while ($continue) {
-        $body = @{
-            "client_id"   = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-            "grant_type"  = "urn:ietf:params:oauth:grant-type:device_code"
-            "code"        = $authResponse.device_code
-            "scope"       = "openid"
-        }
-
-        try {
-            $tokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+        try{
+            Write-Host -ForegroundColor Yellow "[*] Trying to authenticate with the provided credentials"
+            $tokens = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
 
             if ($tokens) {
                 $tokenPayload = $tokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
@@ -92,21 +70,90 @@ function Get-GraphTokens{
                 Write-Output "Decoded JWT payload:"
                 $tokobj
                 Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
-                $continue = $null
             }
         } catch {
             $details = $_.ErrorDetails.Message | ConvertFrom-Json
-            $continue = $details.error -eq "authorization_pending"
             Write-Output $details.error
         }
-
-        if ($continue) {
-            Start-Sleep -Seconds 3
+        $global:tokens = $tokens
+        if($ExternalCall){
+            return $tokens
         }
-        else{
-            $global:tokens = $tokens
-            if($ExternalCall){
-                return $tokens
+    
+    }
+    else{
+        If($tokens){
+            $newtokens = $null
+            while($newtokens -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] It looks like you already tokens set in your `$tokens variable. Are you sure you want to authenticate again?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Initiating device code login..."
+                    $global:tokens = ""
+                    $newtokens = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+        }
+
+        $body = @{
+            "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+            "resource" =      "https://graph.microsoft.com"
+        }
+        $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+        $Headers=@{}
+        $Headers["User-Agent"] = $UserAgent
+        $authResponse = Invoke-RestMethod `
+            -UseBasicParsing `
+            -Method Post `
+            -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+            -Headers $Headers `
+            -Body $body
+        Write-Host -ForegroundColor yellow $authResponse.Message
+
+        $continue = "authorization_pending"
+        while ($continue) {
+            $body = @{
+                "client_id"   = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+                "grant_type"  = "urn:ietf:params:oauth:grant-type:device_code"
+                "code"        = $authResponse.device_code
+                "scope"       = "openid"
+            }
+
+            try {
+                $tokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+
+                if ($tokens) {
+                    $tokenPayload = $tokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
+                    while ($tokenPayload.Length % 4) { Write-Verbose "Invalid length for a Base-64 char array or string, adding ="; $tokenPayload += "=" }
+                    $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
+                    $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
+                    $tokobj = $tokenArray | ConvertFrom-Json
+                    $global:tenantid = $tokobj.tid
+                    Write-Output "Decoded JWT payload:"
+                    $tokobj
+                    Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
+                    $continue = $null
+                }
+            } catch {
+                $details = $_.ErrorDetails.Message | ConvertFrom-Json
+                $continue = $details.error -eq "authorization_pending"
+                Write-Output $details.error
+            }
+
+            if ($continue) {
+                Start-Sleep -Seconds 3
+            }
+            else{
+                $global:tokens = $tokens
+                if($ExternalCall){
+                    return $tokens
+                }
             }
         }
     }
@@ -2454,7 +2501,7 @@ function Invoke-AddGroupMember {
     
     <#
     .SYNOPSIS
-        Adds a member obect ID to a group
+        Adds a member object ID to a group
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
@@ -2462,7 +2509,7 @@ function Invoke-AddGroupMember {
 
     .DESCRIPTION
         
-        Adds a member obect ID to a group
+        Adds a member object ID to a group
 
     .PARAMETER Tokens
 
@@ -2541,7 +2588,7 @@ function Invoke-RemoveGroupMember {
     
     <#
     .SYNOPSIS
-        Removes a member obect ID from a group
+        Removes a member object ID from a group
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
@@ -2549,7 +2596,7 @@ function Invoke-RemoveGroupMember {
 
     .DESCRIPTION
         
-        Removes a member obect ID from a group
+        Removes a member object ID from a group
 
     .PARAMETER Tokens
 
@@ -4397,7 +4444,6 @@ function List-GraphRunnerModules{
 Invoke-RefreshGraphTokens`t-`t Use a refresh token to obtain new access tokens
 Get-AzureAppTokens`t`t-`t Complete OAuth flow as an app to obtain access tokens
 Invoke-RefreshAzureAppTokens`t-`t Use a refresh token and app credentials to refresh a token
-Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow by standing up a web server and listening for auth code
     "
     Write-Host -ForegroundColor green "----------------- Recon & Enumeration Modules -----------------"
     Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
@@ -4439,10 +4485,10 @@ Invoke-DeleteGroup`t`t-`t Delete a group
 Invoke-RemoveGroupMember`t-`t Module for removing users/members from groups
 Invoke-DriveFileDownload`t-`t Has the ability to download single files from as the current user.
 Invoke-CheckAcces`t`t-`t Check if tokens are valid
+Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow by standing up a web server and listening for auth code
 Invoke-HTTPServer`t`t-`t A basic web server to use for accessing the emailviewer that is output from Invoke-SearchMailbox
     "
     Write-Host -ForegroundColor green ("=" * 80)
     Write-Host -ForegroundColor green '[*] For help with individual modules run Get-Help <module name> -detailed'
     Write-Host -ForegroundColor green '[*] Example: Get-Help Invoke-InjectOAuthApp -detailed'
-
 }
