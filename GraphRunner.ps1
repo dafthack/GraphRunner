@@ -2839,9 +2839,13 @@ function Invoke-GraphRecon{
         
            PowerShell module to perform general recon via the Azure AD Graph API.
 
+        .PARAMETER PermissionEnum
+           
+            Enumerates individual permissions for the current user.
+
         .EXAMPLES      
         
-            C:\PS> Invoke-GraphRecon -Tokens $tokens
+            C:\PS> Invoke-GraphRecon -Tokens $tokens -PermissionEnum
     #>
 
     param(
@@ -2849,15 +2853,15 @@ function Invoke-GraphRecon{
         [object[]]
         $Tokens = "",
         [switch]
-        $GraphRun
+        $GraphRun,
+        [switch]
+        $PermissionEnum
     )
     if($Tokens){
         if(!$GraphRun){
             Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
             Write-Host -ForegroundColor Yellow "[*] Refreshing token to the Azure AD Graph API..."
         }
-        $accesstoken = $tokens.access_token
-        $refreshtoken = $tokens.refresh_token
         
         $RefreshToken = $tokens.refresh_token
         $authUrl = "https://login.microsoftonline.com/$tenantid"
@@ -2870,7 +2874,7 @@ function Invoke-GraphRecon{
             }
 
     try{
-    $reftokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Headers $Headers -Body $refreshbody
+    $reftokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Body $refreshbody
     }
     catch{
     $details=$_.ErrorDetails.Message | ConvertFrom-Json
@@ -3113,8 +3117,511 @@ $GetCompanyInfoSoapRequest = @"
     if(!$GraphRun){
     Write-Host -ForegroundColor Yellow ("=" * 80) 
     }
-}
+    $accesstoken = $tokens.access_token
+    $refreshtoken = $tokens.refresh_token
+        
+    $graphApiEndpoint = "https://graph.microsoft.com/v1.0/me"
+    $estimateAccessEndpoint = "https://graph.microsoft.com/beta/roleManagement/directory/estimateAccess"
+    $authpolicyEndpoint = "https://graph.microsoft.com/beta/policies/authorizationPolicy "
 
+    $headers = @{
+        "Authorization" = "Bearer $accessToken"
+        "Content-Type" = "application/json"
+    }
+    
+
+
+    try {
+        $authpolicy = Invoke-RestMethod -Uri $authpolicyEndpoint -Headers $headers -Method Get
+        Write-Host -ForegroundColor Yellow "Authorization Policy Info"
+        Write-Host -ForegroundColor Yellow ("=" * 80) 
+    
+        # Display the extracted data
+        Write-Output ("Allowed to create app registrations (Default User Role Permissions): " + $authpolicy.value.defaultUserRolePermissions.allowedToCreateApps)
+        Write-Output ("Allowed to create security groups (Default User Role Permissions): " + $authpolicy.value.defaultUserRolePermissions.allowedToCreateSecurityGroups)
+        Write-Output ("Allowed to create tenants (Default User Role Permissions): " + $authpolicy.value.defaultUserRolePermissions.allowedToCreateTenants)
+        Write-Output ("Allowed to read Bitlocker keys for own device (Default User Role Permissions): " + $authpolicy.value.defaultUserRolePermissions.allowedToReadBitlockerKeysForOwnedDevice)
+        Write-Output ("Allowed to read other users (Default User Role Permissions): " + $authpolicy.value.defaultUserRolePermissions.allowedToReadOtherUsers)
+        Write-Output ("Who can invite external users to the organization: " + $authpolicy.value.allowInvitesFrom)
+        Write-Output ("Users can sign up for email based subscriptions: " + $authpolicy.value.allowedToSignUpEmailBasedSubscriptions)
+        Write-Output ("Users can use the Self-Serve Password Reset: " + $authpolicy.value.allowedToUseSSPR)
+        Write-Output ("Users can join the tenant by email validation: " + $authpolicy.value.allowEmailVerifiedUsersToJoinOrganization)
+        Write-Output ("Users can consent to risky apps: " + $authpolicy.value.allowUserConsentForRiskyApps)
+        Write-Output ("Block MSOL PowerShell: " + $authpolicy.value.blockMsolPowerShell)
+        Write-Output ("Guest User Role Template ID: " + $authpolicy.value.guestUserRoleId)
+        if ($authpolicy.value.guestUserRoleId -eq "a0b1b346-4d3e-4e8b-98f8-753987be4970"){Write-Output "Guest User Policy: Guest users have the same access as members (most inclusive)"}
+        if ($authpolicy.value.guestUserRoleId -eq "10dae51f-b6af-4016-8d66-8c2a99b929b3"){Write-Output "Guest User Policy: Guest users have limited access to properties and memberships of directory objects"}
+        if ($authpolicy.value.guestUserRoleId -eq "2af84b1e-32c8-42b7-82bc-daa82404023b"){Write-Output "Guest User Policy: Guest user access is restricted to properties and memberships of their own directory objects (most restrictive)"}
+        
+    }
+    catch {
+        Write-Host -ForegroundColor Red "Error fetching user information: $_"
+    }
+
+
+    if(!$GraphRun){
+    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    }
+
+    if($PermissionEnum){
+        Write-Host -ForegroundColor yellow "[*] Now enumerating individual permissions for the current user"
+
+        try {
+            $me = Invoke-RestMethod -Uri $graphApiEndpoint -Headers $headers -Method Get
+            $results = @()
+            $userid = ("/" + $me.id)
+
+            # Permission list pulled from https://learn.microsoft.com/en-us/azure/active-directory/roles/permissions-reference
+
+            $resourceActions = @{
+                "microsoft.directory/adminConsentRequestPolicy/allProperties/allTasks" = "Manage admin consent request policies in Microsoft Entra ID"
+                "microsoft.directory/appConsent/appConsentRequests/allProperties/read" = "Read all properties of consent requests for applications registered with Microsoft Entra ID"
+                "microsoft.directory/applications/create" = "Create all types of applications"
+                "microsoft.directory/applications/createAsOwner" = "Create all types of applications, and creator is added as the first owner"
+                "microsoft.directory/oAuth2PermissionGrants/createAsOwner" = "Create OAuth 2.0 permission grants, with creator as the first owner"
+                "microsoft.directory/servicePrincipals/createAsOwner" = "Create service principals, with creator as the first owner"
+                "microsoft.directory/applications/delete" = "Delete all types of applications"
+                "microsoft.directory/applications/applicationProxy/read" = "Read all application proxy properties"
+                "microsoft.directory/applications/applicationProxy/update" = "Update all application proxy properties"
+                "microsoft.directory/applications/applicationProxyAuthentication/update" = "Update authentication on all types of applications"
+                "microsoft.directory/applications/applicationProxySslCertificate/update" = "Update SSL certificate settings for application proxy"
+                "microsoft.directory/applications/applicationProxyUrlSettings/update" = "Update URL settings for application proxy"
+                "microsoft.directory/applications/appRoles/update" = "Update the appRoles property on all types of applications"
+                "microsoft.directory/applications/audience/update" = "Update the audience property for applications"
+                "microsoft.directory/applications/authentication/update" = "Update authentication on all types of applications"
+                "microsoft.directory/applications/basic/update" = "Update basic properties for applications"
+                "microsoft.directory/applications/credentials/update" = "Update application credentials"
+                "microsoft.directory/applications/extensionProperties/update" = "Update extension properties on applications"
+                "microsoft.directory/applications/notes/update" = "Update notes of applications"
+                "microsoft.directory/applications/owners/update" = "Update owners of applications"
+                "microsoft.directory/applications/permissions/update" = "Update exposed permissions and required permissions on all types of applications"
+                "microsoft.directory/applications/policies/update" = "Update policies of applications"
+                "microsoft.directory/applications/tag/update" = "Update tags of applications"
+                "microsoft.directory/applications/verification/update" = "Update applications verification property"
+                "microsoft.directory/applications/synchronization/standard/read" = "Read provisioning settings associated with the application object"
+                "microsoft.directory/applicationTemplates/instantiate" = "Instantiate gallery applications from application templates"
+                "microsoft.directory/auditLogs/allProperties/read" = "Read all properties on audit logs, excluding custom security attributes audit logs"
+                "microsoft.directory/connectors/create" = "Create application proxy connectors"
+                "microsoft.directory/connectors/allProperties/read" = "Read all properties of application proxy connectors"
+                "microsoft.directory/connectorGroups/create" = "Create application proxy connector groups"
+                "microsoft.directory/connectorGroups/delete" = "Delete application proxy connector groups"
+                "microsoft.directory/connectorGroups/allProperties/read" = "Read all properties of application proxy connector groups"
+                "microsoft.directory/connectorGroups/allProperties/update" = "Update all properties of application proxy connector groups"
+                "microsoft.directory/customAuthenticationExtensions/allProperties/allTasks" = "Create and manage custom authentication extensions"
+                "microsoft.directory/deletedItems.applications/delete" = "Permanently delete applications, which can no longer be restored"
+                "microsoft.directory/deletedItems.applications/restore" = "Restore soft deleted applications to original state"
+                "microsoft.directory/oAuth2PermissionGrants/allProperties/allTasks" = "Create and delete OAuth 2.0 permission grants, and read and update all properties"
+                "microsoft.directory/applicationPolicies/create" = "Create application policies"
+                "microsoft.directory/applicationPolicies/delete" = "Delete application policies"
+                "microsoft.directory/applicationPolicies/standard/read" = "Read standard properties of application policies"
+                "microsoft.directory/applicationPolicies/owners/read" = "Read owners on application policies"
+                "microsoft.directory/applicationPolicies/policyAppliedTo/read" = "Read application policies applied to objects list"
+                "microsoft.directory/applicationPolicies/basic/update" = "Update standard properties of application policies"
+                "microsoft.directory/applicationPolicies/owners/update" = "Update the owner property of application policies"
+                "microsoft.directory/provisioningLogs/allProperties/read" = "Read all properties of provisioning logs"
+                "microsoft.directory/servicePrincipals/create" = "Create service principals"
+                "microsoft.directory/servicePrincipals/delete" = "Delete service principals"
+                "microsoft.directory/servicePrincipals/disable" = "Disable service principals"
+                "microsoft.directory/servicePrincipals/enable" = "Enable service principals"
+                "microsoft.directory/servicePrincipals/getPasswordSingleSignOnCredentials" = "Manage password single sign-on credentials on service principals"
+                "microsoft.directory/servicePrincipals/synchronizationCredentials/manage" = "Manage application provisioning secrets and credentials"
+                "microsoft.directory/servicePrincipals/synchronizationJobs/manage" = "Start, restart, and pause application provisioning synchronization jobs"
+                "microsoft.directory/servicePrincipals/synchronizationSchema/manage" = "Create and manage application provisioning synchronization jobs and schema"
+                "microsoft.directory/servicePrincipals/managePasswordSingleSignOnCredentials" = "Read password single sign-on credentials on service principals"
+                "microsoft.directory/servicePrincipals/managePermissionGrantsForAll.microsoft-application-admin" = "Grant consent for application permissions and delegated permissions on behalf of any user or all users, except for application permissions for Microsoft Graph"
+                "microsoft.directory/servicePrincipals/appRoleAssignedTo/update" = "Update service principal role assignments"
+                "microsoft.directory/servicePrincipals/audience/update" = "Update audience properties on service principals"
+                "microsoft.directory/servicePrincipals/authentication/update" = "Update authentication properties on service principals"
+                "microsoft.directory/servicePrincipals/basic/update" = "Update basic properties on service principals"
+                "microsoft.directory/servicePrincipals/credentials/update" = "Update credentials of service principals"
+                "microsoft.directory/servicePrincipals/notes/update" = "Update notes of service principals"
+                "microsoft.directory/servicePrincipals/owners/update" = "Update owners of service principals"
+                "microsoft.directory/servicePrincipals/permissions/update" = "Update permissions of service principals"
+                "microsoft.directory/servicePrincipals/policies/update" = "Update policies of service principals"
+                "microsoft.directory/servicePrincipals/tag/update" = "Update the tag property for service principals"
+                "microsoft.directory/servicePrincipals/synchronization/standard/read" = "Read provisioning settings associated with your service principal"
+                "microsoft.directory/signInReports/allProperties/read" = "Read all properties on sign-in reports, including privileged properties"
+                "microsoft.azure.serviceHealth/allEntities/allTasks" = "Read and configure Azure Service Health"
+                "microsoft.azure.supportTickets/allEntities/allTasks" = "Create and manage Azure support tickets"
+                "microsoft.office365.serviceHealth/allEntities/allTasks" = "Read and configure Service Health in the Microsoft 365 admin center"
+                "microsoft.office365.supportTickets/allEntities/allTasks" = "Create and manage Microsoft 365 service requests"
+                "microsoft.office365.webPortal/allEntities/standard/read" = "Read basic properties on all resources in the Microsoft 365 admin center"
+                "microsoft.directory/administrativeUnits/standard/read" = "Read basic properties on administrative units"
+                "microsoft.directory/administrativeUnits/members/read" = "Read members of administrative units"
+                "microsoft.directory/applications/standard/read" = "Read standard properties of applications"
+                "microsoft.directory/applications/owners/read" = "Read owners of applications"
+                "microsoft.directory/applications/policies/read" = "Read policies of applications"
+                "microsoft.directory/contacts/standard/read" = "Read basic properties on contacts in Microsoft Entra ID"
+                "microsoft.directory/contacts/memberOf/read" = "Read the group membership for all contacts in Microsoft Entra ID"
+                "microsoft.directory/contracts/standard/read" = "Read basic properties on partner contracts"
+                "microsoft.directory/devices/standard/read" = "Read basic properties on devices"
+                "microsoft.directory/devices/memberOf/read" = "Read device memberships"
+                "microsoft.directory/devices/registeredOwners/read" = "Read registered owners of devices"
+                "microsoft.directory/devices/registeredUsers/read" = "Read registered users of devices"
+                "microsoft.directory/directoryRoles/standard/read" = "Read basic properties in Microsoft Entra roles"
+                "microsoft.directory/directoryRoles/eligibleMembers/read" = "Read the eligible members of Microsoft Entra roles"
+                "microsoft.directory/directoryRoles/members/read" = "Read all members of Microsoft Entra roles"
+                "microsoft.directory/domains/standard/read" = "Read basic properties on domains"
+                "microsoft.directory/groups/standard/read" = "Read standard properties of Security groups and Microsoft 365 groups, including role-assignable groups"
+                "microsoft.directory/groups/appRoleAssignments/read" = "Read application role assignments of groups"
+                "microsoft.directory/groups/memberOf/read" = "Read the memberOf property on Security groups and Microsoft 365 groups, including role-assignable groups"
+                "microsoft.directory/groups/members/read" = "Read members of Security groups and Microsoft 365 groups, including role-assignable groups"
+                "microsoft.directory/groups/owners/read" = "Read owners of Security groups and Microsoft 365 groups, including role-assignable groups"
+                "microsoft.directory/groups/settings/read" = "Read settings of groups"
+                "microsoft.directory/groupSettings/standard/read" = "Read basic properties on group settings"
+                "microsoft.directory/groupSettingTemplates/standard/read" = "Read basic properties on group setting templates"
+                "microsoft.directory/oAuth2PermissionGrants/standard/read" = "Read basic properties on OAuth 2.0 permission grants"
+                "microsoft.directory/organization/standard/read" = "Read basic properties on an organization"
+                "microsoft.directory/organization/trustedCAsForPasswordlessAuth/read" = "Read trusted certificate authorities for passwordless authentication"
+                "microsoft.directory/roleAssignments/standard/read" = "Read basic properties on role assignments"
+                "microsoft.directory/roleDefinitions/standard/read" = "Read basic properties on role definitions"
+                "microsoft.directory/servicePrincipals/appRoleAssignedTo/read" = "Read service principal role assignments"
+                "microsoft.directory/servicePrincipals/appRoleAssignments/read" = "Read role assignments assigned to service principals"
+                "microsoft.directory/servicePrincipals/standard/read" = "Read basic properties of service principals"
+                "microsoft.directory/servicePrincipals/memberOf/read" = "Read the group memberships on service principals"
+                "microsoft.directory/servicePrincipals/oAuth2PermissionGrants/read" = "Read delegated permission grants on service principals"
+                "microsoft.directory/servicePrincipals/owners/read" = "Read owners of service principals"
+                "microsoft.directory/servicePrincipals/ownedObjects/read" = "Read owned objects of service principals"
+                "microsoft.directory/servicePrincipals/policies/read" = "Read policies of service principals"
+                "microsoft.directory/subscribedSkus/standard/read" = "Read basic properties on subscriptions"
+                "microsoft.directory/users/standard/read" = "Read basic properties on users"
+                "microsoft.directory/users/appRoleAssignments/read" = "Read application role assignments for users"
+                "microsoft.directory/users/deviceForResourceAccount/read" = "Read deviceForResourceAccount of users"
+                "microsoft.directory/users/directReports/read" = "Read the direct reports for users"
+                "microsoft.directory/users/licenseDetails/read" = "Read license details of users"
+                "microsoft.directory/users/manager/read" = "Read manager of users"
+                "microsoft.directory/users/memberOf/read" = "Read the group memberships of users"
+                "microsoft.directory/users/oAuth2PermissionGrants/read" = "Read delegated permission grants on users"
+                "microsoft.directory/users/ownedDevices/read" = "Read owned devices of users"
+                "microsoft.directory/users/ownedObjects/read" = "Read owned objects of users"
+                "microsoft.directory/users/photo/read" = "Read photo of users"
+                "microsoft.directory/users/registeredDevices/read" = "Read registered devices of users"
+                "microsoft.directory/users/scopedRoleMemberOf/read" = "Read user's membership of a Microsoft Entra role, that is scoped to an administrative unit"
+                "microsoft.directory/users/sponsors/read" = "Read sponsors of users"
+                "microsoft.directory/authorizationPolicy/allProperties/allTasks" = "Manage all aspects of authorization policy"
+                "microsoft.directory/users/inviteGuest" = "Invite Guest Users"
+                "microsoft.directory/deletedItems.devices/delete" = "Permanently delete devices, which can no longer be restored"
+                "microsoft.directory/deletedItems.devices/restore" = "Restore soft deleted devices to the original state"
+                "microsoft.directory/devices/create" = "Create devices (enroll in Microsoft Entra ID)"
+                "microsoft.directory/devices/delete" = "Delete devices from Microsoft Entra ID"
+                "microsoft.directory/devices/disable" = "Disable devices in Microsoft Entra ID"
+                "microsoft.directory/devices/enable" = "Enable devices in Microsoft Entra ID"
+                "microsoft.directory/devices/basic/update" = "Update basic properties on devices"
+                "microsoft.directory/devices/extensionAttributeSet1/update" = "Update the extensionAttribute1 to extensionAttribute5 properties on devices"
+                "microsoft.directory/devices/extensionAttributeSet2/update" = "Update the extensionAttribute6 to extensionAttribute10 properties on devices"
+                "microsoft.directory/devices/extensionAttributeSet3/update" = "Update the extensionAttribute11 to extensionAttribute15 properties on devices"
+                "microsoft.directory/devices/registeredOwners/update" = "Update registered owners of devices"
+                "microsoft.directory/devices/registeredUsers/update" = "Update registered users of devices"
+                "microsoft.directory/groups.security/create" = "Create Security groups, excluding role-assignable groups"
+                "microsoft.directory/groups.security/delete" = "Delete Security groups, excluding role-assignable groups"
+                "microsoft.directory/groups.security/basic/update" = "Update basic properties on Security groups, excluding role-assignable groups"
+                "microsoft.directory/groups.security/classification/update" = "Update the classification property on Security groups, excluding role-assignable groups"
+                "microsoft.directory/groups.security/dynamicMembershipRule/update" = "Update the dynamic membership rule on Security groups, excluding role-assignable groups"
+                "microsoft.directory/groups.security/members/update" = "Update members of Security groups, excluding role-assignable groups"
+                "microsoft.directory/groups.security/owners/update" = "Update owners of Security groups, excluding role-assignable groups"
+                "microsoft.directory/groups.security/visibility/update" = "Update the visibility property on Security groups, excluding role-assignable groups"
+                "microsoft.directory/deviceManagementPolicies/standard/read" = "Read standard properties on device management application policies"
+                "microsoft.directory/deviceRegistrationPolicy/standard/read" = "Read standard properties on device registration policies"
+                "microsoft.cloudPC/allEntities/allProperties/allTasks" = "Manage all aspects of Windows 365"
+                "microsoft.office365.usageReports/allEntities/allProperties/read" = "Read Office 365 usage reports"
+                "microsoft.directory/authorizationPolicy/standard/read" = "Read standard properties of authorization policy"
+                "microsoft.directory/hybridAuthenticationPolicy/allProperties/allTasks" = "Manage hybrid authentication policy in Microsoft Entra ID"
+                "microsoft.directory/organization/dirSync/update" = "Update the organization directory sync property"
+                "microsoft.directory/passwordHashSync/allProperties/allTasks" = "Manage all aspects of Password Hash Synchronization (PHS) in Microsoft Entra ID"
+                "microsoft.directory/policies/create" = "Create policies in Microsoft Entra ID"
+                "microsoft.directory/policies/delete" = "Delete policies in Microsoft Entra ID"
+                "microsoft.directory/policies/standard/read" = "Read basic properties on policies"
+                "microsoft.directory/policies/owners/read" = "Read owners of policies"
+                "microsoft.directory/policies/policyAppliedTo/read" = "Read policies.policyAppliedTo property"
+                "microsoft.directory/policies/basic/update" = "Update basic properties on policies"
+                "microsoft.directory/policies/owners/update" = "Update owners of policies"
+                "microsoft.directory/policies/tenantDefault/update" = "Update default organization policies"
+                "microsoft.directory/contacts/create" = "Create contacts"
+                "microsoft.directory/groups/assignLicense" = "Assign product licenses to groups for group-based licensing"
+                "microsoft.directory/groups/create" = "Create Security groups and Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groups/reprocessLicenseAssignment" = "Reprocess license assignments for group-based licensing"
+                "microsoft.directory/groups/basic/update" = "Update basic properties on Security groups and Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groups/classification/update" = "Update the classification property on Security groups and Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groups/dynamicMembershipRule/update" = "Update the dynamic membership rule on Security groups and Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groups/groupType/update" = "Update properties that would affect the group type of Security groups and Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groups/members/update" = "Update members of Security groups and Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groups/onPremWriteBack/update" = "Update Microsoft Entra groups to be written back to on-premises with Microsoft Entra Connect"
+                "microsoft.directory/groups/owners/update" = "Update owners of Security groups and Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groups/settings/update" = "Update settings of groups"
+                "microsoft.directory/groups/visibility/update" = "Update the visibility property of Security groups and Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groupSettings/create" = "Create group settings"
+                "microsoft.directory/groupSettings/delete" = "Delete group settings"
+                "microsoft.directory/groupSettings/basic/update" = "Update basic properties on group settings"
+                "microsoft.directory/oAuth2PermissionGrants/create" = "Create OAuth 2.0 permission grants"
+                "microsoft.directory/oAuth2PermissionGrants/basic/update" = "Update OAuth 2.0 permission grants"
+                "microsoft.directory/users/assignLicense" = "Manage user licenses"
+                "microsoft.directory/users/create" = "Add users"
+                "microsoft.directory/users/disable" = "Disable users"
+                "microsoft.directory/users/enable" = "Enable users"
+                "microsoft.directory/users/invalidateAllRefreshTokens" = "Force sign-out by invalidating user refresh tokens"
+                "microsoft.directory/users/reprocessLicenseAssignment" = "Reprocess license assignments for users"
+                "microsoft.directory/users/basic/update" = "Update basic properties on users"
+                "microsoft.directory/users/manager/update" = "Update manager for users"
+                "microsoft.directory/users/photo/update" = "Update photo of users"
+                "microsoft.directory/users/sponsors/update" = "Update sponsors of users"
+                "microsoft.directory/users/userPrincipalName/update" = "Update User Principal Name of users"
+                "microsoft.directory/domains/allProperties/allTasks" = "Create and delete domains, and read and update all properties"
+                "microsoft.directory/b2cUserFlow/allProperties/allTasks" = "Read and configure user flow in Azure Active Directory B2C"
+                "microsoft.directory/b2cUserAttribute/allProperties/allTasks" = "Read and configure user attribute in Azure Active Directory B2C"
+                "microsoft.directory/groups/hiddenMembers/read" = "Read hidden members of Security groups and Microsoft 365 groups, including role-assignable groups"
+                "microsoft.directory/groups.unified/create" = "Create Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groups.unified/delete" = "Delete Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groups.unified/restore" = "Restore Microsoft 365 groups from soft-deleted container, excluding role-assignable groups"
+                "microsoft.directory/groups.unified/basic/update" = "Update basic properties on Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groups.unified/members/update" = "Update members of Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.directory/groups.unified/owners/update" = "Update owners of Microsoft 365 groups, excluding role-assignable groups"
+                "microsoft.office365.exchange/allEntities/basic/allTasks" = "Manage all aspects of Exchange Online"
+                "microsoft.office365.network/performance/allProperties/read" = "Read all network performance properties in the Microsoft 365 admin center"
+                "microsoft.directory/accessReviews/allProperties/allTasks" = "(Deprecated) Create and delete access reviews, read and update all properties of access reviews, and manage access reviews of groups in Microsoft Entra ID"
+                "microsoft.directory/accessReviews/definitions/allProperties/allTasks" = "Manage access reviews of all reviewable resources in Microsoft Entra ID"
+                "microsoft.directory/administrativeUnits/allProperties/allTasks" = "Create and manage administrative units (including members)"
+                "microsoft.directory/applications/allProperties/allTasks" = "Create and delete applications, and read and update all properties"
+                "microsoft.directory/users/authenticationMethods/create" = "Update authentication methods for users"
+                "microsoft.directory/users/authenticationMethods/delete" = "Delete authentication methods for users"
+                "microsoft.directory/users/authenticationMethods/standard/read" = "Read standard properties of authentication methods for users"
+                "microsoft.directory/users/authenticationMethods/basic/update" = "Update basic properties of authentication methods for users"
+                "microsoft.directory/bitlockerKeys/key/read" = "Read bitlocker metadata and key on devices"
+                "microsoft.directory/cloudAppSecurity/allProperties/allTasks" = "Create and delete all resources, and read and update standard properties in Microsoft Defender for Cloud Apps"
+                "microsoft.directory/contacts/allProperties/allTasks" = "Create and delete contacts, and read and update all properties"
+                "microsoft.directory/contracts/allProperties/allTasks" = "Create and delete partner contracts, and read and update all properties"
+                "microsoft.directory/deletedItems/delete" = "Permanently delete objects, which can no longer be restored"
+                "microsoft.directory/deletedItems/restore" = "Restore soft deleted objects to original state"
+                "microsoft.directory/devices/allProperties/allTasks" = "Create and delete devices, and read and update all properties"
+                "microsoft.directory/namedLocations/create" = "Create custom rules that define network locations"
+                "microsoft.directory/namedLocations/delete" = "Delete custom rules that define network locations"
+                "microsoft.directory/namedLocations/standard/read" = "Read basic properties of custom rules that define network locations"
+                "microsoft.directory/namedLocations/basic/update" = "Update basic properties of custom rules that define network locations"
+                "microsoft.directory/deviceLocalCredentials/password/read" = "Read all properties of the backed up local administrator account credentials for Microsoft Entra joined devices, including the password"
+                "microsoft.directory/deviceManagementPolicies/basic/update" = "Update basic properties on device management application policies"
+                "microsoft.directory/deviceRegistrationPolicy/basic/update" = "Update basic properties on device registration policies"
+                "microsoft.directory/directoryRoles/allProperties/allTasks" = "Create and delete directory roles, and read and update all properties"
+                "microsoft.directory/directoryRoleTemplates/allProperties/allTasks" = "Create and delete Microsoft Entra role templates, and read and update all properties"
+                "microsoft.directory/domains/federationConfiguration/standard/read" = "Read standard properties of federation configuration for domains"
+                "microsoft.directory/domains/federationConfiguration/basic/update" = "Update basic federation configuration for domains"
+                "microsoft.directory/domains/federationConfiguration/create" = "Create federation configuration for domains"
+                "microsoft.directory/domains/federationConfiguration/delete" = "Delete federation configuration for domains"
+                "microsoft.directory/entitlementManagement/allProperties/allTasks" = "Create and delete resources, and read and update all properties in Microsoft Entra entitlement management"
+                "microsoft.directory/groups/allProperties/allTasks" = "Create and delete groups, and read and update all properties"
+                "microsoft.directory/groupsAssignableToRoles/create" = "Create role-assignable groups"
+                "microsoft.directory/groupsAssignableToRoles/delete" = "Delete role-assignable groups"
+                "microsoft.directory/groupsAssignableToRoles/restore" = "Restore role-assignable groups"
+                "microsoft.directory/groupsAssignableToRoles/allProperties/update" = "Update role-assignable groups"
+                "microsoft.directory/groupSettings/allProperties/allTasks" = "Create and delete group settings, and read and update all properties"
+                "microsoft.directory/groupSettingTemplates/allProperties/allTasks" = "Create and delete group setting templates, and read and update all properties"
+                "microsoft.directory/identityProtection/allProperties/allTasks" = "Create and delete all resources, and read and update standard properties in Microsoft Entra ID Protection"
+                "microsoft.directory/loginOrganizationBranding/allProperties/allTasks" = "Create and delete loginTenantBranding, and read and update all properties"
+                "microsoft.directory/organization/allProperties/allTasks" = "Read and update all properties for an organization"
+                "microsoft.directory/policies/allProperties/allTasks" = "Create and delete policies, and read and update all properties"
+                "microsoft.directory/conditionalAccessPolicies/allProperties/allTasks" = "Manage all properties of conditional access policies"
+                "microsoft.directory/crossTenantAccessPolicy/standard/read" = "Read basic properties of cross-tenant access policy"
+                "microsoft.directory/crossTenantAccessPolicy/allowedCloudEndpoints/update" = "Update allowed cloud endpoints of cross-tenant access policy"
+                "microsoft.directory/crossTenantAccessPolicy/basic/update" = "Update basic settings of cross-tenant access policy"
+                "microsoft.directory/crossTenantAccessPolicy/default/standard/read" = "Read basic properties of the default cross-tenant access policy"
+                "microsoft.directory/crossTenantAccessPolicy/default/b2bCollaboration/update" = "Update Microsoft Entra B2B collaboration settings of the default cross-tenant access policy"
+                "microsoft.directory/crossTenantAccessPolicy/default/b2bDirectConnect/update" = "Update Microsoft Entra B2B direct connect settings of the default cross-tenant access policy"
+                "microsoft.directory/crossTenantAccessPolicy/default/crossCloudMeetings/update" = "Update cross-cloud Teams meeting settings of the default cross-tenant access policy"
+                "microsoft.directory/crossTenantAccessPolicy/default/tenantRestrictions/update" = "Update tenant restrictions of the default cross-tenant access policy"
+                "microsoft.directory/crossTenantAccessPolicy/partners/create" = "Create cross-tenant access policy for partners"
+                "microsoft.directory/crossTenantAccessPolicy/partners/delete" = "Delete cross-tenant access policy for partners"
+                "microsoft.directory/crossTenantAccessPolicy/partners/standard/read" = "Read basic properties of cross-tenant access policy for partners"
+                "microsoft.directory/crossTenantAccessPolicy/partners/b2bCollaboration/update" = "Update Microsoft Entra B2B collaboration settings of cross-tenant access policy for partners"
+                "microsoft.directory/crossTenantAccessPolicy/partners/b2bDirectConnect/update" = "Update Microsoft Entra B2B direct connect settings of cross-tenant access policy for partners"
+                "microsoft.directory/crossTenantAccessPolicy/partners/crossCloudMeetings/update" = "Update cross-cloud Teams meeting settings of cross-tenant access policy for partners"
+                "microsoft.directory/crossTenantAccessPolicy/partners/tenantRestrictions/update" = "Update tenant restrictions of cross-tenant access policy for partners"
+                "microsoft.directory/crossTenantAccessPolicy/partners/identitySynchronization/create" = "Create cross-tenant sync policy for partners"
+                "microsoft.directory/crossTenantAccessPolicy/partners/identitySynchronization/basic/update" = "Update basic settings of cross-tenant sync policy"
+                "microsoft.directory/crossTenantAccessPolicy/partners/identitySynchronization/standard/read" = "Read basic properties of cross-tenant sync policy"
+                "microsoft.directory/privilegedIdentityManagement/allProperties/read" = "Read all resources in Privileged Identity Management"
+                "microsoft.directory/resourceNamespaces/resourceActions/authenticationContext/update" = "Update Conditional Access authentication context of Microsoft 365 role-based access control (RBAC) resource actions"
+                "microsoft.directory/roleAssignments/allProperties/allTasks" = "Create and delete role assignments, and read and update all role assignment properties"
+                "microsoft.directory/roleDefinitions/allProperties/allTasks" = "Create and delete role definitions, and read and update all properties"
+                "microsoft.directory/scopedRoleMemberships/allProperties/allTasks" = "Create and delete scopedRoleMemberships, and read and update all properties"
+                "microsoft.directory/serviceAction/activateService" = "Can perform the 'activate service' action for a service"
+                "microsoft.directory/serviceAction/disableDirectoryFeature" = "Can perform the 'disable directory feature' service action"
+                "microsoft.directory/serviceAction/enableDirectoryFeature" = "Can perform the 'enable directory feature' service action"
+                "microsoft.directory/serviceAction/getAvailableExtentionProperties" = "Can perform the getAvailableExtentionProperties service action"
+                "microsoft.directory/servicePrincipals/allProperties/allTasks" = "Create and delete service principals, and read and update all properties"
+                "microsoft.directory/servicePrincipals/managePermissionGrantsForAll.microsoft-company-admin" = "Grant consent for any permission to any application"
+                "microsoft.directory/subscribedSkus/allProperties/allTasks" = "Buy and manage subscriptions and delete subscriptions"
+                "microsoft.directory/users/allProperties/allTasks" = "Create and delete users, and read and update all properties"
+                "microsoft.directory/permissionGrantPolicies/create" = "Create permission grant policies"
+                "microsoft.directory/permissionGrantPolicies/delete" = "Delete permission grant policies"
+                "microsoft.directory/permissionGrantPolicies/standard/read" = "Read standard properties of permission grant policies"
+                "microsoft.directory/permissionGrantPolicies/basic/update" = "Update basic properties of permission grant policies"
+                "microsoft.directory/servicePrincipalCreationPolicies/create" = "Create service principal creation policies"
+                "microsoft.directory/servicePrincipalCreationPolicies/delete" = "Delete service principal creation policies"
+                "microsoft.directory/servicePrincipalCreationPolicies/standard/read" = "Read standard properties of service principal creation policies"
+                "microsoft.directory/servicePrincipalCreationPolicies/basic/update" = "Update basic properties of service principal creation policies"
+                "microsoft.directory/tenantManagement/tenants/create" = "Create new tenants in Microsoft Entra ID"
+                "microsoft.directory/verifiableCredentials/configuration/contracts/cards/allProperties/read" = "Read a verifiable credential card"
+                "microsoft.directory/verifiableCredentials/configuration/contracts/cards/revoke" = "Revoke a verifiable credential card"
+                "microsoft.directory/verifiableCredentials/configuration/contracts/create" = "Create a verifiable credential contract"
+                "microsoft.directory/verifiableCredentials/configuration/contracts/allProperties/read" = "Read a verifiable credential contract"
+                "microsoft.directory/verifiableCredentials/configuration/contracts/allProperties/update" = "Update a verifiable credential contract"
+                "microsoft.directory/verifiableCredentials/configuration/create" = "Create configuration required to create and manage verifiable credentials"
+                "microsoft.directory/verifiableCredentials/configuration/delete" = "Delete configuration required to create and manage verifiable credentials and delete all of its verifiable credentials"
+                "microsoft.directory/verifiableCredentials/configuration/allProperties/read" = "Read configuration required to create and manage verifiable credentials"
+                "microsoft.directory/verifiableCredentials/configuration/allProperties/update" = "Update configuration required to create and manage verifiable credentials"
+                "microsoft.directory/lifecycleWorkflows/workflows/allProperties/allTasks" = "Manage all aspects of lifecycle workflows and tasks in Microsoft Entra ID"
+                "microsoft.directory/pendingExternalUserProfiles/create" = "Create external user profiles in the extended directory for Teams"
+                "microsoft.directory/pendingExternalUserProfiles/standard/read" = "Read standard properties of external user profiles in the extended directory for Teams"
+                "microsoft.directory/pendingExternalUserProfiles/basic/update" = "Update basic properties of external user profiles in the extended directory for Teams"
+                "microsoft.directory/pendingExternalUserProfiles/delete" = "Delete external user profiles in the extended directory for Teams"
+                "microsoft.directory/externalUserProfiles/standard/read" = "Read standard properties of external user profiles in the extended directory for Teams"
+                "microsoft.directory/externalUserProfiles/basic/update" = "Update basic properties of external user profiles in the extended directory for Teams"
+                "microsoft.directory/externalUserProfiles/delete" = "Delete external user profiles in the extended directory for Teams"
+                "microsoft.azure.advancedThreatProtection/allEntities/allTasks" = "Manage all aspects of Azure Advanced Threat Protection"
+                "microsoft.azure.informationProtection/allEntities/allTasks" = "Manage all aspects of Azure Information Protection"
+                "microsoft.commerce.billing/allEntities/allProperties/allTasks" = "Manage all aspects of Office 365 billing"
+                "microsoft.commerce.billing/purchases/standard/read" = "Read purchase services in M365 Admin Center."
+                "microsoft.dynamics365/allEntities/allTasks" = "Manage all aspects of Dynamics 365"
+                "microsoft.edge/allEntities/allProperties/allTasks" = "Manage all aspects of Microsoft Edge"
+                "microsoft.networkAccess/allEntities/allProperties/allTasks" = "Manage all aspects of Entra Network Access"
+                "microsoft.flow/allEntities/allTasks" = "Manage all aspects of Microsoft Power Automate"
+                "microsoft.hardware.support/shippingAddress/allProperties/allTasks" = "Create, read, update, and delete shipping addresses for Microsoft hardware warranty claims, including shipping addresses created by others"
+                "microsoft.hardware.support/shippingStatus/allProperties/read" = "Read shipping status for open Microsoft hardware warranty claims"
+                "microsoft.hardware.support/warrantyClaims/allProperties/allTasks" = "Create and manage all aspects of Microsoft hardware warranty claims"
+                "microsoft.insights/allEntities/allProperties/allTasks" = "Manage all aspects of Insights app"
+                "microsoft.intune/allEntities/allTasks" = "Manage all aspects of Microsoft Intune"
+                "microsoft.office365.complianceManager/allEntities/allTasks" = "Manage all aspects of Office 365 Compliance Manager"
+                "microsoft.office365.desktopAnalytics/allEntities/allTasks" = "Manage all aspects of Desktop Analytics"
+                "microsoft.office365.knowledge/contentUnderstanding/allProperties/allTasks" = "Read and update all properties of content understanding in Microsoft 365 admin center"
+                "microsoft.office365.knowledge/contentUnderstanding/analytics/allProperties/read" = "Read analytics reports of content understanding in Microsoft 365 admin center"
+                "microsoft.office365.knowledge/knowledgeNetwork/allProperties/allTasks" = "Read and update all properties of knowledge network in Microsoft 365 admin center"
+                "microsoft.office365.knowledge/knowledgeNetwork/topicVisibility/allProperties/allTasks" = "Manage topic visibility of knowledge network in Microsoft 365 admin center"
+                "microsoft.office365.knowledge/learningSources/allProperties/allTasks" = "Manage learning sources and all their properties in Learning App."
+                "microsoft.office365.lockbox/allEntities/allTasks" = "Manage all aspects of Customer Lockbox"
+                "microsoft.office365.messageCenter/messages/read" = "Read messages in Message Center in the Microsoft 365 admin center, excluding security messages"
+                "microsoft.office365.messageCenter/securityMessages/read" = "Read security messages in Message Center in the Microsoft 365 admin center"
+                "microsoft.office365.organizationalMessages/allEntities/allProperties/allTasks" = "Manage all authoring aspects of Microsoft 365 admin center communications"
+                "microsoft.office365.organizationalMessages/templates/allProperties/allTasks" = "Manage all authoring aspects of Microsoft 365 admin center communications templates"
+                "microsoft.office365.organizationalMessages/allEntities/allTasks" = "Manage all aspects of Microsoft 365 admin center communications"
+                "microsoft.office365.organizationalMessages/templates/allTasks" = "Manage all aspects of Microsoft 365 admin center communications templates"
+                "microsoft.office365.powerPlatform/allEntities/allTasks" = "Manage all aspects of Power Platform"
+                "microsoft.office365.securityComplianceCenter/allEntities/allProperties/allTasks" = "Manage all aspects of Office 365 Security & Compliance Center"
+                "microsoft.directory/accessReviews/allProperties/read" = "(Deprecated) Read all properties of access reviews"
+                "microsoft.directory/accessReviews/definitions/allProperties/read" = "Read all properties of access reviews of all reviewable resources in Microsoft Entra ID"
+                "microsoft.directory/adminConsentRequestPolicy/allProperties/read" = "Read all properties of admin consent request policies in Microsoft Entra ID"
+                "microsoft.directory/administrativeUnits/allProperties/read" = "Read all properties of administrative units, including members"
+                "microsoft.directory/applications/allProperties/read" = "Read all properties (including privileged properties) on all types of applications"
+                "microsoft.directory/users/authenticationMethods/standard/restrictedRead" = "Read standard properties of authentication methods that do not include personally identifiable information for users"
+                "microsoft.directory/cloudAppSecurity/allProperties/read" = "Read all properties for Defender for Cloud Apps"
+                "microsoft.directory/contacts/allProperties/read" = "Read all properties for contacts"
+                "microsoft.directory/customAuthenticationExtensions/allProperties/read" = "Read custom authentication extensions"
+                "microsoft.directory/deviceLocalCredentials/standard/read" = "Read all properties of the backed up local administrator account credentials for Microsoft Entra joined devices, except the password"
+                "microsoft.directory/devices/allProperties/read" = "Read all properties of devices"
+                "microsoft.directory/directoryRoles/allProperties/read" = "Read all properties of directory roles"
+                "microsoft.directory/directoryRoleTemplates/allProperties/read" = "Read all properties of directory role templates"
+                "microsoft.directory/domains/allProperties/read" = "Read all properties of domains"
+                "microsoft.directory/entitlementManagement/allProperties/read" = "Read all properties in Microsoft Entra entitlement management"
+                "microsoft.directory/groups/allProperties/read" = "Read all properties (including privileged properties) on Security groups and Microsoft 365 groups, including role-assignable groups"
+                "microsoft.directory/groupSettings/allProperties/read" = "Read all properties of group settings"
+                "microsoft.directory/groupSettingTemplates/allProperties/read" = "Read all properties of group setting templates"
+                "microsoft.directory/identityProtection/allProperties/read" = "Read all resources in Microsoft Entra ID Protection"
+                "microsoft.directory/loginOrganizationBranding/allProperties/read" = "Read all properties for your organization's branded sign-in page"
+                "microsoft.directory/oAuth2PermissionGrants/allProperties/read" = "Read all properties of OAuth 2.0 permission grants"
+                "microsoft.directory/organization/allProperties/read" = "Read all properties for an organization"
+                "microsoft.directory/policies/allProperties/read" = "Read all properties of policies"
+                "microsoft.directory/conditionalAccessPolicies/allProperties/read" = "Read all properties of conditional access policies"
+                "microsoft.directory/roleAssignments/allProperties/read" = "Read all properties of role assignments"
+                "microsoft.directory/roleDefinitions/allProperties/read" = "Read all properties of role definitions"
+                "microsoft.directory/scopedRoleMemberships/allProperties/read" = "View members in administrative units"
+                "microsoft.directory/servicePrincipals/allProperties/read" = "Read all properties (including privileged properties) on servicePrincipals"
+                "microsoft.directory/subscribedSkus/allProperties/read" = "Read all properties of product subscriptions"
+                "microsoft.directory/users/allProperties/read" = "Read all properties of users"
+                "microsoft.directory/lifecycleWorkflows/workflows/allProperties/read" = "Read all properties of lifecycle workflows and tasks in Microsoft Entra ID"
+                "microsoft.cloudPC/allEntities/allProperties/read" = "Read all aspects of Windows 365"
+                "microsoft.commerce.billing/allEntities/allProperties/read" = "Read all resources of Office 365 billing"
+                "microsoft.edge/allEntities/allProperties/read" = "Read all aspects of Microsoft Edge"
+                "microsoft.networkAccess/allEntities/allProperties/read" = "Read all aspects of Entra Network Access"
+                "microsoft.hardware.support/shippingAddress/allProperties/read" = "Read shipping addresses for Microsoft hardware warranty claims, including existing shipping addresses created by others"
+                "microsoft.hardware.support/warrantyClaims/allProperties/read" = "Read Microsoft hardware warranty claims"
+                "microsoft.insights/allEntities/allProperties/read" = "Read all aspects of Viva Insights"
+                "microsoft.office365.organizationalMessages/allEntities/allProperties/read" = "Read all aspects of Microsoft 365 Organizational Messages"
+                "microsoft.office365.protectionCenter/allEntities/allProperties/read" = "Read all properties in the Security and Compliance centers"
+                "microsoft.office365.securityComplianceCenter/allEntities/read" = "Read standard properties in Microsoft 365 Security and Compliance Center"
+                "microsoft.office365.yammer/allEntities/allProperties/read" = "Read all aspects of Yammer"
+                "microsoft.permissionsManagement/allEntities/allProperties/read" = "Read all aspects of Entra Permissions Management"
+                "microsoft.teams/allEntities/allProperties/read" = "Read all properties of Microsoft Teams"
+                "microsoft.virtualVisits/allEntities/allProperties/read" = "Read all aspects of Virtual Visits"
+                "microsoft.viva.goals/allEntities/allProperties/read" = "Read all aspects of Microsoft Viva Goals"
+                "microsoft.viva.pulse/allEntities/allProperties/read" = "Read all aspects of Microsoft Viva Pulse"
+                "microsoft.windows.updatesDeployments/allEntities/allProperties/read" = "Read all aspects of Windows Update Service"
+            }
+
+            # Split resource actions into batches of 20
+            $batchSize = 20
+            $batchCount = [math]::Ceiling($resourceActions.Count / $batchSize)
+
+            # Create arrays to separate "Allowed" and other access types
+            $allowedActions = @()
+            $conditionalActions = @()
+            $otherActions = @()
+    
+
+            for ($i = 0; $i -lt $batchCount; $i++) {
+                $start = $i * $batchSize
+                $end = [Math]::Min(($i + 1) * $batchSize, $resourceActions.Count)
+
+                $batchResourceActions = $resourceActions.GetEnumerator() | Select-Object -Skip $start -First $batchSize
+
+                $requestBody = @{
+                    resourceActionAuthorizationChecks = $batchResourceActions | ForEach-Object {
+                        @{
+                            directoryScopeId = $userid
+                            resourceAction = $_.Key
+                        }
+                    }
+                } | ConvertTo-JSon
+
+                try {
+                    $estimateresponse = Invoke-RestMethod -Uri $estimateAccessEndpoint -Headers $headers -Method Post -Body $requestBody
+
+                    foreach ($perm in $estimateresponse.value) {
+                        $accessdecision = $perm.accessdecision
+                        $resourceAction = $perm.resourceaction
+
+                        # Determine the access type and add to the appropriate array
+                        if ($accessdecision -eq "Allowed") {
+                            $description = $resourceActions[$resourceAction]
+                            $allowedActions += "$description : $accessdecision"
+                        } 
+                        elseif($accessdecision -eq "Conditional"){
+                            $description = $resourceActions[$resourceAction]
+                            $conditionalActions += "$description : $accessdecision"
+                        }
+                        else {
+                            $description = $resourceActions[$resourceAction]
+                            $otherActions += "$description : $accessdecision"
+                        }
+                    }
+                } catch {
+                    Write-Host -ForegroundColor Red "Error estimating access: $_"
+                }
+            }
+
+            # Output "Allowed" actions first, followed by other actions
+            Write-Host -ForegroundColor Green "[Allowed Actions]:"
+            
+            foreach ($action in $allowedActions) {
+                Write-Output $action
+            }
+
+            Write-Host -ForegroundColor Yellow "[Conditional Actions]:"
+            foreach ($action in $conditionalActions) {
+                Write-Output $action
+            }
+        } catch {
+            Write-Host -ForegroundColor Red "Error fetching user information: $_"
+        }
+    
+    }
+}
 
 
 function Invoke-SearchUserAttributes{
