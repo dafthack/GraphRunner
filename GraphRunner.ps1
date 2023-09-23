@@ -70,6 +70,9 @@ function Get-GraphTokens{
                 Write-Output "Decoded JWT payload:"
                 $tokobj
                 Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
+                $baseDate = Get-Date -date "01-01-1970"
+                $tokenExpire = $baseDate.AddSeconds($tokobj.exp).ToLocalTime()
+                Write-Host -ForegroundColor Yellow "[!] Your access token is set to expire on: $tokenExpire"
             }
         } catch {
             $details = $_.ErrorDetails.Message | ConvertFrom-Json
@@ -137,7 +140,10 @@ function Get-GraphTokens{
                     $global:tenantid = $tokobj.tid
                     Write-Output "Decoded JWT payload:"
                     $tokobj
+                    $baseDate = Get-Date -date "01-01-1970"
+                    $tokenExpire = $baseDate.AddSeconds($tokobj.exp).ToLocalTime()
                     Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
+                    Write-Host -ForegroundColor Yellow "[!] Your access token is set to expire on: $tokenExpire"
                     $continue = $null
                 }
             } catch {
@@ -237,6 +243,9 @@ function Invoke-RefreshGraphTokens{
                 Write-host "Decoded JWT payload:"
                 $tokobj
                 Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
+                $baseDate = Get-Date -date "01-01-1970"
+                $tokenExpire = $baseDate.AddSeconds($tokobj.exp).ToLocalTime()
+                Write-Host -ForegroundColor Yellow "[!] Your access token is set to expire on: $tokenExpire"
                 break
             }
 }
