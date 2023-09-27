@@ -25,6 +25,7 @@ It consists of three separate parts:
 * Tools to complete OAuth flow during consent grant attacks
 * GraphRunner doesn't rely on any third-party libraries or modules
 * Works with Windows and Linux
+* Continuously refresh your token package
 
 ****
 ## Usage
