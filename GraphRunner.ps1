@@ -2101,34 +2101,52 @@ function Get-SecurityGroups{
     $graphApiUrl = "https://graph.microsoft.com/v1.0"
     $groupsUrl = "$graphApiUrl/groups?$filter=securityEnabled eq true"
 
-    $groupsResponse = Invoke-RestMethod -Uri $groupsUrl -Headers $headers -Method Get
-
-    $groups = $groupsResponse.value
-
-
-    #Get Group Members
-
     $groupsWithMemberIDs = @()
 
-    foreach ($group in $groups) {
-        $groupId = $group.id
-        $membersUrl = "$graphApiUrl/groups/$groupId/members"
+    do {
+        $groupsResponse = Invoke-RestMethod -Uri $groupsUrl -Headers $headers -Method Get
+        $groups = $groupsResponse.value
 
-        $membersResponse = Invoke-RestMethod -Uri $membersUrl -Headers $headers -Method Get
-        $members = $membersResponse.value
+        foreach ($group in $groups) {
+            $groupId = $group.id
+            $membersUrl = "$graphApiUrl/groups/$groupId/members"
 
-        $memberIds = $members | ForEach-Object { $_.id }
+            try{
+            $membersResponse = Invoke-RestMethod -Uri $membersUrl -Headers $headers -Method Get
+            }catch {
+                if($_.Exception.Response.StatusCode.value__ -match "429"){
+                Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
+                Start-Sleep -Seconds 5 
+                }
+                
+            }
+            $members = $membersResponse.value
 
-        $groupInfo = @{
-            GroupName = $group.displayName
-            MemberIds = $memberIds -join ","
+            $memberIds = $members | ForEach-Object { $_.id }
+
+            $groupInfo = @{
+                GroupName = $group.displayName
+                MemberIds = $memberIds -join ","
+            }
+
+            Write-Output ("Group Name: " + $group.displayName + " | Group ID: " + $groupId)
+            Write-Output ("Members: " + ($($members.userPrincipalName) -join ', '))
+            Write-Output ""
+            Write-Output ("=" * 80)
+            $groupsWithMemberIDs += New-Object PSObject -Property $groupInfo
         }
-        Write-Output ("Group Name: " + $group.displayName + " | Group ID: " + $groupid)
-        Write-Output ("Members: " + ($($members.userPrincipalName) -join ', '))
-        Write-Output ""
-        Write-Output ("=" * 80) 
-        $groupsWithMemberIDs += New-Object PSObject -Property $groupInfo
-    }
+
+        # Check if there are more pages of results
+        if ($groupsResponse.'@odata.nextLink') {
+            $groupsUrl = $groupsResponse.'@odata.nextLink'
+            if(!$GraphRun){
+                Write-Host -ForegroundColor Yellow "[*] Processing more groups..."
+            }
+        }
+        else {
+            $groupsUrl = $null  
+        }
+    } while ($groupsUrl)
 
     return $groupsWithMemberIDs
 
@@ -2445,60 +2463,75 @@ function Get-UpdatableGroups{
         "Content-Type" = "application/json"
     }
 
+    $results = @()
     Write-Host -ForegroundColor yellow "[*] Now gathering groups and checking if each one is updatable."
+    do {
+        
 
-    try {
-        $response = Invoke-RestMethod -Uri $graphApiEndpoint -Headers $headers -Method Get
-        $results = @()
-        foreach($group in $response.value){
-        $groupid = ("/" + $group.id)
-        $requestBody = @{
-                resourceActionAuthorizationChecks = @(
-                    @{
-                        directoryScopeId = $groupid
-                        resourceAction = "microsoft.directory/groups/members/update"
+        try {
+            $response = Invoke-RestMethod -Uri $graphApiEndpoint -Headers $headers -Method Get
+            foreach ($group in $response.value) {
+                $groupid = ("/" + $group.id)
+                $requestBody = @{
+                    resourceActionAuthorizationChecks = @(
+                        @{
+                            directoryScopeId = $groupid
+                            resourceAction = "microsoft.directory/groups/members/update"
+                        }
+                    )
+                } | ConvertTo-Json
+
+                try {
+                    try{
+                        $estimateresponse = Invoke-RestMethod -Uri $estimateAccessEndpoint -Headers $headers -Method Post -Body $requestBody
+                    }catch {
+                        if($_.Exception.Response.StatusCode.value__ -match "429"){
+                        Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
+                        Start-Sleep -Seconds 5 
+                        }
+                
                     }
-                )
-            } | ConvertTo-Json
 
-            try {
-                $estimateresponse = Invoke-RestMethod -Uri $estimateAccessEndpoint -Headers $headers -Method Post -Body $requestBody
-
-               
-                if ($estimateresponse.value.accessDecision -like "allowed"){
-                Write-Host -ForegroundColor green ("[+] Found updatable group: " +$group.displayName)
-                $groupout = $group | ConvertTo-Json
-                $results += [PSCustomObject]@{
-                    "Group Name" = $group.displayName
-                    "Group ID" = $group.id
-                    "Description" = $group.description
-                    "Is Assignable To Role" = $group.isAssignableToRole
-                    "On-Prem Sync Enabled" = $group.onPremisesSyncEnabled
-                    "Mail" = $group.mail
-                    "Created Date" = $group.createdDateTime
-                    "Visibility" = $group.visibility
-                }
+                    if ($estimateresponse.value.accessDecision -like "allowed") {
+                        Write-Host -ForegroundColor green ("[+] Found updatable group: " + $group.displayName)
+                        $groupout = $group | ConvertTo-Json
+                        $results += [PSCustomObject]@{
+                            "Group Name" = $group.displayName
+                            "Group ID" = $group.id
+                            "Description" = $group.description
+                            "Is Assignable To Role" = $group.isAssignableToRole
+                            "On-Prem Sync Enabled" = $group.onPremisesSyncEnabled
+                            "Mail" = $group.mail
+                            "Created Date" = $group.createdDateTime
+                            "Visibility" = $group.visibility
+                        }
+                    }
+                } catch {
+                    Write-Host "Error estimating access for $directoryScopeId : $_"
                 }
             }
-            catch {
-                Write-Host "Error estimating access for $directoryScopeId : $_"
-            }
-
-        }
-        if($results.count -gt 0){
-            Write-Host -ForegroundColor Green ("[*] Found " + $results.count + " groups that can be updated.")
-
-            foreach($result in $results){
-                Write-Output ("=" * 80) 
-                Write-Output $result
-                Write-Output ""
             
+            # Check if there are more pages of results
+            if ($response.'@odata.nextLink') {
+                $graphApiEndpoint = $response.'@odata.nextLink'
+                Write-Host -ForegroundColor yellow "[*] Processing more groups..."
+            } else {
+                $graphApiEndpoint = $null  # No more pages, exit the loop
             }
-            Write-Output ("=" * 80) 
+        } catch {
+            Write-Host "Error fetching Group IDs: $_"
         }
-    }
-    catch {
-        Write-Host "Error fetching Group IDs: $_"
+    } while ($graphApiEndpoint)
+
+    if ($results.count -gt 0) {
+        Write-Host -ForegroundColor Green ("[*] Found " + $results.count + " groups that can be updated.")
+
+        foreach ($result in $results) {
+            Write-Output ("=" * 80)
+            Write-Output $result
+            Write-Output ""
+        }
+        Write-Output ("=" * 80)
     }
 
 
@@ -2564,25 +2597,33 @@ function Get-DynamicGroups{
         "Content-Type" = "application/json"
     }
 
+    $results = @()
     Write-Host -ForegroundColor yellow "[*] Now gathering groups and checking if each one is a dynamic group."
+    do {
 
-    try {
-        $response = Invoke-RestMethod -Uri $graphApiEndpoint -Headers $headers -Method Get
-        $results = @()
-        
-        foreach($group in $response.value){
-        $groupid = ("/" + $group.id)
-        $requestBody = @{
-                resourceActionAuthorizationChecks = @(
-                    @{
-                        directoryScopeId = $groupid
-                        resourceAction = "microsoft.directory/groups/members/update"
-                    }
-                )
-            } | ConvertTo-Json
+        try {
+            try{
+                $response = Invoke-RestMethod -Uri $graphApiEndpoint -Headers $headers -Method Get
+            }catch {
+                if($_.Exception.Response.StatusCode.value__ -match "429"){
+                Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
+                Start-Sleep -Seconds 5 
+                }
+                
+            }
+            foreach ($group in $response.value) {
+                $groupid = ("/" + $group.id)
+                $requestBody = @{
+                    resourceActionAuthorizationChecks = @(
+                        @{
+                            directoryScopeId = $groupid
+                            resourceAction = "microsoft.directory/groups/members/update"
+                        }
+                    )
+                } | ConvertTo-Json
 
-                if($group.membershipRule -ne $null){
-                    Write-Host -ForegroundColor green ("[+] Found dynamic group: " +$group.displayName)
+                if ($group.membershipRule -ne $null) {
+                    Write-Host -ForegroundColor green ("[+] Found dynamic group: " + $group.displayName)
                     $results += [PSCustomObject]@{
                         "Group Name" = $group.displayName
                         "Group ID" = $group.id
@@ -2596,23 +2637,29 @@ function Get-DynamicGroups{
                         "Membership Rule Processing State" = $group.membershipRuleProcessingState
                     }
                 }
-                
-
-        }
-        if($results.count -gt 0){
-            Write-Host -ForegroundColor Green ("[*] Found " + $results.count + " groups that can be updated.")
-
-            foreach($result in $results){
-                Write-Output ("=" * 80) 
-                Write-Output $result
-                Write-Output ""
-            
             }
-            Write-Output ("=" * 80) 
+            
+            # Check if there are more pages of results
+            if ($response.'@odata.nextLink') {
+                $graphApiEndpoint = $response.'@odata.nextLink'
+                Write-Host -ForegroundColor yellow "[*] Processing more groups..."
+            } else {
+                $graphApiEndpoint = $null  # No more pages, exit the loop
+            }
+        } catch {
+            Write-Host "Error fetching Group IDs: $_"
         }
-    }
-    catch {
-        Write-Host "Error fetching Group IDs: $_"
+    } while ($graphApiEndpoint)
+
+    if ($results.count -gt 0) {
+        Write-Host -ForegroundColor Green ("[*] Found " + $results.count + " dynamic groups.")
+
+        foreach ($result in $results) {
+            Write-Output ("=" * 80)
+            Write-Output $result
+            Write-Output ""
+        }
+        Write-Output ("=" * 80)
     }
 
 
