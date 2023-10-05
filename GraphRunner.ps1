@@ -403,7 +403,7 @@ function Invoke-InjectOAuthApp{
     
     .EXAMPLE
         
-        C:\PS> Invoke-InjectOAuthApp -AppName "Not a Backdoor" -ReplyUrl "http://localhost:10000" -scope "op backdoor" -AccessToken "eyJ0eXAiOiJKV..."
+        C:\PS> Invoke-InjectOAuthApp -AppName "Not a Backdoor" -ReplyUrl "http://localhost:10000" -scope "op backdoor" -Tokens $tokens
         Description
         -----------
         This command takes an already authenticated access token gathered from something like a device code login. It uses the hardcoded value of "op backdoor" as the scope to add a large number of permissions to the app registration. None of these permissions require admin consent. Also, by specifying the reply url as running on localhost you can use the Invoke-AutoOAuthFlow module to spin up a web server on the localhost for capturing the auth code during consent flow.
@@ -2083,16 +2083,42 @@ function Get-SecurityGroups{
 
     .EXAMPLE
         
-        C:\PS> Get-SecurityGroups -AccessToken $tokens.access_token
+        C:\PS> Get-SecurityGroups -Tokens $tokens
         -----------
         This will dump all security groups.
     #>
     param (
-            [string] $AccessToken,
+            [object[]] $Tokens,
             [switch] $GraphRun
         )
+
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    }
+    else{
+         # Login
+         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+         while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+    }
+    $accesstoken = $tokens.access_token   
+    [string]$refreshToken = $tokens.refresh_token 
     $headers = @{
-        Authorization = "Bearer $accessToken"
+        Authorization = "Bearer $accesstoken"
     }
     if(!$GraphRun){
     Write-Host -ForegroundColor Yellow "[*] Now getting a list of groups along with members from the directory..."
@@ -2329,7 +2355,7 @@ function Invoke-SecurityGroupCloner{
         Authorization = "Bearer $accessToken"
     }
 
-    $secgroups = Get-SecurityGroups -AccessToken $accessToken
+    $secgroups = Get-SecurityGroups -Tokens $tokens
     foreach($line in $secgroups){if(!$line.groupname){$Line}}
     $CloneGroup = ""
     while($CloneGroup -eq ""){
@@ -5058,7 +5084,7 @@ function Invoke-GraphRunner{
     # Groups
     if(!$DisableGroups){
         Write-Host -ForegroundColor yellow "[*] Now getting all groups"
-        Get-SecurityGroups -AccessToken $tokens.access_token -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
+        Get-SecurityGroups -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
     }
 
     # CAPS
