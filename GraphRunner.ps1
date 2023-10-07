@@ -5288,6 +5288,8 @@ function Invoke-BruteClientIDAccess {
     [cmdletbinding()]
     Param([Parameter(Mandatory=$true)]
     [string]$domain,
+    [Parameter(Mandatory=$false)]
+    [string]$Resource = "https://graph.microsoft.com/",
     [Parameter(Mandatory=$true)]
     [string]$refreshToken,
     [Parameter(Mandatory=$False)]
