@@ -1004,6 +1004,28 @@ Function Invoke-CheckAccess{
     $out = $request.Content | ConvertFrom-Json
     $out
 }
+
+Function Get-UserObjectID{
+    <#
+        .SYNOPSIS 
+            
+            A simple module to retrieve a user's object ID.
+
+    #>
+
+    param(
+    [Parameter(Position = 0, Mandatory = $true)]
+    [object[]]
+    $Tokens = "",
+    [Parameter(Position = 1, Mandatory = $true)]
+    [string]
+    $upn = ""
+    )
+    $access_token = $tokens.access_token
+    $request = Invoke-WebRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$upn" -Headers @{"Authorization" = "Bearer $access_token"}
+    $out = $request.Content | ConvertFrom-Json
+    $out.id
+}
 Function Invoke-RefreshAzureAppTokens{
     <#
      .SYNOPSIS
@@ -5458,6 +5480,7 @@ Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow by standing up a web server and
 Invoke-HTTPServer`t`t-`t A basic web server to use for accessing the emailviewer that is output from Invoke-SearchMailbox
 Invoke-BruteClientIDAccess`t-`t Test different CLientID's against MSGraph to determine permissions
 Invoke-ImportTokens`t`t-`t Import tokens from other tools for use in GraphRunner
+Get-UserObjectID`t`t-`t Retrieves an object ID for a user
     "
     Write-Host -ForegroundColor green ("=" * 80)
     Write-Host -ForegroundColor green '[*] For help with individual modules run Get-Help <module name> -detailed'
