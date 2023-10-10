@@ -5475,7 +5475,7 @@ Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
 Invoke-DeleteGroup`t`t-`t Delete a group
 Invoke-RemoveGroupMember`t-`t Module for removing users/members from groups
 Invoke-DriveFileDownload`t-`t Has the ability to download single files from as the current user.
-Invoke-CheckAcces`t`t-`t Check if tokens are valid
+Invoke-CheckAccess`t`t-`t Check if tokens are valid
 Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow by standing up a web server and listening for auth code
 Invoke-HTTPServer`t`t-`t A basic web server to use for accessing the emailviewer that is output from Invoke-SearchMailbox
 Invoke-BruteClientIDAccess`t-`t Test different CLientID's against MSGraph to determine permissions
