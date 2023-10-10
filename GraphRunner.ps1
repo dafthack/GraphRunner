@@ -5385,7 +5385,18 @@ function Invoke-BruteClientIDAccess {
         Write-Host -ForegroundColor $OutputColor "App: $($_.App) ClientID: $($_.ClientID) has scope of: $($CustomToken.scope)"
     }
 }
-
+function Invoke-ImportTokens {
+    [cmdletbinding()]
+    Param([Parameter(Mandatory=$false)]
+    [String]$AccessToken,
+    [Parameter(Mandatory=$false)]
+    [String]$RefreshToken
+    )
+    $global:tokens = $null
+    $global:tokens = @(
+        [pscustomobject]@{access_token=$AccessToken;refresh_token=$RefreshToken}
+    )
+}
 function List-GraphRunnerModules{
     <#
     .SYNOPSIS 
@@ -5413,6 +5424,7 @@ Get-UpdatableGroups`t`t-`t Gets groups that may be able to be modified by the cu
 Get-DynamicGroups`t`t-`t Finds dynamic groups and displays membership rules
 Get-SharePointSiteURLs`t`t-`t Gets a list of SharePoint site URLs visible to the current user
 Invoke-GraphOpenInboxFinder`t-`t Checks each user’s inbox in a list to see if they are readable
+Get-TenantID`t`t`t-`t Retreives the tenant GUID from the domain name
     "
     Write-Host -ForegroundColor green "--------------------- Persistence Modules ---------------------"
     Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
@@ -5444,7 +5456,8 @@ Invoke-DriveFileDownload`t-`t Has the ability to download single files from as t
 Invoke-CheckAcces`t`t-`t Check if tokens are valid
 Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow by standing up a web server and listening for auth code
 Invoke-HTTPServer`t`t-`t A basic web server to use for accessing the emailviewer that is output from Invoke-SearchMailbox
-Invoke-BruteClientIDAccess`t`t-`t Test different CLientID's against MSGraph to determine permissions
+Invoke-BruteClientIDAccess`t-`t Test different CLientID's against MSGraph to determine permissions
+Invoke-ImportTokens`t`t-`t Import tokens from other tools for use in GraphRunner
     "
     Write-Host -ForegroundColor green ("=" * 80)
     Write-Host -ForegroundColor green '[*] For help with individual modules run Get-Help <module name> -detailed'
