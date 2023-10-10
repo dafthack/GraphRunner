@@ -5456,7 +5456,7 @@ Invoke-DriveFileDownload`t-`t Has the ability to download single files from as t
 Invoke-CheckAcces`t`t-`t Check if tokens are valid
 Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow by standing up a web server and listening for auth code
 Invoke-HTTPServer`t`t-`t A basic web server to use for accessing the emailviewer that is output from Invoke-SearchMailbox
-Invoke-BruteClientIDAccess`t`t-`t Test different CLientID's against MSGraph to determine permissions
+Invoke-BruteClientIDAccess`t-`t Test different CLientID's against MSGraph to determine permissions
 Invoke-ImportTokens`t`t-`t Import tokens from other tools for use in GraphRunner
     "
     Write-Host -ForegroundColor green ("=" * 80)
