@@ -1552,8 +1552,8 @@ Function Get-AzureADUsers{
     if(!$GraphRun){
     Write-Output "---All Azure AD User Principal Names---"
     $userlist
-    }
     Write-Host -ForegroundColor green ("Discovered " + $userlist.count + " users")
+    }
     $userlist | Out-File -Encoding ASCII $outfile
 }
 
@@ -1614,8 +1614,10 @@ Function Invoke-DumpCAPS{
     )
 
     if($Tokens){
+        if(!$GraphRun){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
         Write-Host -ForegroundColor Yellow "[*] Refreshing token to the Azure AD Graph API..."
+        }
         $RefreshToken = $tokens.refresh_token
         $authUrl = "https://login.microsoftonline.com/$tenantid"
         $refreshbody = @{
@@ -1872,7 +1874,9 @@ Function Invoke-DumpApps{
     )
 
     if($Tokens){
+        if(!$GraphRun){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        }
     }
     else{
          # Login
@@ -1934,7 +1938,9 @@ Function Invoke-DumpApps{
     Write-Output "Internal Graph ID: $graphIdInternal"
 
     # Get Object IDs of individual permissions
+    if(!$GraphRun){
     Write-Host -ForegroundColor yellow "[*] Now getting object IDs for scope objects..."
+    }
     $spns = Invoke-WebRequest -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$graphIdInternal" -Headers $headers
     $spnsjson = $spns.Content | ConvertFrom-Json
 
@@ -2114,7 +2120,9 @@ function Get-SecurityGroups{
         )
 
     if($Tokens){
+        if(!$GraphRun){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        }
     }
     else{
          # Login
@@ -3350,9 +3358,10 @@ $GetCompanyInfoSoapRequest = @"
 
     try {
         $authpolicy = Invoke-RestMethod -Uri $authpolicyEndpoint -Headers $headers -Method Get
+        if(!$GraphRun){
         Write-Host -ForegroundColor Yellow "Authorization Policy Info"
         Write-Host -ForegroundColor Yellow ("=" * 80) 
-    
+        }
         # Display the extracted data
         Write-Output ("Allowed to create app registrations (Default User Role Permissions): " + $authpolicy.value.defaultUserRolePermissions.allowedToCreateApps)
         Write-Output ("Allowed to create security groups (Default User Role Permissions): " + $authpolicy.value.defaultUserRolePermissions.allowedToCreateSecurityGroups)
