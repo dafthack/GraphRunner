@@ -35,11 +35,35 @@ function Get-GraphTokens{
         -----------
         This command will initiate a device code auth where you can authenticate the terminal from an already authenticated browser session.
      #>
-
+    [CmdletBinding()]
     param(
-        [switch]$ExternalCall,
-        [switch]$UserPasswordAuth
+    [Parameter(Mandatory=$False)]
+    [switch]$ExternalCall,
+    [Parameter(Mandatory=$False)]
+    [switch]$UserPasswordAuth,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser
     )
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if($UserPasswordAuth){
         Write-Host -ForegroundColor Yellow "[*] Initiating the User/Password authentication flow"
         $username = Read-Host -Prompt "Enter username"
@@ -51,7 +75,7 @@ function Get-GraphTokens{
         $headers = @{
             "Accept" = "application/json"
             "Content-Type" = "application/x-www-form-urlencoded"
-            "User-Agent" = "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.19041.3031"
+            "User-Agent" = $UserAgent
         }
         $body = "grant_type=password&password=$passwordText&client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&username=$username&resource=https%3A%2F%2Fgraph.microsoft.com&client_info=1&scope=openid"
 
@@ -108,7 +132,6 @@ function Get-GraphTokens{
             "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
             "resource" =      "https://graph.microsoft.com"
         }
-        $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
         $Headers=@{}
         $Headers["User-Agent"] = $UserAgent
         $authResponse = Invoke-RestMethod `
@@ -5308,7 +5331,7 @@ function Invoke-ForgeUserAgent
             }
             else
             {
-                $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19042'
+                $UserAgent = $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'
             } 
         }
         return $UserAgent
