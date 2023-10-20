@@ -37,14 +37,21 @@ function Get-GraphTokens{
      #>
     [CmdletBinding()]
     param(
-    [Parameter(Mandatory=$False)]
+    [Parameter(Position = 0,Mandatory=$False)]
     [switch]$ExternalCall,
-    [Parameter(Mandatory=$False)]
+    [Parameter(Position = 1,Mandatory=$False)]
     [switch]$UserPasswordAuth,
-    [Parameter(Mandatory=$False)]
+    [Parameter(Position = 2,Mandatory=$False)]
+    [ValidateSet("Yammer","Outlook","MSTeams","Graph","AzureCoreManagement","AzureManagement","MSGraph","DODMSGraph","Custom","Substrate")]
+    [String[]]$Client = "MSGraph",
+    [Parameter(Position = 3,Mandatory=$False)]
+    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
+    [Parameter(Position = 4,Mandatory=$False)]
+    [String]$Resource = "https://graph.microsoft.com",
+    [Parameter(Position = 5,Mandatory=$False)]
     [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
     [String]$Device,
-    [Parameter(Mandatory=$False)]
+    [Parameter(Position = 6,Mandatory=$False)]
     [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
     [String]$Browser
     )
@@ -77,7 +84,7 @@ function Get-GraphTokens{
             "Content-Type" = "application/x-www-form-urlencoded"
             "User-Agent" = $UserAgent
         }
-        $body = "grant_type=password&password=$passwordText&client_id=d3590ed6-52b3-4102-aeff-aad2292ab01c&username=$username&resource=https%3A%2F%2Fgraph.microsoft.com&client_info=1&scope=openid"
+        $body = "grant_type=password&password=$passwordText&client_id=$ClientID&username=$username&resource=$Resource&client_info=1&scope=openid"
 
 
         try{
@@ -129,8 +136,8 @@ function Get-GraphTokens{
         }
 
         $body = @{
-            "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-            "resource" =      "https://graph.microsoft.com"
+            "client_id" =     $ClientID
+            "resource" =      $Resource
         }
         $Headers=@{}
         $Headers["User-Agent"] = $UserAgent
@@ -145,7 +152,7 @@ function Get-GraphTokens{
         $continue = "authorization_pending"
         while ($continue) {
             $body = @{
-                "client_id"   = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+                "client_id"   = $ClientID
                 "grant_type"  = "urn:ietf:params:oauth:grant-type:device_code"
                 "code"        = $authResponse.device_code
                 "scope"       = "openid"
@@ -322,6 +329,15 @@ function Invoke-RefreshGraphTokens{
     .PARAMETER tenantid
         
         Supply a tenant domain or ID to authenticate to.
+    
+    .PARAMETER Device
+
+        Supply a Device type to use.
+
+    .PARAMETER Browser
+
+        Supply a browser UserAgent.
+
 
     .EXAMPLE
         
@@ -334,13 +350,42 @@ function Invoke-RefreshGraphTokens{
     #>
     [cmdletbinding()]
     Param(
-    [Parameter(Position = 0, Mandatory = $False)]
+    [Parameter(Mandatory = $False)]
     [string]
     $RefreshToken,
-    [Parameter(Position = 1, Mandatory = $False)]
+    [Parameter(Mandatory = $False)]
     [string]
-    $tenantid = $global:tenantid
+    $tenantid = $global:tenantid,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet("Yammer","Outlook","MSTeams","Graph","AzureCoreManagement","AzureManagement","MSGraph","DODMSGraph","Custom","Substrate")]
+    [String[]]$Client = "MSGraph",
+    [Parameter(Mandatory=$False)]
+    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
+    [Parameter(Mandatory=$False)]
+    [String]$Resource = "https://graph.microsoft.com",
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser
     )
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if(!$RefreshToken){
         if(!$tokens){
             write-host -ForegroundColor red '[*] No tokens found in the $tokens variable. Use the Get-GraphTokens module to authenticate first.'
@@ -358,7 +403,6 @@ function Invoke-RefreshGraphTokens{
             "refresh_token" = $RefreshToken
             "scope"=         "openid"
         }
-    $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
     $Headers=@{}
     $Headers["User-Agent"] = $UserAgent
     try {
@@ -662,15 +706,34 @@ function Invoke-RefreshToSharePointToken {
     [String]$ClientId = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
     [Parameter(Position = 3, Mandatory = $True)]
     [object[]]
-    $Tokens
+    $Tokens,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser
     )
-    
-    
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     $Headers=@{}
-    $Headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0)"
+    $Headers["User-Agent"] = $UserAgent
     $Resource = "https://$($domain)/"
     $authUrl = "https://login.microsoftonline.com/$($global:tenantid)"
-    
     $refreshToken = $tokens.refresh_token
     $body = @{
         "resource" =      $Resource
@@ -719,21 +782,35 @@ function Invoke-ImmersiveFileReader{
     #>
 
     param(
-
         [Parameter(Position = 1, Mandatory = $True)]
         [string]
         $SharePointDomain,
-        [Parameter(Position = 2, Mandatory = $True)]
+        [Parameter(Mandatory = $True)]
         [string]
         $DriveID,
-        [Parameter(Position = 3, Mandatory = $True)]
+        [Parameter(Mandatory = $True)]
         [string]
         $FileID,
-        [Parameter(Position = 4, Mandatory = $False)]
+        [Parameter(Mandatory = $False)]
         [object[]]
         $Tokens
     )
-
+    if ($Device) {
+        if ($Browser) {
+            $UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+        }
+        else {
+            $UserAgent = Invoke-ForgeUserAgent -Device $Device
+        }
+    }
+    else {
+        if ($Browser) {
+            $UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+        } 
+        else {
+            $UserAgent = Invoke-ForgeUserAgent
+        }
+    }
     if($Tokens){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
     }
@@ -759,7 +836,7 @@ function Invoke-ImmersiveFileReader{
     }
 
     $Headers=@{}
-    $Headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0)"
+    $Headers["User-Agent"] = $UserAgent
     $Headers["Host"] = 'southcentralus1-mediap.svc.ms'
     $Headers["Accept-Language"] = "en-US"
     
