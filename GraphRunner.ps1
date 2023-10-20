@@ -27,6 +27,28 @@ function Get-GraphTokens{
     .PARAMETER UserPasswordAuth
         
         Provide a username and password for authentication instead of using a device code auth.
+    
+    .PARAMETER Client
+        
+        Provide a Client to authenticate to. Use Custom to provide your own ClientID.
+
+    .PARAMETER ClientID
+        
+        Provide a ClientID to use with the Custom client option.
+
+    .PARAMETER Resource
+
+        Provide a resource to authenticate to such as https://graph.microsoft.com/
+
+    .PARAMETER Device
+        
+        Provide a device type to use such as Windows or Android.
+
+    .PARAMETER Browser
+        
+        Provide a Browser to spoof.
+    
+
 
     .EXAMPLE
         
@@ -330,13 +352,25 @@ function Invoke-RefreshGraphTokens{
         
         Supply a tenant domain or ID to authenticate to.
     
-    .PARAMETER Device
+    .PARAMETER Client
+        
+        Provide a Client to authenticate to. Use Custom to provide your own ClientID.
 
-        Supply a Device type to use.
+    .PARAMETER ClientID
+        
+        Provide a ClientID to use with the Custom client option.
+
+    .PARAMETER Resource
+
+        Provide a resource to authenticate to such as https://graph.microsoft.com/
+
+    .PARAMETER Device
+        
+        Provide a device type to use such as Windows or Android.
 
     .PARAMETER Browser
-
-        Supply a browser UserAgent.
+        
+        Provide a Browser to spoof.
 
 
     .EXAMPLE
