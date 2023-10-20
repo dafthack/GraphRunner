@@ -1,5 +1,6 @@
 # GraphRunner
-![GraphRunner](https://github.com/dafthack/GraphRunner/assets/2296229/46be3309-859c-483b-91fc-f392b81e4fa0)
+![GraphRunner](https://github.com/dafthack/GraphRunner/assets/2296229/d9b6843c-8c69-4d9d-bed4-38e5e2269574)
+
 
 GraphRunner is a post-exploitation toolset for interacting with the Microsoft Graph API. It provides various tools for performing reconnaissance, persistence, and pillaging of data from a Microsoft Entra ID (Azure AD) account. 
 
