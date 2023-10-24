@@ -1669,8 +1669,15 @@ Function Get-AzureADUsers{
     $usersEndpoint = "https://graph.microsoft.com/v1.0/users"
     $userlist = @()
     do{
-        $request = Invoke-WebRequest -Method GET -Uri $usersEndpoint -Headers @{"Authorization" = "Bearer $access_token"}
-        $out = $request.Content | ConvertFrom-Json
+        try{
+		$request = Invoke-WebRequest -Method GET -Uri $usersEndpoint -Headers @{"Authorization" = "Bearer $access_token"}
+        }catch {
+		if($_.Exception.Response.StatusCode.value__ -match "429"){
+                Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
+                Start-Sleep -Seconds 5 
+                }
+	}
+	$out = $request.Content | ConvertFrom-Json
         $userlist += $out.value.userPrincipalName 
         if ($out.'@odata.nextLink') {
             if(!$GraphRun){
