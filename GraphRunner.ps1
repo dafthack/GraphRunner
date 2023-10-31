@@ -371,7 +371,9 @@ function Invoke-RefreshGraphTokens{
     .PARAMETER Browser
         
         Provide a Browser to spoof.
-
+    
+    .PARAMETER AutoRefresh
+    If this switch is enabled, it will skip the 'break' statement, allowing for automatic token refresh.
 
     .EXAMPLE
         
@@ -402,7 +404,9 @@ function Invoke-RefreshGraphTokens{
     [String]$Device,
     [Parameter(Mandatory=$False)]
     [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
-    [String]$Browser
+    [String]$Browser,
+    [switch]
+    $AutoRefresh 
     )
     if ($Device) {
 		if ($Browser) {
@@ -461,7 +465,9 @@ function Invoke-RefreshGraphTokens{
                 $baseDate = Get-Date -date "01-01-1970"
                 $tokenExpire = $baseDate.AddSeconds($tokobj.exp).ToLocalTime()
                 Write-Host -ForegroundColor Yellow "[!] Your access token is set to expire on: $tokenExpire"
-                break
+                if (-not $AutoRefresh){
+                    break
+                }
             }
 }
 function Invoke-InjectOAuthApp{
@@ -2256,97 +2262,132 @@ function Get-SecurityGroups{
         This will dump all security groups.
     #>
     param (
-            [object[]] $Tokens,
-            [switch] $GraphRun
-        )
+        [object] $Tokens,
+        [switch] $GraphRun,
+        [string]$RefreshToken,
+        [Parameter(Mandatory = $False)]
+        [string]
+        $tenantid = $global:tenantid,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet("Yammer","Outlook","MSTeams","Graph","AzureCoreManagement","AzureManagement","MSGraph","DODMSGraph","Custom","Substrate")]
+        [String[]]$Client = "MSGraph",
+        [Parameter(Mandatory=$False)]
+        [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
+        [Parameter(Mandatory=$False)]
+        [String]$Resource = "https://graph.microsoft.com",
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+        [String]$Device = "Windows",
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+        [String]$Browser = "Edge",
+        [Parameter(Mandatory=$False)]
+        [switch]$AutoRefresh,
+        [Parameter(Mandatory=$False)]
+        $RefreshInterval = (60*10) # 10 minutes
+    )
 
-    if($Tokens){
-        if(!$GraphRun){
-        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    if ($Tokens) {
+        if (!$GraphRun) {
+            Write-Host -ForegroundColor Yellow "[*] Using the provided access tokens."
+        }
+    } else {
+        # Login
+        Write-Host -ForegroundColor Yellow "[*] First, you need to log in."
+        Write-Host -ForegroundColor Yellow "[*] If you already have tokens, you can use the -Tokens parameter to pass them to this function."
+        while ($auth -notlike "Yes") {
+            Write-Host -ForegroundColor Cyan "[*] Do you want to authenticate now (yes/no)?"
+            $answer = Read-Host
+            $answer = $answer.ToLower()
+            if ($answer -eq "yes" -or $answer -eq "y") {
+                Write-Host -ForegroundColor Yellow "[*] Running Get-GraphTokens now..."
+                $tokens = Get-GraphTokens -ExternalCall
+                $auth = "Yes"
+            } elseif ($answer -eq "no" -or $answer -eq "n") {
+                Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                return
+            } else {
+                Write-Host -ForegroundColor Red "Invalid input. Please enter Yes or No."
+            }
         }
     }
-    else{
-         # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
-         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
-         while($auth -notlike "Yes"){
-                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
-                $answer = $answer.ToLower()
-                if ($answer -eq "yes" -or $answer -eq "y") {
-                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
-                    $tokens = Get-GraphTokens -ExternalCall
-                    $auth = "Yes"
-                } elseif ($answer -eq "no" -or $answer -eq "n") {
-                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
-                    return
-                } else {
-                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
-                }
-            }
-    }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token 
+    
+    $accessToken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
     $headers = @{
-        Authorization = "Bearer $accesstoken"
+        Authorization = "Bearer $accessToken"
     }
-    if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow "[*] Now getting a list of groups along with members from the directory..."
+    
+    if (!$GraphRun) {
+        Write-Host -ForegroundColor Yellow "[*] Retrieving a list of security groups and their members from the directory..."
     }
-    # Get all groups and group types
+    
     $graphApiUrl = "https://graph.microsoft.com/v1.0"
     $groupsUrl = "$graphApiUrl/groups?$filter=securityEnabled eq true"
-
+    
     $groupsWithMemberIDs = @()
-
+    $startTime = Get-Date
+    $refresh_Interval = [TimeSpan]::FromSeconds($RefreshInterval)
+    
     do {
-        $groupsResponse = Invoke-RestMethod -Uri $groupsUrl -Headers $headers -Method Get
-        $groups = $groupsResponse.value
+        try {
+            $groupsResponse = Invoke-RestMethod -Uri $groupsUrl -Headers $headers -Method Get
+            $groups = $groupsResponse.value
+        } catch {
+            Write-Host -ForegroundColor Red "[*] An error occurred while retrieving security groups: $($_.Exception.Message)"
+            return
+        }
 
         foreach ($group in $groups) {
+            if ((Get-Date) - $startTime -ge $refresh_interval) {
+                Write-Host -ForegroundColor Yellow "[*] Pausing script for token refresh..."
+                Invoke-RefreshGraphTokens -RefreshToken $refreshToken -AutoRefresh -tenantid $global:tenantid -Resource $Resource -Client $Client -ClientID $ClientID -Browser $Browser -Device $Device
+                Write-Host -ForegroundColor Yellow "[*] Resuming script..."
+                $startTime = Get-Date
+            }
+            
             $groupId = $group.id
             $membersUrl = "$graphApiUrl/groups/$groupId/members"
-
-            try{
-            $membersResponse = Invoke-RestMethod -Uri $membersUrl -Headers $headers -Method Get
-            }catch {
-                if($_.Exception.Response.StatusCode.value__ -match "429"){
-                Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
-                Start-Sleep -Seconds 5 
+    
+            try {
+                $membersResponse = Invoke-RestMethod -Uri $membersUrl -Headers $headers -Method Get
+                $members = $membersResponse.value
+            } catch {
+                if ($_.Exception.Response.StatusCode.value__ -match "429") {
+                    Write-Host -ForegroundColor Red "[*] Being throttled... sleeping for 5 seconds"
+                    Start-Sleep -Seconds 5
+                } else {
+                    Write-Host -ForegroundColor Red "[*] An error occurred while retrieving members for group $($group.displayName): $($_.Exception.Message)"
                 }
-                
             }
-            $members = $membersResponse.value
-
+    
             $memberIds = $members | ForEach-Object { $_.id }
-
+    
             $groupInfo = @{
                 GroupName = $group.displayName
                 MemberIds = $memberIds -join ","
             }
-
+    
             Write-Output ("Group Name: " + $group.displayName + " | Group ID: " + $groupId)
             Write-Output ("Members: " + ($($members.userPrincipalName) -join ', '))
             Write-Output ""
             Write-Output ("=" * 80)
             $groupsWithMemberIDs += New-Object PSObject -Property $groupInfo
         }
-
-        # Check if there are more pages of results
+    
         if ($groupsResponse.'@odata.nextLink') {
             $groupsUrl = $groupsResponse.'@odata.nextLink'
-            if(!$GraphRun){
+            if (!$GraphRun) {
                 Write-Host -ForegroundColor Yellow "[*] Processing more groups..."
             }
-        }
-        else {
-            $groupsUrl = $null  
+        } else {
+            $groupsUrl = $null
         }
     } while ($groupsUrl)
-
+    
     return $groupsWithMemberIDs
-
 }
+
 
 
 function Create-SecurityGroupWithMembers {
@@ -2619,120 +2660,123 @@ function Get-UpdatableGroups{
     #>
 
     Param(
-        [Parameter(Position = 0, Mandatory = $False)]
-        [object[]]
-        $Tokens = ""
+        [Parameter(Position = 0, Mandatory = $true)]
+        [object]
+        $Tokens,
+        [Parameter()]
+        [string]
+        $GraphApiEndpoint = "https://graph.microsoft.com/v1.0/groups",
+        [Parameter()]
+        [string]
+        $EstimateAccessEndpoint = "https://graph.microsoft.com/beta/roleManagement/directory/estimateAccess",
+        [string]$RefreshToken,
+        [Parameter(Mandatory = $False)]
+        [string]$tenantid = $global:tenantid,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet("Yammer","Outlook","MSTeams","Graph","AzureCoreManagement","AzureManagement","MSGraph","DODMSGraph","Custom","Substrate")]
+        [String[]]$Client = "MSGraph",
+        [Parameter(Mandatory=$False)]
+        [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
+        [Parameter(Mandatory=$False)]
+        [String]$Resource = "https://graph.microsoft.com",
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+        [String]$Device,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+        [String]$Browser,
+        [Parameter(Mandatory = $False)]
+        [string]$OutFile,
+        [Parameter(Mandatory=$False)]
+        [switch]$AutoRefresh,
+        [Parameter(Mandatory=$False)]
+        [Int]$RefreshInterval = (60*10) # 10 minutes
     )
 
-    if($Tokens){
-        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
-    }
-    else{
-         # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
-         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
-         while($auth -notlike "Yes"){
-                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
-                $answer = $answer.ToLower()
-                if ($answer -eq "yes" -or $answer -eq "y") {
-                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
-                    $tokens = Get-GraphTokens -ExternalCall
-                    $auth = "Yes"
-                } elseif ($answer -eq "no" -or $answer -eq "n") {
-                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
-                    return
+    try {
+        $accesstoken = $Tokens.access_token
+        $refreshToken = $Tokens.refresh_token
+        $headers = @{
+            "Authorization" = "Bearer $accesstoken"
+            "Content-Type" = "application/json"
+        }
+
+        $results = @()
+
+        Write-Host -ForegroundColor yellow "[*] Now gathering groups and checking if each one is updatable."
+
+        $timer = [System.Diagnostics.Stopwatch]::StartNew()
+
+        do {
+            try {
+                $response = Invoke-RestMethod -Uri $GraphApiEndpoint -Headers $headers -Method Get 
+                if ($timer.Elapsed.TotalMinutes -ge $RefreshInterval) {
+                    $timer.Stop()
+                    Write-Host -ForegroundColor Yellow "[*] Pausing script for 1 minute..."
+                    Invoke-RefreshGraphTokens -RefreshToken $refreshToken -AutoRefresh -tenantid $global:tenantid -Resource $Resource -Client $Client -ClientID $ClientID -Browser $Browser -Device $Device -RefreshInterval $RefreshInterval
+                    Write-Host -ForegroundColor Yellow "[*] Resuming script..."
+                    $timer.Start()
+                }
+
+                foreach ($group in $response.value) {
+                    # Check the elapsed time and pause if 3 minutes have passed
+
+                    $groupid = ("/" + $group.id)
+                    $requestBody = @{
+                        resourceActionAuthorizationChecks = @(
+                            @{
+                                directoryScopeId = $groupid
+                                resourceAction = "microsoft.directory/groups/members/update"
+                            }
+                            
+                        )
+                    } | ConvertTo-Json
+
+                    try {
+                        $estimateresponse = Invoke-RestMethod -Uri $EstimateAccessEndpoint -Headers $headers -Method Post -Body $requestBody
+                        if ($estimateresponse.value.accessDecision -eq "allowed") {
+                            Write-Host -ForegroundColor Green ("[+] Found updatable group: " + $group.displayName + ": " + $group.id)
+                            $group.displayName+":"+$group.id|Out-File  -Append -Encoding Ascii $OutFile
+                            $groupout = $group | Select-Object -Property displayName, id, description, isAssignableToRole, onPremisesSyncEnabled, mail, createdDateTime, visibility
+                            $results += $groupout
+                        }
+                    } catch {
+                        Write-Host "Error estimating access for $groupid : $_"
+                    }
+                }
+
+                $time = $watch.Elapsed.TotalSeconds
+
+                if ($time -gt 120) {
+                    Invoke-RefreshGraphTokens -RefreshToken $global:Tokens -tenantid $global:tenantid
+                    $watch.restart()
+                }
+
+                if ($response.'@odata.nextLink') {
+                    $GraphApiEndpoint = $response.'@odata.nextLink'
+                    Write-Host -ForegroundColor Yellow "[*] Processing more groups..."
                 } else {
-                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                    $GraphApiEndpoint = $null  # No more pages, exit the loop
                 }
+            } catch {
+                Write-Host "Error fetching Group IDs: $_"
             }
-    }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token 
+        } while ($GraphApiEndpoint)
 
+        if ($results.Count -gt 0) {
+            Write-Host -ForegroundColor Green ("[*] Found " + $results.Count + " groups that can be updated.")
 
-    $graphApiEndpoint = "https://graph.microsoft.com/v1.0/groups"
-    $estimateAccessEndpoint = "https://graph.microsoft.com/beta/roleManagement/directory/estimateAccess"
+            foreach ($result in $results) {
+                Write-Host ("=" * 80)
+                Write-Output $result
 
-    $headers = @{
-        "Authorization" = "Bearer $accessToken"
-        "Content-Type" = "application/json"
-    }
-
-    $results = @()
-    Write-Host -ForegroundColor yellow "[*] Now gathering groups and checking if each one is updatable."
-    do {
-        
-
-        try {
-            $response = Invoke-RestMethod -Uri $graphApiEndpoint -Headers $headers -Method Get
-            foreach ($group in $response.value) {
-                $groupid = ("/" + $group.id)
-                $requestBody = @{
-                    resourceActionAuthorizationChecks = @(
-                        @{
-                            directoryScopeId = $groupid
-                            resourceAction = "microsoft.directory/groups/members/update"
-                        }
-                    )
-                } | ConvertTo-Json
-
-                try {
-                    try{
-                        $estimateresponse = Invoke-RestMethod -Uri $estimateAccessEndpoint -Headers $headers -Method Post -Body $requestBody
-                    }catch {
-                        if($_.Exception.Response.StatusCode.value__ -match "429"){
-                        Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
-                        Start-Sleep -Seconds 5 
-                        }
-                
-                    }
-
-                    if ($estimateresponse.value.accessDecision -like "allowed") {
-                        Write-Host -ForegroundColor green ("[+] Found updatable group: " + $group.displayName)
-                        $groupout = $group | ConvertTo-Json
-                        $results += [PSCustomObject]@{
-                            "Group Name" = $group.displayName
-                            "Group ID" = $group.id
-                            "Description" = $group.description
-                            "Is Assignable To Role" = $group.isAssignableToRole
-                            "On-Prem Sync Enabled" = $group.onPremisesSyncEnabled
-                            "Mail" = $group.mail
-                            "Created Date" = $group.createdDateTime
-                            "Visibility" = $group.visibility
-                        }
-                    }
-                } catch {
-                    Write-Host "Error estimating access for $directoryScopeId : $_"
-                }
+                Write-Host ("=" * 80)
             }
-            
-            # Check if there are more pages of results
-            if ($response.'@odata.nextLink') {
-                $graphApiEndpoint = $response.'@odata.nextLink'
-                Write-Host -ForegroundColor yellow "[*] Processing more groups..."
-            } else {
-                $graphApiEndpoint = $null  # No more pages, exit the loop
-            }
-        } catch {
-            Write-Host "Error fetching Group IDs: $_"
         }
-    } while ($graphApiEndpoint)
-
-    if ($results.count -gt 0) {
-        Write-Host -ForegroundColor Green ("[*] Found " + $results.count + " groups that can be updated.")
-
-        foreach ($result in $results) {
-            Write-Output ("=" * 80)
-            Write-Output $result
-            Write-Output ""
-        }
-        Write-Output ("=" * 80)
+    } catch {
+        Write-Host -ForegroundColor Red "An error occurred: $_"
     }
-
-
 }
-
 
 function Get-DynamicGroups{
     <#
@@ -2860,9 +2904,6 @@ function Get-DynamicGroups{
 
 
 }
-
-
-
 function Invoke-AddGroupMember {
     
     <#
