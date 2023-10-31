@@ -2255,36 +2255,40 @@ function Get-SecurityGroups{
 
         Pass the $tokens.access_token global variable after authenticating to this parameter
 
+    .PARAMETER OutputFile
+
+        The path to the CSV file where the security groups will be exported.
+
     .EXAMPLE
         
-        C:\PS> Get-SecurityGroups -Tokens $tokens
+        C:\PS> Get-SecurityGroups -Tokens $tokens -OutputFile "security_groups.csv"
         -----------
-        This will dump all security groups.
+        This will dump all security groups to the specified CSV file.
     #>
     param (
         [object] $Tokens,
+        [string] $OutputFile = "security_groups.csv", # Default value is "security_groups.csv"
         [switch] $GraphRun,
-        [string]$RefreshToken,
+        [string] $RefreshToken,
         [Parameter(Mandatory = $False)]
-        [string]
-        $tenantid = $global:tenantid,
-        [Parameter(Mandatory=$False)]
-        [ValidateSet("Yammer","Outlook","MSTeams","Graph","AzureCoreManagement","AzureManagement","MSGraph","DODMSGraph","Custom","Substrate")]
-        [String[]]$Client = "MSGraph",
-        [Parameter(Mandatory=$False)]
-        [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
-        [Parameter(Mandatory=$False)]
-        [String]$Resource = "https://graph.microsoft.com",
-        [Parameter(Mandatory=$False)]
-        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
-        [String]$Device = "Windows",
-        [Parameter(Mandatory=$False)]
-        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
-        [String]$Browser = "Edge",
-        [Parameter(Mandatory=$False)]
-        [switch]$AutoRefresh,
-        [Parameter(Mandatory=$False)]
-        $RefreshInterval = (60*10) # 10 minutes
+        [string] $tenantid = $global:tenantid,
+        [Parameter(Mandatory = $False)]
+        [ValidateSet("Yammer", "Outlook", "MSTeams", "Graph", "AzureCoreManagement", "AzureManagement", "MSGraph", "DODMSGraph", "Custom", "Substrate")]
+        [String[]] $Client = "MSGraph",
+        [Parameter(Mandatory = $False)]
+        [String] $ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
+        [Parameter(Mandatory = $False)]
+        [String] $Resource = "https://graph.microsoft.com",
+        [Parameter(Mandatory = $False)]
+        [ValidateSet('Mac', 'Windows', 'AndroidMobile', 'iPhone')]
+        [String] $Device = "Windows",
+        [Parameter(Mandatory = $False)]
+        [ValidateSet('Android', 'IE', 'Chrome', 'Firefox', 'Edge', 'Safari')]
+        [String] $Browser = "Edge", # Default value is "Edge"
+        [Parameter(Mandatory = $False)]
+        [switch] $AutoRefresh,
+        [Parameter(Mandatory = $False)]
+        $RefreshInterval = (60 * 10) # 10 minutes
     )
 
     if ($Tokens) {
@@ -2385,10 +2389,14 @@ function Get-SecurityGroups{
         }
     } while ($groupsUrl)
     
+    if ($OutputFile) {
+        # Export security groups to a CSV file
+        $groupsWithMemberIDs | Export-Csv -Path $OutputFile -NoTypeInformation
+        Write-Host -ForegroundColor Green "Security groups exported to $OutputFile."
+    }
+
     return $groupsWithMemberIDs
 }
-
-
 
 function Create-SecurityGroupWithMembers {
     param (
@@ -2671,26 +2679,35 @@ function Get-UpdatableGroups{
         $EstimateAccessEndpoint = "https://graph.microsoft.com/beta/roleManagement/directory/estimateAccess",
         [string]$RefreshToken,
         [Parameter(Mandatory = $False)]
-        [string]$tenantid = $global:tenantid,
+        [string]
+        $tenantid = $global:tenantid,
         [Parameter(Mandatory=$False)]
         [ValidateSet("Yammer","Outlook","MSTeams","Graph","AzureCoreManagement","AzureManagement","MSGraph","DODMSGraph","Custom","Substrate")]
-        [String[]]$Client = "MSGraph",
+        [String[]]
+        $Client = "MSGraph",
         [Parameter(Mandatory=$False)]
-        [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
+        [String]
+        $ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
         [Parameter(Mandatory=$False)]
-        [String]$Resource = "https://graph.microsoft.com",
+        [String]
+        $Resource = "https://graph.microsoft.com",
         [Parameter(Mandatory=$False)]
         [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
-        [String]$Device,
+        [String]
+        $Device,
         [Parameter(Mandatory=$False)]
         [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
-        [String]$Browser,
+        [String]
+        $Browser = "Edge",  # Set the default value to "Edge"
         [Parameter(Mandatory = $False)]
-        [string]$OutFile,
+        [string]
+        $OutFile = "Updatable_groups.csv",  # Set the default value to "Updatable_groups.csv"
         [Parameter(Mandatory=$False)]
-        [switch]$AutoRefresh,
+        [switch]
+        $AutoRefresh,
         [Parameter(Mandatory=$False)]
-        [Int]$RefreshInterval = (60*10) # 10 minutes
+        [Int]
+        $RefreshInterval = (60*10) # 10 minutes
     )
 
     try {
@@ -2728,7 +2745,6 @@ function Get-UpdatableGroups{
                                 directoryScopeId = $groupid
                                 resourceAction = "microsoft.directory/groups/members/update"
                             }
-                            
                         )
                     } | ConvertTo-Json
 
@@ -2773,10 +2789,18 @@ function Get-UpdatableGroups{
                 Write-Host ("=" * 80)
             }
         }
+
+        if ($OutFile) {
+            $results | Export-Csv -Path $OutFile -NoTypeInformation
+            Write-Host -ForegroundColor Green ("[*] Exported updatable groups to $OutFile")
+        }
     } catch {
         Write-Host -ForegroundColor Red "An error occurred: $_"
     }
 }
+
+
+
 
 function Get-DynamicGroups{
     <#
