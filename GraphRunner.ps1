@@ -5218,22 +5218,85 @@ function Invoke-SearchTeams{
     }
 }
 
+<#
+.SYNOPSIS
+Creates a new calendar event using the Microsoft Graph API.
+
+.DESCRIPTION
+This function allows you to create a new calendar event by sending a POST request to the Microsoft Graph API.
+
+.PARAMETER Tokens
+The access token required to authenticate with the Microsoft Graph API.
+
+.PARAMETER Subject
+The subject or title of the event.
+
+.PARAMETER Start
+The start date and time of the event.
+
+.PARAMETER End
+The end date and time of the event.
+
+.PARAMETER Body
+The description or body content of the event.
+
+.PARAMETER Location
+(Optional) The location of the event.
+
+.EXAMPLE
+$Tokens = Get-YourAccessTokenFunction
+$Subject = "Meeting with Rick and Morty"
+$Start = (Get-Date).AddHours(2)
+$End = $Start.AddHours(1)
+$Body = "Discuss potential Abuses :)"
+$Location = "127.0.0.1"
+
+$result = Invoke-CreateCalendarEvent -Tokens $Tokens -Subject $Subject -Start $Start -End $End -Body $Body -Location $Location
+
+if ($result -ne $null) {
+    # Event creation was successful, you can handle the response data here
+} else {
+    # Handle the case where event creation failed
+}
+
+.NOTES
+File Name      : Invoke-CreateCalendarEvent.ps1
+Author         : Your Name
+Prerequisite   : You need to have an access token to use this function.
+Copyright 2023 - Your Company
+#>
 function Invoke-CreateCalendarEvent {
+    [CmdletBinding()]
     Param(
-        $Tokens,
+        [Parameter(Mandatory=$true)]
+        [PSCustomObject]$Tokens,
+
+        [Parameter(Mandatory=$true)]
         [string]$Subject,
+
+        [Parameter(Mandatory=$true)]
         [DateTime]$Start,
+
+        [Parameter(Mandatory=$true)]
         [DateTime]$End,
+
+        [Parameter(Mandatory=$true)]
         [string]$Body,
+
+        [Parameter()]
         [string]$Location = ""
     )
 
+    # Set the Microsoft Graph API endpoint for creating events
     $uri = "https://graph.microsoft.com/v1.0/me/events"
+
+    # Prepare headers for the request
     $headers = @{
         "Authorization" = "Bearer $($Tokens.access_token)"
         "Content-Type"  = "application/json"
     }
 
+    # Create the event data in a structured format
     $eventData = @{
         subject = $Subject
         start   = @{
@@ -5253,8 +5316,10 @@ function Invoke-CreateCalendarEvent {
         }
     }
 
+    # Convert event data to JSON format
     $body = $eventData | ConvertTo-Json
 
+    # Send an HTTP POST request to create the event
     $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method Post -Body $body
 
     if ($response -ne $null) {
@@ -5265,6 +5330,7 @@ function Invoke-CreateCalendarEvent {
         return $null
     }
 }
+
 
 function Invoke-GraphRunner{
     <#
