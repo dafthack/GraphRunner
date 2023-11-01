@@ -5520,6 +5520,82 @@ function Invoke-ForgeUserAgent
         return $UserAgent
    }   
 }
+
+function Invoke-FetchCalendarData {
+    <#
+    .SYNOPSIS
+        Fetches calendar data of a user using Microsoft Graph API.
+        Author: Jason Haddix (@Jhaddix)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        This module retrieves calendar events, including their subjects, start times, end times, and body content from the authenticated user's account.
+
+    .PARAMETER Tokens
+        Pass the $tokens global variable after authenticating to this parameter.
+
+    .EXAMPLE
+        C:\PS> Invoke-FetchCalendarData -Tokens $tokens
+        -----------
+        This will fetch and display calendar data of the authenticated user.
+    #>
+
+	# Fetch Calendar Data function
+    $uri = "$global:uriBase/me/events?$select=subject,start,end,body"
+    $response = Invoke-RestMethod -Uri $uri -Headers $global:headers -Method Get
+
+    # Extracting relevant information and formatting it into a neat object
+    $events = $response.value | ForEach-Object {
+        [PSCustomObject]@{
+            Subject = $_.subject
+            Start   = $_.start.dateTime
+            End     = $_.end.dateTime
+            Body    = $_.body.content
+        }
+    }
+
+    # Displaying the events immediately
+    $events | Format-Table Subject, Start, End, Body -AutoSize
+}
+
+Function Invoke-SoftwareRecon {
+    <#
+    .SYNOPSIS
+        Reconnaissance of installed software on Intune-managed devices using Microsoft Graph API.
+        Author: Jason Haddix (@jhaddix)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        This module retrieves a list of software installed on devices managed by Intune. It provides details such as device name, software name, and version.
+
+    .PARAMETER Tokens
+        Pass the $tokens global variable after authenticating to this parameter.
+
+    .EXAMPLE
+        C:\PS> Invoke-SoftwareRecon -Tokens $tokens
+        -----------
+        This will fetch and display the software installed on all Intune-managed devices.
+    #>
+
+    $uri = "$global:uriBase/deviceManagement/managedDevices"
+    $devices = Invoke-RestMethod -Uri $uri -Headers $global:headers -Method Get
+
+    $allApps = @()
+    foreach ($device in $devices.value) {
+        $appsUri = "$global:uriBase/deviceManagement/managedDevices/$($device.id)/detectedApps"
+        $apps = Invoke-RestMethod -Uri $appsUri -Headers $global:headers -Method Get
+        $allApps += $apps.value
+    }
+
+    # Displaying the software data immediately
+    $allApps | Format-Table deviceName, displayName, version -AutoSize
+}
+
+
 function Invoke-BruteClientIDAccess {
 
     [cmdletbinding()]
