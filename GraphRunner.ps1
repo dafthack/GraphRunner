@@ -5220,6 +5220,7 @@ function Invoke-SearchTeams{
 
 function Invoke-CreateCalendarEvent {
 
+
     <#
         .SYNOPSIS
 
@@ -5250,15 +5251,20 @@ function Invoke-CreateCalendarEvent {
         .PARAMETER Location
         (Optional) The location of the event.
 
+        .PARAMETER Attendees
+        An array of email addresses of participants (attendees) to invite to the event.
+
         .EXAMPLE
         $Tokens = Get-YourAccessTokenFunction
         $Subject = "Meeting with HR"
         $Start = (Get-Date).AddHours(2)
         $End = $Start.AddHours(1)
         $Body = "Discuss potential Abuses :)"
-        $Location = "Virtual"
-        # Invoke-CreateCalendarEvent -Tokens $Tokens -Subject $Subject -Start $Start -End $End -Body $Body -Location $Location
+        $TimeZone = "UTC"
+        $Attendees = @("participant1@example.com", "participant2@example.com")
+        Invoke-CreateCalendarEvent -Tokens $Tokens -Subject $Subject -Start $Start -End $End -Body $Body -Location $Location -TimeZone $TimeZone -Attendees $Attendees
         #>
+    
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$true)]
@@ -5277,49 +5283,65 @@ function Invoke-CreateCalendarEvent {
         [string]$Body,
 
         [Parameter()]
-        [string]$Location = ""
+        [string]$Location = "",
+
+        [Parameter()]
+        [string]$TimeZone = "UTC",
+
+        [Parameter()]
+        [string[]]$Attendees = @()
     )
 
-    # Set the Microsoft Graph API endpoint for creating events
-    $uri = "https://graph.microsoft.com/v1.0/me/events"
+    try {
+        # Set the Microsoft Graph API endpoint for creating events
+        $uri = "https://graph.microsoft.com/v1.0/me/events"
 
-    # Prepare headers for the request
-    $headers = @{
-        "Authorization" = "Bearer $($Tokens.access_token)"
-        "Content-Type"  = "application/json"
-    }
-
-    # Create the event data in a structured format
-    $eventData = @{
-        subject = $Subject
-        start   = @{
-            dateTime = $Start.ToUniversalTime().ToString("o")
-            timeZone = "UTC" # Adjust to the desired time zone
+        # Prepare headers for the request
+        $headers = @{
+            "Authorization" = "Bearer $($Tokens.access_token)"
+            "Content-Type"  = "application/json"
         }
-        end     = @{
-            dateTime = $End.ToUniversalTime().ToString("o")
-            timeZone = "UTC" # Adjust to the desired time zone
-        }
-        body    = @{
-            contentType = "text"
-            content     = $Body
-        }
-        location = @{
-            displayName = $Location
-        }
-    }
 
-    # Convert event data to JSON format
-    $body = $eventData | ConvertTo-Json
+        # Create the event data in a structured format
+        $eventData = @{
+            subject = $Subject
+            start   = @{
+                dateTime = $Start.ToUniversalTime().ToString("o")
+                timeZone = $TimeZone
+            }
+            end     = @{
+                dateTime = $End.ToUniversalTime().ToString("o")
+                timeZone = $TimeZone
+            }
+            body    = @{
+                contentType = "text"
+                content     = $Body
+            }
+            location = @{
+                displayName = $Location
+            }
+            attendees = @(
+                foreach ($attendee in $Attendees) {
+                    @{
+                        emailAddress = @{
+                            address = $attendee
+                        }
+                        type = "required"
+                    }
+                }
+            )
+        }
 
-    # Send an HTTP POST request to create the event
-    $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method Post -Body $body
+        # Convert event data to JSON format with a higher depth limit
+        $body = $eventData | ConvertTo-Json -Depth 10
 
-    if ($response -ne $null) {
+        # Send an HTTP POST request to create the event
+        $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method Post -Body $body
+
         Write-Host "Event created successfully."
         return $response
-    } else {
-        Write-Host "Failed to create the event."
+    } catch {
+        Write-Host "Failed to create the event: $($Error[0].Exception.Message)"
         return $null
     }
 }
