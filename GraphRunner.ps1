@@ -5218,6 +5218,53 @@ function Invoke-SearchTeams{
     }
 }
 
+function Invoke-CreateCalendarEvent {
+    Param(
+        $Tokens,
+        [string]$Subject,
+        [DateTime]$Start,
+        [DateTime]$End,
+        [string]$Body,
+        [string]$Location = ""
+    )
+
+    $uri = "https://graph.microsoft.com/v1.0/me/events"
+    $headers = @{
+        "Authorization" = "Bearer $($Tokens.access_token)"
+        "Content-Type"  = "application/json"
+    }
+
+    $eventData = @{
+        subject = $Subject
+        start   = @{
+            dateTime = $Start.ToUniversalTime().ToString("o")
+            timeZone = "UTC" # Adjust to the desired time zone
+        }
+        end     = @{
+            dateTime = $End.ToUniversalTime().ToString("o")
+            timeZone = "UTC" # Adjust to the desired time zone
+        }
+        body    = @{
+            contentType = "text"
+            content     = $Body
+        }
+        location = @{
+            displayName = $Location
+        }
+    }
+
+    $body = $eventData | ConvertTo-Json
+
+    $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method Post -Body $body
+
+    if ($response -ne $null) {
+        Write-Host "Event created successfully."
+        return $response
+    } else {
+        Write-Host "Failed to create the event."
+        return $null
+    }
+}
 
 function Invoke-GraphRunner{
     <#
