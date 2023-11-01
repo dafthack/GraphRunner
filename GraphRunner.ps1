@@ -331,145 +331,127 @@ function Invoke-AutoTokenRefresh{
             }
         } 
 }
-function Invoke-RefreshGraphTokens{
+
+function Invoke-RefreshGraphTokens {
     <#
-        .SYNOPSIS
-        Access tokens typically have an expiration time of one hour so it will be necessary to refresh them occasionally. If you have already run the Get-GraphTokens command your refresh tokens will be utilized when you run Invoke-RefreshGraphTokens to obtain a new set of tokens.
-        Author: Beau Bullock (@dafthack)
-        License: MIT
-        Required Dependencies: None
-        Optional Dependencies: None
-
+    .SYNOPSIS
+    Access tokens typically have an expiration time of one hour, so it will be necessary to refresh them occasionally. If you have already run the Get-GraphTokens command, your refresh tokens will be utilized when you run Invoke-RefreshGraphTokens to obtain a new set of tokens.
+    Author: Beau Bullock (@dafthack)
+    License: MIT
+    Required Dependencies: None
+    Optional Dependencies: None
     .DESCRIPTION
-        
-       Access tokens typically have an expiration time of one hour so it will be necessary to refresh them occasionally. If you have already run the Get-GraphTokens command your refresh tokens will be utilized when you run Invoke-RefreshGraphTokens to obtain a new set of tokens.    
-    
+    Access tokens typically have an expiration time of one hour, so it will be necessary to refresh them occasionally. If you have already run the Get-GraphTokens command, your refresh tokens will be utilized when you run Invoke-RefreshGraphTokens to obtain a new set of tokens.
     .PARAMETER RefreshToken
-        
-        Supply a refresh token to re-authenticate.
-
+    Supply a refresh token to re-authenticate.
     .PARAMETER tenantid
-        
-        Supply a tenant domain or ID to authenticate to.
-    
+    Supply a tenant domain or ID to authenticate to.
     .PARAMETER Client
-        
-        Provide a Client to authenticate to. Use Custom to provide your own ClientID.
-
+    Provide a Client to authenticate to. Use Custom to provide your own ClientID.
     .PARAMETER ClientID
-        
-        Provide a ClientID to use with the Custom client option.
-
+    Provide a ClientID to use with the Custom client option.
     .PARAMETER Resource
-
-        Provide a resource to authenticate to such as https://graph.microsoft.com/
-
+    Provide a resource to authenticate to such as https://graph.microsoft.com/
     .PARAMETER Device
-        
-        Provide a device type to use such as Windows or Android.
-
+    Provide a device type to use such as Windows or Android.
     .PARAMETER Browser
-        
-        Provide a Browser to spoof.
-    
+    Provide a Browser to spoof.
     .PARAMETER AutoRefresh
     If this switch is enabled, it will skip the 'break' statement, allowing for automatic token refresh.
-
-    .EXAMPLE
-        
-        C:\PS> Invoke-RefreshGraphTokens
-        Description
-        -----------
-        This command will use the refresh token in the $tokens variable to execute a token refresh.
-    
-
     #>
     [cmdletbinding()]
-    Param(
-    [Parameter(Mandatory = $False)]
-    [string]
-    $RefreshToken,
-    [Parameter(Mandatory = $False)]
-    [string]
-    $tenantid = $global:tenantid,
-    [Parameter(Mandatory=$False)]
-    [ValidateSet("Yammer","Outlook","MSTeams","Graph","AzureCoreManagement","AzureManagement","MSGraph","DODMSGraph","Custom","Substrate")]
-    [String[]]$Client = "MSGraph",
-    [Parameter(Mandatory=$False)]
-    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
-    [Parameter(Mandatory=$False)]
-    [String]$Resource = "https://graph.microsoft.com",
-    [Parameter(Mandatory=$False)]
-    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
-    [String]$Device,
-    [Parameter(Mandatory=$False)]
-    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
-    [String]$Browser,
-    [switch]
-    $AutoRefresh 
+    Param (
+        [Parameter(Mandatory = $False)]
+        [string]
+        $RefreshToken,
+        [Parameter(Mandatory = $False)]
+        [string]
+        $tenantid = $global:tenantid,
+        [Parameter(Mandatory = $False)]
+        [ValidateSet("Yammer", "Outlook", "MSTeams", "Graph", "AzureCoreManagement", "AzureManagement", "MSGraph", "DODMSGraph", "Custom", "Substrate")]
+        [String[]]$Client = "MSGraph",
+        [Parameter(Mandatory = $False)]
+        [String]
+        $ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+        [Parameter(Mandatory = $False)]
+        [String]
+        $Resource = "https://graph.microsoft.com",
+        [Parameter(Mandatory = $False)]
+        [ValidateSet('Mac', 'Windows', 'AndroidMobile', 'iPhone')]
+        [String]
+        $Device,
+        [Parameter(Mandatory = $False)]
+        [ValidateSet('Android', 'IE', 'Chrome', 'Firefox', 'Edge', 'Safari')]
+        [String]
+        $Browser,
+        [switch]
+        $AutoRefresh
     )
+
     if ($Device) {
-		if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
-		}
-		else {
-			$UserAgent = Invoke-ForgeUserAgent -Device $Device
-		}
-	}
-	else {
-	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
-	   else {
-			$UserAgent = Invoke-ForgeUserAgent
-	   }
-	}
-    if(!$RefreshToken){
-        if(!$tokens){
-            write-host -ForegroundColor red '[*] No tokens found in the $tokens variable. Use the Get-GraphTokens module to authenticate first.'
-        break
+        if ($Browser) {
+            $UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+        } else {
+            $UserAgent = Invoke-ForgeUserAgent -Device $Device
+        }
+    } else {
+        if ($Browser) {
+            $UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+        } else {
+            $UserAgent = Invoke-ForgeUserAgent
+        }
+    }
+
+    if (!$RefreshToken) {
+        if (!$tokens) {
+            Write-Host -ForegroundColor red '[*] No tokens found in the $tokens variable. Use the Get-GraphTokens module to authenticate first.'
+            break
         } else {
             $RefreshToken = $tokens.refresh_token
         }
     }
+
     Write-Host -ForegroundColor yellow "[*] Refreshing Tokens..."
     $authUrl = "https://login.microsoftonline.com/$tenantid"
     $refreshbody = @{
-            "resource" = "https://graph.microsoft.com/"
-            "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-            "grant_type" =    "refresh_token"
-            "refresh_token" = $RefreshToken
-            "scope"=         "openid"
-        }
-    $Headers=@{}
+        "resource" = "https://graph.microsoft.com/"
+        "client_id" = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+        "grant_type" = "refresh_token"
+        "refresh_token" = $RefreshToken
+        "scope" = "openid"
+    }
+    $Headers = @{}
     $Headers["User-Agent"] = $UserAgent
+
     try {
         $reftokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Headers $Headers -Body $refreshbody
+    } catch {
+        $errorMessage = $_.Exception.Message
+        Write-Output "Error refreshing tokens: $errorMessage"
+        return
     }
-    catch {
-        $details=$_.ErrorDetails.Message | ConvertFrom-Json
-        Write-Output $details.error
-    } 
-    if($reftokens)
-            {
-                $global:tokens = $reftokens
-                $tokenPayload = $tokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
-                while ($tokenPayload.Length % 4) { Write-Verbose "Invalid length for a Base-64 char array or string, adding ="; $tokenPayload += "=" }
-                $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
-                $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
-                $tokobj = $tokenArray | ConvertFrom-Json
-                $global:tenantid = $tokobj.tid
-                Write-host "Decoded JWT payload:"
-                $tokobj
-                Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
-                $baseDate = Get-Date -date "01-01-1970"
-                $tokenExpire = $baseDate.AddSeconds($tokobj.exp).ToLocalTime()
-                Write-Host -ForegroundColor Yellow "[!] Your access token is set to expire on: $tokenExpire"
-                if (-not $AutoRefresh){
-                    break
-                }
-            }
+
+    if ($reftokens) {
+        $global:tokens = $reftokens
+        $tokenPayload = $tokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
+        while ($tokenPayload.Length % 4) { Write-Verbose "Invalid length for a Base-64 char array or string, adding ="; $tokenPayload += "=" }
+        $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
+        $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
+        $tokobj = $tokenArray | ConvertFrom-Json
+        $global:tenantid = $tokobj.tid
+        Write-host "Decoded JWT payload:"
+        $tokobj
+        Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
+        $baseDate = Get-Date -date "01-01-1970"
+        $tokenExpire = $baseDate.AddSeconds($tokobj.exp).ToLocalTime()
+        Write-Host -ForegroundColor Yellow "[!] Your access token is set to expire on: $tokenExpire"
+        if (-not $AutoRefresh) {
+            break
+        }
+    }
 }
+
+
 function Invoke-InjectOAuthApp{
 
 
@@ -2264,11 +2246,17 @@ function Get-SecurityGroups{
         C:\PS> Get-SecurityGroups -Tokens $tokens -OutputFile "security_groups.csv"
         -----------
         This will dump all security groups to the specified CSV file.
+        -----------
+        C:\PS> Get-SecurityGroups -Tokens $tokens -Client Custom -ClientID "cb1056e2-e479-49de-ae31-7812af012ed8" -Resource "https://graph.microsoft.com/ -Device AndroidMobile -Browser Android
     #>
     param (
+        [Parameter(Mandatory = $False)]
         [object] $Tokens,
+        [Parameter(Mandatory = $False)]
         [string] $OutputFile = "security_groups.csv", # Default value is "security_groups.csv"
+        [Parameter(Mandatory = $False)]
         [switch] $GraphRun,
+        [Parameter(Mandatory = $False)]
         [string] $RefreshToken,
         [Parameter(Mandatory = $False)]
         [string] $tenantid = $global:tenantid,
@@ -2332,6 +2320,7 @@ function Get-SecurityGroups{
     $groupsWithMemberIDs = @()
     $startTime = Get-Date
     $refresh_Interval = [TimeSpan]::FromSeconds($RefreshInterval)
+
     
     do {
         try {
@@ -2665,6 +2654,7 @@ function Get-UpdatableGroups{
         .EXAMPLES      
         
             C:\PS> Get-UpdatableGroups -Tokens $tokens
+            C:\PS> Get-UpdatableGroups -Tokens $tokens -Client Custom -ClientID "cb1056e2-e479-49de-ae31-7812af012ed8" -Resource "https://graph.microsoft.com/ -Device AndroidMobile -Browser Android 
     #>
 
     Param(
@@ -2694,20 +2684,20 @@ function Get-UpdatableGroups{
         [Parameter(Mandatory=$False)]
         [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
         [String]
-        $Device,
+        $Device = "Windows",
         [Parameter(Mandatory=$False)]
         [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
         [String]
         $Browser = "Edge",  # Set the default value to "Edge"
         [Parameter(Mandatory = $False)]
         [string]
-        $OutFile = "Updatable_groups.csv",  # Set the default value to "Updatable_groups.csv"
+        $OutputFile = "Updatable_groups.csv",  # Set the default value to "Updatable_groups.csv"
         [Parameter(Mandatory=$False)]
         [switch]
         $AutoRefresh,
         [Parameter(Mandatory=$False)]
         [Int]
-        $RefreshInterval = (60*10) # 10 minutes
+        $RefreshInterval = (60 * 10) # 10 minutes
     )
 
     try {
@@ -2722,21 +2712,19 @@ function Get-UpdatableGroups{
 
         Write-Host -ForegroundColor yellow "[*] Now gathering groups and checking if each one is updatable."
 
-        $timer = [System.Diagnostics.Stopwatch]::StartNew()
+        $startTime = Get-Date
+        $refresh_Interval = [TimeSpan]::FromSeconds($RefreshInterval)
 
         do {
             try {
                 $response = Invoke-RestMethod -Uri $GraphApiEndpoint -Headers $headers -Method Get 
-                if ($timer.Elapsed.TotalMinutes -ge $RefreshInterval) {
-                    $timer.Stop()
-                    Write-Host -ForegroundColor Yellow "[*] Pausing script for 1 minute..."
-                    Invoke-RefreshGraphTokens -RefreshToken $refreshToken -AutoRefresh -tenantid $global:tenantid -Resource $Resource -Client $Client -ClientID $ClientID -Browser $Browser -Device $Device -RefreshInterval $RefreshInterval
-                    Write-Host -ForegroundColor Yellow "[*] Resuming script..."
-                    $timer.Start()
-                }
-
                 foreach ($group in $response.value) {
-                    # Check the elapsed time and pause if 3 minutes have passed
+                    if ((Get-Date) - $startTime -ge $refresh_interval) {
+                        Write-Host -ForegroundColor Yellow "[*] Pausing script for token refresh..."
+                        Invoke-RefreshGraphTokens -RefreshToken $refreshToken -AutoRefresh -tenantid $global:tenantid -Resource $Resource -Client $Client -ClientID $ClientID -Browser $Browser -Device $Device
+                        Write-Host -ForegroundColor Yellow "[*] Resuming script..."
+                        $startTime = Get-Date
+                    }  
 
                     $groupid = ("/" + $group.id)
                     $requestBody = @{
@@ -2752,20 +2740,13 @@ function Get-UpdatableGroups{
                         $estimateresponse = Invoke-RestMethod -Uri $EstimateAccessEndpoint -Headers $headers -Method Post -Body $requestBody
                         if ($estimateresponse.value.accessDecision -eq "allowed") {
                             Write-Host -ForegroundColor Green ("[+] Found updatable group: " + $group.displayName + ": " + $group.id)
-                            $group.displayName+":"+$group.id|Out-File  -Append -Encoding Ascii $OutFile
+                            $group.displayName+":"+$group.id|Out-File  -Append -Encoding Ascii $OutputFile
                             $groupout = $group | Select-Object -Property displayName, id, description, isAssignableToRole, onPremisesSyncEnabled, mail, createdDateTime, visibility
                             $results += $groupout
                         }
                     } catch {
                         Write-Host "Error estimating access for $groupid : $_"
                     }
-                }
-
-                $time = $watch.Elapsed.TotalSeconds
-
-                if ($time -gt 120) {
-                    Invoke-RefreshGraphTokens -RefreshToken $global:Tokens -tenantid $global:tenantid
-                    $watch.restart()
                 }
 
                 if ($response.'@odata.nextLink') {
@@ -2790,9 +2771,9 @@ function Get-UpdatableGroups{
             }
         }
 
-        if ($OutFile) {
-            $results | Export-Csv -Path $OutFile -NoTypeInformation
-            Write-Host -ForegroundColor Green ("[*] Exported updatable groups to $OutFile")
+        if ($OutputFile) {
+            $results | Export-Csv -Path $OutputFile -NoTypeInformation
+            Write-Host -ForegroundColor Green ("[*] Exported updatable groups to $OutputFile")
         }
     } catch {
         Write-Host -ForegroundColor Red "An error occurred: $_"
