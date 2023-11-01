@@ -2717,7 +2717,16 @@ function Get-UpdatableGroups{
 
         do {
             try {
-                $response = Invoke-RestMethod -Uri $GraphApiEndpoint -Headers $headers -Method Get 
+                try {
+                $response = Invoke-RestMethod -Uri $GraphApiEndpoint -Headers $headers -Method Get
+                } catch {
+                    if ($_.Exception.Response.StatusCode.value__ -match "429") {
+                        Write-Host -ForegroundColor Red "[*] Being throttled... sleeping for 5 seconds"
+                        Start-Sleep -Seconds 5
+                    } else {
+                        Write-Host -ForegroundColor Red "[*] An error occurred while retrieving members for group $($group.displayName): $($_.Exception.Message)"
+                    }
+                }
                 foreach ($group in $response.value) {
                     if ((Get-Date) - $startTime -ge $refresh_interval) {
                         Write-Host -ForegroundColor Yellow "[*] Pausing script for token refresh..."
@@ -2737,7 +2746,17 @@ function Get-UpdatableGroups{
                     } | ConvertTo-Json
 
                     try {
+                        try {
                         $estimateresponse = Invoke-RestMethod -Uri $EstimateAccessEndpoint -Headers $headers -Method Post -Body $requestBody
+                        }
+                        catch {
+                            if ($_.Exception.Response.StatusCode.value__ -match "429") {
+                                Write-Host -ForegroundColor Red "[*] Being throttled... sleeping for 5 seconds"
+                                Start-Sleep -Seconds 5
+                            } else {
+                                Write-Host -ForegroundColor Red "[*] An error occurred while estimating access: $($_.Exception.Message)"
+                            }
+                        }
                         if ($estimateresponse.value.accessDecision -eq "allowed") {
                             Write-Host -ForegroundColor Green ("[+] Found updatable group: " + $group.displayName + ": " + $group.id)
                             $group.displayName+":"+$group.id|Out-File  -Append -Encoding Ascii $OutputFile
