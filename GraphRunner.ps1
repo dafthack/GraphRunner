@@ -5261,9 +5261,7 @@ if ($result -ne $null) {
 
 .NOTES
 File Name      : Invoke-CreateCalendarEvent.ps1
-Author         : Your Name
-Prerequisite   : You need to have an access token to use this function.
-Copyright 2023 - Your Company
+Author         : C0axx - Curtis Ringwald
 #>
 function Invoke-CreateCalendarEvent {
     [CmdletBinding()]
