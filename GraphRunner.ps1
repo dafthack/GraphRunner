@@ -5218,6 +5218,134 @@ function Invoke-SearchTeams{
     }
 }
 
+function Invoke-CreateCalendarEvent {
+
+
+    <#
+        .SYNOPSIS
+
+        This module creates a new calendar event using the Microsoft Graph API. 
+        Author: Curtis Ringwald (@C0axx)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+        .DESCRIPTION
+        This function allows you to create a new calendar event by sending a POST request to the Microsoft Graph API.
+
+        .PARAMETER Tokens
+        The access token required to authenticate with the Microsoft Graph API.
+
+        .PARAMETER Subject
+        The subject or title of the event.
+
+        .PARAMETER Start
+        The start date and time of the event.
+
+        .PARAMETER End
+        The end date and time of the event.
+
+        .PARAMETER Body
+        The description or body content of the event.
+
+        .PARAMETER Location
+        (Optional) The location of the event.
+
+        .PARAMETER Attendees
+        An array of email addresses of participants (attendees) to invite to the event.
+
+        .EXAMPLE
+        $Tokens = Get-YourAccessTokenFunction
+        $Subject = "Meeting with HR"
+        $Start = (Get-Date).AddHours(2)
+        $End = $Start.AddHours(1)
+        $Body = "Discuss potential Abuses :)"
+        $TimeZone = "UTC"
+        $Attendees = @("participant1@example.com", "participant2@example.com")
+        Invoke-CreateCalendarEvent -Tokens $Tokens -Subject $Subject -Start $Start -End $End -Body $Body -Location $Location -TimeZone $TimeZone -Attendees $Attendees
+        #>
+    
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [PSCustomObject]$Tokens,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Subject,
+
+        [Parameter(Mandatory=$true)]
+        [DateTime]$Start,
+
+        [Parameter(Mandatory=$true)]
+        [DateTime]$End,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Body,
+
+        [Parameter()]
+        [string]$Location = "",
+
+        [Parameter()]
+        [string]$TimeZone = "UTC",
+
+        [Parameter()]
+        [string[]]$Attendees = @()
+    )
+
+    try {
+        # Set the Microsoft Graph API endpoint for creating events
+        $uri = "https://graph.microsoft.com/v1.0/me/events"
+
+        # Prepare headers for the request
+        $headers = @{
+            "Authorization" = "Bearer $($Tokens.access_token)"
+            "Content-Type"  = "application/json"
+        }
+
+        # Create the event data in a structured format
+        $eventData = @{
+            subject = $Subject
+            start   = @{
+                dateTime = $Start.ToUniversalTime().ToString("o")
+                timeZone = $TimeZone
+            }
+            end     = @{
+                dateTime = $End.ToUniversalTime().ToString("o")
+                timeZone = $TimeZone
+            }
+            body    = @{
+                contentType = "text"
+                content     = $Body
+            }
+            location = @{
+                displayName = $Location
+            }
+            attendees = @(
+                foreach ($attendee in $Attendees) {
+                    @{
+                        emailAddress = @{
+                            address = $attendee
+                        }
+                        type = "required"
+                    }
+                }
+            )
+        }
+
+        # Convert event data to JSON format with a higher depth limit
+        $body = $eventData | ConvertTo-Json -Depth 10
+
+        # Send an HTTP POST request to create the event
+        $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method Post -Body $body
+
+        Write-Host "Event created successfully."
+        return $response
+    } catch {
+        Write-Host "Failed to create the event: $($Error[0].Exception.Message)"
+        return $null
+    }
+}
+
 
 function Invoke-GraphRunner{
     <#
