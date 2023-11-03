@@ -433,21 +433,24 @@ function Invoke-RefreshGraphTokens {
 
     if ($reftokens) {
         $global:tokens = $reftokens
-        $tokenPayload = $tokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
+        $tokenPayload = $reftokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
         while ($tokenPayload.Length % 4) { Write-Verbose "Invalid length for a Base-64 char array or string, adding ="; $tokenPayload += "=" }
         $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
         $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
         $tokobj = $tokenArray | ConvertFrom-Json
         $global:tenantid = $tokobj.tid
-        Write-host "Decoded JWT payload:"
-        $tokobj
-        Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
+        if(!$AutoRefresh){
+            Write-host "Decoded JWT payload:"
+            $tokobj
+            Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
+        }
         $baseDate = Get-Date -date "01-01-1970"
         $tokenExpire = $baseDate.AddSeconds($tokobj.exp).ToLocalTime()
         Write-Host -ForegroundColor Yellow "[!] Your access token is set to expire on: $tokenExpire"
         if (-not $AutoRefresh) {
             break
         }
+        return $reftokens
     }
 }
 
@@ -2334,7 +2337,12 @@ function Get-SecurityGroups{
         foreach ($group in $groups) {
             if ((Get-Date) - $startTime -ge $refresh_interval) {
                 Write-Host -ForegroundColor Yellow "[*] Pausing script for token refresh..."
-                Invoke-RefreshGraphTokens -RefreshToken $refreshToken -AutoRefresh -tenantid $global:tenantid -Resource $Resource -Client $Client -ClientID $ClientID -Browser $Browser -Device $Device
+                $reftokens = Invoke-RefreshGraphTokens -RefreshToken $refreshToken -AutoRefresh -tenantid $global:tenantid -Resource $Resource -Client $Client -ClientID $ClientID -Browser $Browser -Device $Device
+                $accessToken = $reftokens.access_token
+                [string]$refreshToken = $reftokens.refresh_token
+                $headers = @{
+                    Authorization = "Bearer $accessToken"
+                }
                 Write-Host -ForegroundColor Yellow "[*] Resuming script..."
                 $startTime = Get-Date
             }
@@ -2730,7 +2738,13 @@ function Get-UpdatableGroups{
                 foreach ($group in $response.value) {
                     if ((Get-Date) - $startTime -ge $refresh_interval) {
                         Write-Host -ForegroundColor Yellow "[*] Pausing script for token refresh..."
-                        Invoke-RefreshGraphTokens -RefreshToken $refreshToken -AutoRefresh -tenantid $global:tenantid -Resource $Resource -Client $Client -ClientID $ClientID -Browser $Browser -Device $Device
+                        $reftokens = Invoke-RefreshGraphTokens -RefreshToken $refreshToken -AutoRefresh -tenantid $global:tenantid -Resource $Resource -Client $Client -ClientID $ClientID -Browser $Browser -Device $Device
+                        $accesstoken = $reftokens.access_token
+                        $refreshToken = $reftokens.refresh_token
+                        $headers = @{
+                            "Authorization" = "Bearer $accesstoken"
+                            "Content-Type" = "application/json"
+                        }
                         Write-Host -ForegroundColor Yellow "[*] Resuming script..."
                         $startTime = Get-Date
                     }  
@@ -3094,6 +3108,187 @@ function Invoke-RemoveGroupMember {
         Write-host -ForegroundColor green "[*] Member removed successfully."
     } catch {
         Write-Error "[*] Failed to remove member from the security group: $_"
+    }
+}
+
+
+function Get-EntraIDGroupInfo {
+    <#
+    .SYNOPSIS
+        A function to retrieve group information 
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        A function to retrieve group information 
+
+    .PARAMETER Tokens
+
+        File path to a text file with group names and guids exported from Get-UpdatableGroups
+
+    .PARAMETER GroupList
+    
+        The object ID of the group you want to modify 
+        
+    .PARAMETER GroupName
+    
+        A specific group name to lookup
+
+    .PARAMETER GroupGUID
+
+        A specific group guid to lookup
+        
+    .EXAMPLES      
+        
+        C:\PS> Get-EntraIDGroupInfo -Tokens $tokens -GroupList .\updatable-groups-output.txt
+
+    .EXAMPLES
+
+        C:\PS> Get-EntraIDGroupInfo -Token $tokens -GroupName "admin"
+
+    .EXAMPLES
+
+        C:\PS> Get-EntraIDGroupInfo -Token $tokens -GroupGUID "<input group object guid here>"
+
+    #>
+
+
+    param(
+        [object[]]$Tokens,         # Your Azure access token
+        [string]$GroupList,    # File path to a text file with group names and guids exported from Get-UpdatableGroups
+        [string]$GroupName,     # Specific group name to lookup
+        [string]$GroupGUID      # Specific group guid to lookup
+    )
+
+    if($Tokens){
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    }
+    else{
+         # Login
+         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+         while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+    }
+    $accesstoken = $tokens.access_token   
+    [string]$refreshToken = $tokens.refresh_token 
+  
+    $headers = @{
+        'Authorization' = "Bearer $accesstoken"
+    }
+
+    if ($GroupName){
+        $encodedDisplayName = [System.Web.HttpUtility]::UrlEncode($GroupName)
+        $groupUrl = "https://graph.microsoft.com/v1.0/groups?`$filter=displayName eq '$encodeddisplayName'"
+        Invoke-GroupLookup -headers $headers -groupurl $groupUrl
+    }
+    if($GroupGuid){
+        $groupUrl = "https://graph.microsoft.com/v1.0/groups/$groupguid"
+        Invoke-GroupLookup -headers $headers -groupurl $groupUrl
+    }
+    if($GroupList){
+        Write-Host "[*] Using the provided list of groups."
+        $groupNames = Get-Content $GroupList
+        foreach ($line in $groupNames) {
+            $guid = $line -replace '.*:\s*(\w{8}-\w{4}-\w{4}-\w{4}-\w{12})$', '$1'  # Extract the GUID
+            $groupUrl = "https://graph.microsoft.com/v1.0/groups/$guid"
+            Invoke-GroupLookup -headers $headers -groupurl $groupUrl
+        }
+    }
+}
+
+function Invoke-GroupLookup{
+    param(
+    $headers,         
+    [string]$groupurl
+    )
+    try {
+        $response = Invoke-RestMethod -Uri $groupUrl -Headers $headers -Method Get
+    } catch {
+        Write-Host "Group with GUID '$guid' not found."
+        continue
+    }
+    if($response.value.count -gt 1){
+        foreach($group in $response.value){
+            Write-Host "Group Name: $($group.displayName)" 
+            Write-Host "Group ID: $($group.id)"
+            if ($group.groupTypes -match "Unified"){
+                Write-Host "Group Type: Microsoft 365 Group"
+            }
+            else{
+                Write-Host "Group Type: Security or Distribution Group"
+            }
+            if ($group.securityEnabled){
+                Write-Host "Security Enabled: $($group.securityEnabled)" 
+            }
+            if ($group.visibility){
+                Write-Host "Visibility: $($group.visibility)" 
+            }
+            if ($group.onPremisesSyncEnabled){
+                Write-Host "OnPrem Sync Enabled: $($group.onPremisesSyncEnabled)" 
+                Write-Host "OnPrem Domain Name: $($group.onPremisesDomainName)"
+                Write-Host "OnPrem NetBIOS Name: $($group.onPremisesNetBiosName)"
+                Write-Host "OnPrem SAM Account Name: $($group.onPremisesSamAccountName)"
+            }
+            if ($group.isAssignableToRole){
+                Write-Host "Role-Assignable: $($group.isAssignableToRole)" 
+            }
+            if ($group.resourceProvisioningOptions){
+                Write-Host "Provisioning Options: $($group.resourceProvisioningOptions -join ', ')" 
+            }
+            if ($group.resourceBehaviorOptions){
+                Write-Host "Behavior Options: $($group.resourceBehaviorOptions -join ',')" 
+            }
+            Write-Host "-----------------------------"
+        }
+    }
+    else{
+        Write-Host "Group Name: $($response.displayName)" 
+        Write-Host "Group ID: $($response.id)"
+        if ($response.groupTypes -match "Unified"){
+            Write-Host "Group Type: Microsoft 365 Group"
+        }
+        else{
+            Write-Host "Group Type: Security or Distribution Group"
+        }
+        if ($response.securityEnabled){
+            Write-Host "Security Enabled: $($response.securityEnabled)" 
+        }
+        if ($response.visibility){
+            Write-Host "Visibility: $($response.visibility)" 
+        }
+        if ($response.onPremisesSyncEnabled){
+            Write-Host "OnPrem Sync Enabled: $($response.onPremisesSyncEnabled)" 
+            Write-Host "OnPrem Domain Name: $($response.onPremisesDomainName)"
+            Write-Host "OnPrem NetBIOS Name: $($response.onPremisesNetBiosName)"
+            Write-Host "OnPrem SAM Account Name: $($response.onPremisesSamAccountName)"
+        }
+        if ($response.isAssignableToRole){
+            Write-Host "Role-Assignable: $($response.isAssignableToRole)" 
+        }
+        if ($response.resourceProvisioningOptions){
+            Write-Host "Provisioning Options: $($response.resourceProvisioningOptions -join ', ')" 
+        }
+        if ($response.resourceBehaviorOptions){
+            Write-Host "Behavior Options: $($response.resourceBehaviorOptions -join ',')" 
+        }
+        Write-Host "-----------------------------"
     }
 }
 
