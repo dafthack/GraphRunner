@@ -1444,6 +1444,84 @@ Function Get-Inbox{
     }
 }
 
+function Get-TeamsApps{
+    <#
+    .SYNOPSIS
+
+        This module enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel.
+        Author: Matt Eidelberg (@Tyl0us)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+    This module enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel.     
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+  
+    .EXAMPLE
+        
+        C:\PS> Get-TeamsApps -Tokens $tokens 
+        -----------
+        This will enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel. 
+
+    #>
+    Param (
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens = "",
+        [switch]
+        $GraphRun
+        )
+        if($Tokens){
+            if(!$GraphRun){
+                Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+            }    
+        }
+        if (!$Tokens) {
+            if (!$global:tokens) {
+                Write-Host -ForegroundColor red '[*] No tokens found in the $tokens variable. Use the Get-GraphTokens module to authenticate first.'
+                break
+            } else {
+            $access_token = $global:tokens.access_token
+        }
+    }
+
+    $headers = @{
+        Authorization = "Bearer $access_token"
+        "Content-Type" = "application/json"
+    }
+
+
+    $teamsResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/me/joinedTeams" -Headers $headers
+
+    foreach ($team in $teamsResponse.value) {
+        $teamId = $team.id
+        Write-Host "Team: $($team.displayName)"
+
+        $channelsResponse = Invoke-RestMethod -Headers $headers -Uri "https://graph.microsoft.com/v1.0/teams/$teamId/channels" -Method Get -ErrorAction Stop
+
+        foreach ($channel in $channelsResponse.value) {
+            $channelId = $channel.id
+            Write-Host "  Checking Channel: $($channel.displayName)"
+
+            try {
+                $connectorsResponse = Invoke-RestMethod -Headers $headers -Uri "https://graph.microsoft.com/v1.0/teams/$teamId/channels/$channelId/tabs" -Method Get -ErrorAction Stop
+                foreach ($tab in $connectorsResponse.value) {
+                    if ($tab -and $tab.webUrl) {
+                        Write-Host "    Channel App: $($tab.displayName) - URL: $($tab.webUrl)"
+                    }
+                }
+            } catch {
+                Write-Host "    An error occurred: $_.Exception.Message"
+            }
+        }
+    }
+}
+
 function Get-TeamsChat{
     <#
     .SYNOPSIS
