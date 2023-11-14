@@ -1472,29 +1472,33 @@ function Get-TeamsApps{
     Param (
         [Parameter(Position = 0, Mandatory = $False)]
         [object[]]
-        $Tokens = "",
-        [switch]
-        $GraphRun
+        $Tokens
         )
-        if($Tokens){
-            if(!$GraphRun){
-                Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
-            }    
+        if(!$Tokens){
+            # Login
+            Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+            Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+            while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
         }
-        if (!$Tokens) {
-            if (!$global:tokens) {
-                Write-Host -ForegroundColor red '[*] No tokens found in the $tokens variable. Use the Get-GraphTokens module to authenticate first.'
-                break
-            } else {
-            $access_token = $global:tokens.access_token
-        }
-    }
-
+    $access_token = $tokens.access_token   
     $headers = @{
         Authorization = "Bearer $access_token"
         "Content-Type" = "application/json"
     }
-
 
     $teamsResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/me/joinedTeams" -Headers $headers
 
