@@ -1444,6 +1444,88 @@ Function Get-Inbox{
     }
 }
 
+function Get-TeamsApps{
+    <#
+    .SYNOPSIS
+
+        This module enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel.
+        Author: Matt Eidelberg (@Tyl0us)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+    This module enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel.     
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+  
+    .EXAMPLE
+        
+        C:\PS> Get-TeamsApps -Tokens $tokens 
+        -----------
+        This will enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel. 
+
+    #>
+    Param (
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens
+        )
+        if(!$Tokens){
+            # Login
+            Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+            Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+            while($auth -notlike "Yes"){
+                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                $answer = Read-Host 
+                $answer = $answer.ToLower()
+                if ($answer -eq "yes" -or $answer -eq "y") {
+                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                    $tokens = Get-GraphTokens -ExternalCall
+                    $auth = "Yes"
+                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                    return
+                } else {
+                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                }
+            }
+        }
+    $access_token = $tokens.access_token   
+    $headers = @{
+        Authorization = "Bearer $access_token"
+        "Content-Type" = "application/json"
+    }
+
+    $teamsResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/me/joinedTeams" -Headers $headers
+
+    foreach ($team in $teamsResponse.value) {
+        $teamId = $team.id
+        Write-Host "Team: $($team.displayName)"
+
+        $channelsResponse = Invoke-RestMethod -Headers $headers -Uri "https://graph.microsoft.com/v1.0/teams/$teamId/channels" -Method Get -ErrorAction Stop
+
+        foreach ($channel in $channelsResponse.value) {
+            $channelId = $channel.id
+            Write-Host "  Checking Channel: $($channel.displayName)"
+
+            try {
+                $connectorsResponse = Invoke-RestMethod -Headers $headers -Uri "https://graph.microsoft.com/v1.0/teams/$teamId/channels/$channelId/tabs" -Method Get -ErrorAction Stop
+                foreach ($tab in $connectorsResponse.value) {
+                    if ($tab -and $tab.webUrl) {
+                        Write-Host "    Channel App: $($tab.displayName) - URL: $($tab.webUrl)"
+                    }
+                }
+            } catch {
+                Write-Host "    An error occurred: $_.Exception.Message"
+            }
+        }
+    }
+}
+
 function Get-TeamsChat{
     <#
     .SYNOPSIS
