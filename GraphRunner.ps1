@@ -415,7 +415,7 @@ function Invoke-RefreshGraphTokens {
     $authUrl = "https://login.microsoftonline.com/$tenantid"
     $refreshbody = @{
         "resource" = "https://graph.microsoft.com/"
-        "client_id" = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+        "client_id" = $ClientID
         "grant_type" = "refresh_token"
         "refresh_token" = $RefreshToken
         "scope" = "openid"
