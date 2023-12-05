@@ -1448,7 +1448,7 @@ function Get-TeamsApps{
     <#
     .SYNOPSIS
 
-        This module enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel.
+        This module enumerates all accessible Teams chat channel and grabs the URLs for all installed apps in side each channel.
         Author: Matt Eidelberg (@Tyl0us)
         License: MIT
         Required Dependencies: None
@@ -1456,7 +1456,7 @@ function Get-TeamsApps{
 
     .DESCRIPTION
         
-    This module enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel.     
+    This module enumerates all accessible Teams chat channel and grabs the URLs for all installed apps in side each channel.     
 
     .PARAMETER Tokens
 
@@ -1466,7 +1466,7 @@ function Get-TeamsApps{
         
         C:\PS> Get-TeamsApps -Tokens $tokens 
         -----------
-        This will enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel. 
+        This will enumerates all accessible Teams chat channel and grabs the URLs for all installed apps in side each channel. 
 
     #>
     Param (
