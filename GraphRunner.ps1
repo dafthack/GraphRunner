@@ -4337,69 +4337,67 @@ $GetCompanyInfoSoapRequest = @"
     }
 }
 
-
-function Invoke-SearchUserAttributes{
+function Invoke-SearchUserAttributes {
     <#
-     .SYNOPSIS
+    .SYNOPSIS
 
-        This module will query user attributes from the directory and search through them for a specific term.       
-        Author: Beau Bullock (@dafthack)
-        License: MIT
-        Required Dependencies: None
-        Optional Dependencies: None
+    This module will query user attributes from the directory and search through them for a specific term.
+    Author: Beau Bullock (@dafthack)
+    License: MIT
+    Required Dependencies: None
+    Optional Dependencies: None
 
     .DESCRIPTION
-        
-       This module will query user attributes from the directory and search through them for a specific term.
+
+    This module will query user attributes from the directory and search through them for a specific term.
 
     .PARAMETER Tokens
 
-        Token object for auth
+    Token object for auth
 
     .PARAMETER SearchTerm
 
-        The term you want to search across user attributes
+    The term you want to search across user attributes
 
     .EXAMPLE
-        
-        C:\PS> Invoke-SearchUserAttributes -Tokens $tokens -SearchTerm "password"
-        -----------
-        This will search every user attribute for the term password.
+
+    C:\PS> Invoke-SearchUserAttributes -Tokens $tokens -SearchTerm "password"
+    -----------
+    This will search every user attribute for the term password.
 
     #>
     Param(
 
-    [Parameter(Position = 0, Mandatory = $False)]
-    [object[]]
-    $Tokens = "",
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens = "",
 
-    [Parameter(Position = 0, Mandatory = $True)]
-    [string]
-    $SearchTerm = ""
+        [Parameter(Position = 0, Mandatory = $True)]
+        [string]
+        $SearchTerm = ""
     )
 
-    if($Tokens){
+    if ($Tokens) {
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
-    }
-    else{
-         # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
-         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
-         while($auth -notlike "Yes"){
-                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
-                $answer = $answer.ToLower()
-                if ($answer -eq "yes" -or $answer -eq "y") {
-                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
-                    $tokens = Get-GraphTokens -ExternalCall
-                    $auth = "Yes"
-                } elseif ($answer -eq "no" -or $answer -eq "n") {
-                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
-                    return
-                } else {
-                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
-                }
+    } else {
+        # Login
+        Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+        Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+        while ($auth -notlike "Yes") {
+            Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+            $answer = Read-Host 
+            $answer = $answer.ToLower()
+            if ($answer -eq "yes" -or $answer -eq "y") {
+                Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                $tokens = Get-GraphTokens -ExternalCall
+                $auth = "Yes"
+            } elseif ($answer -eq "no" -or $answer -eq "n") {
+                Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                return
+            } else {
+                Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
             }
+        }
     }
     $accesstoken = $tokens.access_token   
     [string]$refreshToken = $tokens.refresh_token 
@@ -4413,17 +4411,36 @@ function Invoke-SearchUserAttributes{
     Write-Host "[*] Now searching each user attribute for the term $searchTerm"
     # Query users
     Write-Host "[*] Gathering the users from the tenant."
-    do{
-        
-        $usersResponse = Invoke-RestMethod -Uri $usersEndpoint -Headers $headers
+    do {
+        try {
+            $usersResponse = Invoke-RestMethod -Uri $usersEndpoint -Headers $headers
+        } catch {
+            if ($_.Exception.Response.StatusCode.value__ -eq "429") {
+                Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
+                Start-Sleep -Seconds 5
+                continue
+            } else {
+                throw $_
+            }
+        }
 
         $attributes = '?$select=accountEnabled,ageGroup,assignedLicenses,businessPhones,city,companyName,consentProvidedForMinor,country,createdDateTime,creationType,department,displayName,mail,employeeId,employeeHireDate,employeeOrgData,employeeType,onPremisesExtensionAttributes,externalUserStateChangeDateTime,faxNumber,givenName,imAddresses,identities,externalUserState,jobTitle,surname,lastPasswordChangeDateTime,legalAgeGroupClassification,mailNickname,mobilePhone,id,officeLocation,onPremisesSamAccountName,onPremisesDistinguishedName,onPremisesDomainName,onPremisesImmutableId,onPremisesLastSyncDateTime,onPremisesProvisioningErrors,onPremisesSecurityIdentifier,onPremisesSyncEnabled,onPremisesUserPrincipalName,otherMails,passwordPolicies,passwordProfile,preferredDataLocation,preferredLanguage,proxyAddresses,Comment,Info,Password,Information,Description,login,signin,credential,cred,credentials,data,signInSessionsValidFromDateTime,sponsors,state,streetAddress,usageLocation,userPrincipalName,userType,postalCode&$expand=manager'
 
-        
         foreach ($user in $usersResponse.value) {
             $userId = $user.id
             $uri = ($graphApiUrl + "/users/" + $userId + $attributes)
-            $userAttributesResponse = Invoke-RestMethod -Uri $uri -Headers $headers
+            try {
+                $userAttributesResponse = Invoke-RestMethod -Uri $uri -Headers $headers
+            } catch {
+                if ($_.Exception.Response.StatusCode.value__ -eq "429") {
+                    Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
+                    Start-Sleep -Seconds 5
+                    continue
+                } else {
+                    throw $_
+                }
+            }
+
             $upn = $userAttributesResponse.UserPrincipalName
             # Search through attributes (excluding @odata.context)
             $propertiesToSearch = $userAttributesResponse.PSObject.Properties | Where-Object { $_.Name -ne "@odata.context" }
@@ -4434,21 +4451,19 @@ function Invoke-SearchUserAttributes{
                 if ($propertyValue -is [string] -and $propertyValue -like "*$searchTerm*") {
                     Write-Host -ForegroundColor green "[*] Found a match! User: $upn in attritube: $propertyName : $propertyValue"
                 }
-
             }
-     
         }
+
         if ($usersResponse.'@odata.nextLink') {
             Write-Host "[*] Gathering more users..."
             $usersEndpoint = $usersResponse.'@odata.nextLink'
-        }
-        else {
+        } else {
             # No more pages, exit loop
             break
         }
     } while ($true)
-
 }
+
 
 Function Invoke-SearchMailbox{
     <#
