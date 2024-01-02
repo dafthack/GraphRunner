@@ -2405,7 +2405,7 @@ function Get-SecurityGroups{
     }
     
     $graphApiUrl = "https://graph.microsoft.com/v1.0"
-    $groupsUrl = "$graphApiUrl/groups?$filter=securityEnabled eq true"
+    $groupsUrl = "$graphApiUrl/groups?`$filter=securityEnabled eq true"
     
     $groupsWithMemberIDs = @()
     $startTime = Get-Date
