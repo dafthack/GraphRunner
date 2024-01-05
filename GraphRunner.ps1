@@ -4663,8 +4663,7 @@ Function Invoke-SearchMailbox{
                 New-Item -Path $folderName -ItemType Directory | Out-Null
                 # Process the response and export email content
                 foreach ($hit in $response.value[0].hitsContainers[0].hits) {
-                $webLink = $hit.resource.webLink
-                $itemId = [regex]::Match($webLink, "ItemID=([^&]+)").Groups[1].Value
+                $itemId = $hit.hitId
                 $subject = $hit.resource.subject
 
                 # Remove special characters and replace spaces with underscores
