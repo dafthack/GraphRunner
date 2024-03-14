@@ -1,0 +1,18 @@
+{
+    "@type": "MessageCard",
+    "@context": "http://schema.org/extensions",
+    "themeColor": "0076D7",
+    "summary": "Summary of the card content",
+    "sections": [
+        {
+            "activityTitle": "Urgent Security Alert",
+            "facts": [
+                {
+                    "name": "Your Password Is Outdated.",
+                    "value": "Go to this legit link: www.legit.com"
+                }
+            ],
+            "markdown": true
+        }
+    ]
+}
