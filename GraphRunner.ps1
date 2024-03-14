@@ -1531,6 +1531,1247 @@ function Get-TeamsApps{
 }
 
 
+function Get-TeamsChannels{
+    <#
+    .SYNOPSIS
+        This module enumerates all accessible teams and the channels a user has access to. 
+        Author: Matt Eidelberg (@Tyl0us)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        This module enumerates all accessible teams and their channels a user has access to. 
+
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+  
+    .EXAMPLE
+        
+        C:\PS> Get-TeamsChannels -Tokens $tokens
+        -----------
+        This module enumerates all accessible teams and their channels a user has access to. 
+
+    #>
+    Param (
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens
+        )
+        if(!$Tokens){
+            if ($global:tokens){
+                $tokens = $global:tokens   
+            } else {
+                # Login
+                Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+                while($auth -notlike "Yes"){
+                    Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                    $answer = Read-Host 
+                    $answer = $answer.ToLower()
+                    if ($answer -eq "yes" -or $answer -eq "y") {
+                        Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                        $tokens = Get-GraphTokens -ExternalCall
+                        $auth = "Yes"
+                    } elseif ($answer -eq "no" -or $answer -eq "n") {
+                        Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                        return
+                    } else {
+                        Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                    }
+                }
+            }
+        }
+          
+    $accesstoken = $tokens.access_token   
+    [string]$refreshtoken = $tokens.refresh_token 
+
+    $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
+    $grantType = "refresh_token"
+
+    $access_token = $tokens.access_token   
+    $teamsheaders = @{
+        Authorization  = "Bearer $access_token"
+        "Content-Type" = "application/json"
+    }
+    $teamsResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/me/joinedTeams" -Headers $teamsheaders
+    foreach ($team in $teamsResponse.value) {
+            $teamId = $team.id
+            $teamName = $team.displayName
+            Write-Host "Team Name: $($teamName)"
+            $channelsResponse = Invoke-RestMethod -Headers $teamsheaders -Uri "https://graph.microsoft.com/v1.0/teams/$teamId/channels" -Method Get -ErrorAction Stop
+            foreach ($channel in $channelsResponse.value) {
+                    $channelDesc = $channel.Description
+                    $channelName = $channel.displayName
+                    Write-Host "    Channel Name: $($channelName)"
+                    if ($channel.Description -and $channel.Description.Trim() -ne "") {
+                        Write-Host "    Channel Description: $($channelDesc)"
+                    }
+                }
+        }
+}
+function Get-ChannelUsersEnum{
+    <#
+    .SYNOPSIS
+        This module enumerates a defined channel to see how many people are in a channel and who they are.
+        Author: Matt Eidelberg (@Tyl0us)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        This module enumerates a defined channel to see how many people are in a channel and who they are.
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+
+    .PARAMETER Channel
+
+        The channel name to enumerate 
+  
+    .PARAMETER Teams
+
+        The team name that the channel resides in 
+
+    .EXAMPLE
+        
+        C:\PS> Get-ChannelUsersEnum -Tokens $tokens -Channel "ChannelName" -Teams "TeamName"
+        -----------
+        This module enumerates a defined channel to see how many people are in a channel and who they are.
+
+    #>
+    Param (
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens,
+        [Parameter(Position = 1, Mandatory = $True)]
+        [string]
+        $Channel = "",
+        [Parameter(Position = 2, Mandatory = $False)]
+        [string]
+        $Teams = ""
+        )
+        if(!$Tokens){
+            if ($global:tokens){
+                $tokens = $global:tokens   
+            } else {
+                # Login
+                Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+                while($auth -notlike "Yes"){
+                    Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                    $answer = Read-Host 
+                    $answer = $answer.ToLower()
+                    if ($answer -eq "yes" -or $answer -eq "y") {
+                        Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                        $tokens = Get-GraphTokens -ExternalCall
+                        $auth = "Yes"
+                    } elseif ($answer -eq "no" -or $answer -eq "n") {
+                        Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                        return
+                    } else {
+                        Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                    }
+                }
+            }
+        }    
+        $accesstoken = $tokens.access_token
+        $channelString = $Channel
+        [string]$refreshtoken = $tokens.refresh_token 
+
+        $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
+        $grantType = "refresh_token"
+
+
+        ### addded logic to loop through all teams, to get the teams ID and then the channels and their IDs
+        $access_token = $tokens.access_token   
+        $teamsheaders = @{
+            Authorization  = "Bearer $access_token"
+            "Content-Type" = "application/json"
+            "User-Agent"   = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+        }
+        $teamsResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/me/joinedTeams" -Headers $teamsheaders
+        $channelFound = $false
+
+        foreach ($team in $teamsResponse.value) {
+            $teamId = $team.id
+            $teamName = $team.displayName
+            if (-not $Teams -or $teamName -eq $Teams) {
+                $channelsResponse = Invoke-RestMethod -Headers $teamsheaders -Uri "https://graph.microsoft.com/v1.0/teams/$teamId/channels" -Method Get -ErrorAction Stop
+                foreach ($channelinfo in $channelsResponse.value) {
+                    if ($channelinfo.displayName -eq $Channel) {
+                        Write-Host "Team Name: $teamName"
+                        $channelId = $channelinfo.id
+                        $channelDesc = $channelinfo.Description
+                        $channelName = $channelinfo.displayName
+                        Write-Host "Channel Name: $($channelName)"
+                        Write-Host "Channel Description: $($channelDesc)"
+                        Write-Host "Channel ID: $($channelId)"
+                        $channelFound = $true
+                        break
+                    }
+                }
+                if ($channelFound) {
+                    break 
+                } elseif (-not $Teams) {
+                    continue
+                } else {
+                    Write-Host -ForegroundColor Red "Error: Channel '$Channel' not found in team '$Teams'. Please ensure the channel name is correct."
+                    break
+                }
+            }
+        }
+        if (-not $channelId) {
+            Write-Host -ForegroundColor Red "Error Channel Not found..."
+            Write-Host -ForegroundColor Red "Please ensure the channel name is correct"
+            return
+        }
+
+        $channelResponse2 = Invoke-RestMethod "https://graph.microsoft.com/beta/teams/$teamId/channels/$channelId/members" -Method GET -headers $teamsheaders
+
+        Write-Host -ForegroundColor Yellow  "Number of people in the Channel: $($channelResponse2.'@odata.count')"
+
+        foreach ($channelinfo in $channelResponse2.value) {
+            Write-Host "User: $($channelinfo.displayName)"
+            Write-Host "    Email Address: $($channelinfo.email)"
+            if ($($channelinfo.roles) -eq "owner") {
+                Write-Host -ForegroundColor Yellow "    Channel Role: $($channelinfo.roles)"
+            }
+        }
+}
+
+function Get-ChannelEmail{
+    <#
+    .SYNOPSIS
+        This module enumerates a defined channel for an email address and sets the sender type to Anyone. If there is no email address, it then creates one and sets the sender type to Anyone.
+	Author: Matt Eidelberg (@Tyl0us)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        This module enumerates a defined channel for an email address and sets the sender type to Anyone. If there is no email address, it then creates one and sets the sender type to Anyone.
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+
+    .PARAMETER Channel
+
+        The channel name to set or create the email address for
+  
+    .PARAMETER Teams
+
+        The team name that the channel resides in 
+
+    .EXAMPLE
+        
+        C:\PS> Get-ChannelEmail -Tokens $tokens -Channel "ChannelName" -Teams "TeamName"
+        -----------
+        This module enumerates a defined channel for an email address and sets the sender type to Anyone. If there is no email address, it then creates one and sets the sender type to Anyone.
+
+    #>
+    Param (
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens,
+        [Parameter(Position = 1, Mandatory = $True)]
+        [string]
+        $Channel = "",
+        [Parameter(Position = 2, Mandatory = $False)]
+        [string]
+        $Teams = ""
+        )
+        if(!$Tokens){
+            if ($global:tokens){
+                $tokens = $global:tokens   
+            } else {
+                # Login
+                Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+                while($auth -notlike "Yes"){
+                    Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                    $answer = Read-Host 
+                    $answer = $answer.ToLower()
+                    if ($answer -eq "yes" -or $answer -eq "y") {
+                        Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                        $tokens = Get-GraphTokens -ExternalCall
+                        $auth = "Yes"
+                    } elseif ($answer -eq "no" -or $answer -eq "n") {
+                        Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                        return
+                    } else {
+                        Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                    }
+                }
+            }
+        }    
+        $accesstoken = $tokens.access_token   
+        [string]$refreshtoken = $tokens.refresh_token 
+
+        $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
+        $grantType = "refresh_token"
+
+        $body = @{
+            client_id           = $clientId
+            scope               = $scope
+            grant_type          = $grantType
+            refresh_token       = $refreshToken
+            client_info         = 1
+            "client-request-id" = (New-Guid).ToString()
+        }
+        $response = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$tenantid/oauth2/v2.0/token" -Method Post -ContentType "application/x-www-form-urlencoded;charset=utf-8" -Body $body
+        $token2 = $response.access_token
+
+        $scope2 = "https://api.spaces.skype.com/.default openid profile offline_access"
+        $grantType = "refresh_token"
+
+        $body = @{
+            client_id           = $clientId
+            scope               = $scope2
+            grant_type          = $grantType
+            refresh_token       = $refreshToken
+            client_info         = 1
+            "client-request-id" = (New-Guid).ToString()
+        }
+        $response2 = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$tenantid/oauth2/v2.0/token" -Method Post -ContentType "application/x-www-form-urlencoded;charset=utf-8" -Body $body
+        $SStoken = $response2.access_token
+
+        $headers = @{
+            "Host"             = "outlook.office.com"
+            "Cache-Control"    = "no-cache"
+            "Pragma"           = "no-cache"
+            "Sec-Ch-Ua-Mobile" = "?0"
+            "Authorization"    = "Bearer $token2"
+            "Sstoken"          = "$SStoken"
+            "User-Agent"       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+        }
+
+        $response3 = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/Manage/AuthorizeUsingToken?client=SkypeSpaces" -Method Get -SessionVariable WebSession -headers $headers
+        $url = 'https://outlook.office.com'
+        $WebSession.Headers.Clear()
+
+        $access_token = $tokens.access_token   
+        $teamsheaders = @{
+            Authorization  = "Bearer $access_token"
+            "Content-Type" = "application/json"
+        }
+
+        $teamsResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/me/joinedTeams" -Headers $teamsheaders
+        $channelFound = $false
+
+        foreach ($team in $teamsResponse.value) {
+            $teamId = $team.id
+            $teamName = $team.displayName
+            if (-not $Teams -or $teamName -eq $Teams) {
+                $channelsResponse = Invoke-RestMethod -Headers $teamsheaders -Uri "https://graph.microsoft.com/v1.0/teams/$teamId/channels" -Method Get -ErrorAction Stop
+                foreach ($channelinfo in $channelsResponse.value) {
+                    if ($channelinfo.displayName -eq $Channel) {
+                        $channelId = $channelinfo.id
+                        $channelName = $channelinfo.displayName
+                        Write-Host "Team Name: $teamName"
+                        Write-Host "Channel Name: $($channelName)"
+                        $channelFound = $true
+                        break 
+                    }
+                }
+                if ($channelFound) {
+                    break 
+                } elseif (-not $Teams) {
+                    continue
+                } else {
+                    Write-Host -ForegroundColor Red "Error: Channel '$Channel' not found in team '$Teams'. Please ensure the channel name is correct."
+                    break
+                }
+            }
+        }
+        if (-not $channelId) {
+            Write-Host -ForegroundColor Red "Error Channel Not found..."
+            Write-Host -ForegroundColor Red "Please ensure the channel name is correct"
+            return
+        }
+                $headers2 = @{
+                    "Host"       = "outlook.office.com"
+                    "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                }
+                ### Set the cookie Value you needs to be the team Channel ID
+                $Cookie = New-Object System.Net.Cookie
+                $Cookie.Name = "SkypeSpacesTeamId" 
+                $Cookie.Value = "$channelId" 
+                $Cookie.Domain = "outlook.office.com"
+                $WebSession.Cookies.Add($Cookie)
+
+                $token3 = $response2.access_token
+
+                ###This is where we get a SPECIFIC SkypeSpaceToken that allows us Query the configuration API
+                $headers3 = @{
+                    "Authorization" = "Bearer $token3"
+                    "User-Agent"    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                    "Origin"        = "https://teams.microsoft.com"
+
+                }
+                $response6 = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/authsvc/v1.0/authz" -Method POST -headers $headers3
+                $jsonResponse = $response6.Content | ConvertFrom-Json
+                $skypeToken = $jsonResponse.Tokens.skypeToken
+                [string]$permissions = "" 
+
+            try {
+                Write-Host "Checking Channel for Email Address"
+                    $Channelheader = @{
+                        "Authorization" = "Bearer $token3"
+                        "User-Agent"    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                        "Origin"        = "https://teams.microsoft.com"
+                        "X-Skypetoken"  = "$skypeToken"
+                    }
+
+                    $EmailChannel = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/mt/amer/beta/channels/$channelId/email" -Method GET -headers $Channelheader
+                    $jsonResponse = $EmailChannel.Content | ConvertFrom-Json
+                    Write-Host "Current Channel Settings"
+                    Write-Host "Channel Email: $($jsonResponse.emailAddressDetails.emailId)"
+                    Write-Host "Channel Permissions: $($jsonResponse.allowedSenders.allowedSenderType)"
+                    $permissions = $jsonResponse.allowedSenders
+                }
+                catch {
+                    if ($_.Exception.Response.StatusCode -eq 'NotFound') {
+                        Write-Host -ForegroundColor Yellow "No Channel for Email Address Set"
+                        Write-Host -ForegroundColor Yellow "Creating one..."
+                        $PostChannelheader = @{
+                            "Authorization" = "Bearer $token3"
+                            "X-Skypetoken"  = "$skypeToken"
+                            "User-Agent"    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                            "Content-Type" = "application/json;charset=UTF-8"
+                        }
+                        $body = "{`"allowedSenderType`":`"anyone`",`"allowedDomains`":null}"
+                        $EmailChannel = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/mt/amer/beta/channels/$channelId/email" -Method POST -headers $PostChannelheader -Body $body -ContentType $null
+                        $jsonResponse = $EmailChannel.Content | ConvertFrom-Json
+                        Write-Host "Current Channel Settings"
+                        Write-Host "Channel Email: $($jsonResponse.emailAddressDetails.emailId)"
+                        Write-Host "Channel Permissions: $($jsonResponse.allowedSenders.allowedSenderType)"
+                        $permissions = $jsonResponse.allowedSenders
+                    }
+                    if ($_.Exception.Response.StatusCode -eq 'Unauthorized') {
+                        Write-Host -ForegroundColor Red "Error: Access-Denied"
+                        Write-Host -ForegroundColor Yellow "User has insufficient privileges..."
+                    }
+
+                }
+        if ($jsonResponse.allowedSenders.allowedSenderType -eq "members") {
+                    Write-Host -ForegroundColor Yellow "Email Address Permissions Set to Member"
+                    Write-Host -ForegroundColor Yellow "Changing Email Address Permissions to Anyone"
+                    $SetChannelheader = @{
+                        "Authorization" = "Bearer $token3"
+                        "User-Agent"    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                        "Origin"        = "https://teams.microsoft.com"
+                        "X-Skypetoken"  = "$skypeToken"
+                    }
+                    $body = "{`"allowedSenderType`":`"anyone`",`"allowedDomains`":null}"
+                    $EmailChannel = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/mt/amer/beta/channels/$channelId/email" -Method PUT -headers $SetChannelheader -Body $body 
+                    $EmailChannel = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/mt/amer/beta/channels/$channelId/email" -Method GET -headers $Channelheader
+                    $jsonResponse = $EmailChannel.Content | ConvertFrom-Json
+                    Write-Host "Updated Channel Settings"
+                    Write-Host "Channel Email: $($jsonResponse.emailAddressDetails.emailId)"
+                    Write-Host "Channel Permissions: $($jsonResponse.allowedSenders.allowedSenderType)"
+                }
+}
+function Find-ChannelEmails{
+    <#
+    .SYNOPSIS
+        Author: Matt Eidelberg (@Tyl0us)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        This module enumerates all accessible teams and the channels looking for any email addresses assoicated with them. 
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+
+    .EXAMPLE
+        
+        C:\PS> Find-ChannelEmails -Tokens $tokens 
+        -----------
+        This module  enumerates all accessible teams and the channels looking for any email addresses assoicated with them. 
+    #>
+    Param (
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens
+        )
+        if(!$Tokens){
+            if ($global:tokens){
+                $tokens = $global:tokens   
+            } else {
+                # Login
+                Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+                while($auth -notlike "Yes"){
+                    Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                    $answer = Read-Host 
+                    $answer = $answer.ToLower()
+                    if ($answer -eq "yes" -or $answer -eq "y") {
+                        Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                        $tokens = Get-GraphTokens -ExternalCall
+                        $auth = "Yes"
+                    } elseif ($answer -eq "no" -or $answer -eq "n") {
+                        Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                        return
+                    } else {
+                        Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                    }
+                }
+            }
+        }    
+        $accesstoken = $tokens.access_token
+        $channelString = $Channel
+        [string]$refreshtoken = $tokens.refresh_token 
+
+        $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
+        $grantType = "refresh_token"
+
+        $access_token = $tokens.access_token   
+        $teamsheaders = @{
+            Authorization  = "Bearer $access_token"
+            "Content-Type" = "application/json"
+            "User-Agent"   = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+        }
+        $teamsResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/me/joinedTeams" -Headers $teamsheaders
+        foreach ($team in $teamsResponse.value) {
+            $teamId = $team.id
+            $teamName = $team.displayName
+            $channelsResponse = Invoke-RestMethod -Headers $teamsheaders -Uri "https://graph.microsoft.com/v1.0/teams/$teamId/channels" -Method Get -ErrorAction Stop
+            foreach ($channelinfo in $channelsResponse.value) {
+                    if ($channelinfo.email -ne $null) {
+                    $channelId = $channelinfo.id
+                    $channelDesc = $channelinfo.Description
+                    $channelName = $channelinfo.displayName
+                    $channelEmail = $channelinfo.email
+                    Write-Host "Team Name: $teamName"
+                    Write-Host "Channel Name: $($channelName)"
+                    Write-Host "Channel ID: $($channelId)"
+                    Write-Host "Channel Description: $($channelDesc)"
+                    Write-Host "Channel Email: $($channelEmail)"
+                }
+            }
+        }
+}
+
+
+function Get-Webhooks{
+    <#
+    .SYNOPSIS
+        This module enumerates all accessible channels by looking for any webhooks and their configuration information, including the webhook url. 
+        Author: Matt Eidelberg (@Tyl0us)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        This module enumerates all accessible channels by looking for any webhooks and their configuration information, including the webhook url. 
+
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+  
+    .EXAMPLE
+        
+        C:\PS> Get-Webhooks -Tokens $tokens
+        -----------
+        This module enumerates all accessible channels by looking for any webhooks and their configuration information, including the webhook url. 
+
+    #>
+    Param (
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]
+        $Tokens
+        )
+        if(!$Tokens){
+            if ($global:tokens){
+                $tokens = $global:tokens   
+            } else {
+                # Login
+                Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+                while($auth -notlike "Yes"){
+                    Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                    $answer = Read-Host 
+                    $answer = $answer.ToLower()
+                    if ($answer -eq "yes" -or $answer -eq "y") {
+                        Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                        $tokens = Get-GraphTokens -ExternalCall
+                        $auth = "Yes"
+                    } elseif ($answer -eq "no" -or $answer -eq "n") {
+                        Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                        return
+                    } else {
+                        Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                    }
+                }
+            }
+        }
+            $accesstoken = $tokens.access_token   
+            [string]$refreshtoken = $tokens.refresh_token 
+            
+            $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
+            $grantType = "refresh_token"
+            
+            $body = @{
+                client_id           = $clientId
+                scope               = $scope
+                grant_type          = $grantType
+                refresh_token       = $refreshToken
+                client_info         = 1
+                "client-request-id" = (New-Guid).ToString()
+            }
+            $response = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$tenantid/oauth2/v2.0/token" -Method Post -ContentType "application/x-www-form-urlencoded;charset=utf-8" -Body $body
+            $token2 = $response.access_token
+            
+            $scope2 = "https://api.spaces.skype.com/.default openid profile offline_access"
+            $grantType = "refresh_token"
+            
+            $body = @{
+                client_id           = $clientId
+                scope               = $scope2
+                grant_type          = $grantType
+                refresh_token       = $refreshToken
+                client_info         = 1
+                "client-request-id" = (New-Guid).ToString()
+            }
+            $response2 = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$tenantid/oauth2/v2.0/token" -Method Post -ContentType "application/x-www-form-urlencoded;charset=utf-8" -Body $body
+            $SStoken = $response2.access_token
+            
+            ### Since we are looping through every channel we need to purge these values each time
+            if ($WebSession) {
+                Write-Host "WebSessions exists clearing old data"
+                Remove-Variable -Name WebSession
+                Remove-Variable -Name SuperAwesomeSession
+                Remove-Variable -Name Cookie
+                Remove-Variable -Name Cookie1
+                Remove-Variable -Name tempSessions
+            }
+            else {
+            }
+            
+            $headers = @{
+                "Host"             = "outlook.office.com"
+                "Cache-Control"    = "no-cache"
+                "Pragma"           = "no-cache"
+                "Sec-Ch-Ua-Mobile" = "?0"
+                "Authorization"    = "Bearer $token2"
+                "Sstoken"          = "$SStoken"
+                "User-Agent"       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+            }
+            
+            $response3 = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/Manage/AuthorizeUsingToken?client=SkypeSpaces" -Method Get -SessionVariable WebSession -headers $headers
+            $url = 'https://outlook.office.com'
+            $WebSession.Headers.Clear()
+            
+            $access_token = $tokens.access_token   
+            $teamsheaders = @{
+                Authorization  = "Bearer $access_token"
+                "Content-Type" = "application/json"
+            }
+            $teamsResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/me/joinedTeams" -Headers $teamsheaders
+            
+            foreach ($team in $teamsResponse.value) {
+                $teamId = $team.id
+                Write-Host "Team: $($team.displayName)"
+                Write-Host "TeamID: $($teamId)"
+                $channelsResponse = Invoke-RestMethod -Headers $teamsheaders -Uri "https://graph.microsoft.com/v1.0/teams/$teamId/channels" -Method Get -ErrorAction Stop
+                foreach ($channel in $channelsResponse.value) {
+                    $channelId = $channel.id
+                    Write-Host "  Checking Channel: $($channel.displayName)"
+                    $channelName = $channel.displayName
+                   
+                    $headers2 = @{
+                        "Host"       = "outlook.office.com"
+                        "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                    }
+            
+                    ### Set the cookie Value you needs to be the team Channel ID
+                    $Cookie = New-Object System.Net.Cookie
+                    $Cookie.Name = "SkypeSpacesTeamId"
+                    $Cookie.Value = "$channelId"
+                    $Cookie.Domain = "outlook.office.com"
+                    $WebSession.Cookies.Add($Cookie)
+            
+                    $token3 = $response2.access_token
+            
+            
+                    ### This is where we get a SPECIFIC SkypeSpaceToken that allows us Query the configuration API
+                    $headers3 = @{
+                        "Authorization" = "Bearer $token3"
+                        "User-Agent"    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                        "Origin"        = "https://teams.microsoft.com"
+            
+                    }
+                    $response6 = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/authsvc/v1.0/authz" -Method POST  -headers $headers3
+                    $jsonResponse = $response6.Content | ConvertFrom-Json
+                    $skypeToken = $jsonResponse.Tokens.skypeToken
+            
+            
+                    ### Create a temp copy of the websessions then replace the SkypeSpaceToken for the ConfigurationManager API
+                    $tempSessions = $WebSession
+            
+                    $cookieName = "SkypeSpacesToken" 
+                    $newValue = "$skypeToken" 
+                    $SuperAwesomeSession = New-Object System.Net.CookieContainer
+                    foreach ($cookie in $websession.Cookies.GetCookies($url)) {
+                        if ($cookie.Name -ne "SkypeSpacesToken") {
+                            $SuperAwesomeSession.Add($cookie)
+                        }
+                    }
+            
+                    $webSession.Cookies = $SuperAwesomeSession
+                    $Cookie1 = New-Object System.Net.Cookie
+                    $Cookie1.Name = "SkypeSpacesToken" 
+                    $Cookie1.Value = "$skypeToken"
+                    $Cookie1.Domain = "outlook.office.com"
+                    $tempSessions.Cookies.Add($Cookie1)
+            
+            
+                    $headers4 = @{
+                        "Host"       = "outlook.office.com"
+                        "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                    }
+
+                    ### Need to get the MailBox ID client  
+                    try {
+                        $GetConnectorsConfiginfo = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/Manage/Configurations?MailboxAddress=$teamId%40$tenantid&client=SkypeSpaces&SSThread=$channelId&HostName=teams.microsoft.com&culture=en-us&SSEnv=DM2P&ssChannelName=$channelName&ssApiHost=amer.ng.msg.teams.microsoft.com&iframe=true&SSTheme=default&SSTokenType=SkypeToken&SSFormat=Swift&isDesktopClient=false&enableConnectorApps=tru" -Method Get -WebSession $tempSessions -headers $headers4 -ErrorAction Stop
+                    } catch {
+                        if ($_.Exception.Response.StatusCode -eq 500) {
+                                Write-Host "Retrying in 5 seconds"
+                                Start-Sleep -Seconds 5
+                                $GetConnectorsConfiginfo = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/Manage/Configurations?MailboxAddress=$teamId%40$tenantid&client=SkypeSpaces&SSThread=$channelId&HostName=teams.microsoft.com&culture=en-us&SSEnv=DM2P&ssChannelName=$channelName&ssApiHost=amer.ng.msg.teams.microsoft.com&iframe=true&SSTheme=default&SSTokenType=SkypeToken&SSFormat=Swift&isDesktopClient=false&enableConnectorApps=tru" -Method Get -WebSession $tempSessions -headers $headers4
+                        }
+                    }
+
+                    ### Assuming $GetConnectorsConfiginfo.Content contains the JSON string
+                    $jsonContent = $GetConnectorsConfiginfo.Content | ConvertFrom-Json
+                    if ([string]::IsNullOrEmpty($jsonContent)){
+                        Write-Host -ForegroundColor Red "       No Webhook found in channel"
+                    }
+
+
+                    ### Create an array to store ConnectorConfigurationIds
+                    $connectorConfigurationIds = @()
+            
+                    ### Loop through each ProviderGuid
+                    foreach ($guid in $jsonContent.PSObject.Properties.Name) {
+                        $providerInfo = $jsonContent.$guid
+            
+                        ### Loop through each ConfiguredConnector under this ProviderGuid
+                        foreach ($connector in $providerInfo.ConfiguredConnectors) {
+                            ### Add the ConnectorConfigurationId to the array
+                            $connectorConfigurationIds = $connector.ConnectorConfigurationId
+                  
+                            ### Now we can loop through each ConnectorConfigurationId
+                            foreach ($configId in $connectorConfigurationIds) {
+                                $WebhookinfoResponse = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/IncomingWebhook/Manage/Show?MailboxAddress=$teamId%40$tenantid&client=SkypeSpaces&SSThread=$channelId&HostName=teams.microsoft.com&culture=en-us&ssApiHost=amer.ng.msg.teams.microsoft.com&iframe=true&profileuniquename=$configId" -Method Get -WebSession $WebSession
+            
+                                $pattern = '<button[^>]+onclick="CopyToClipboard\(''webhookUrl'', ''(https://[^'']+)'','
+                                $matches = [regex]::Matches($WebhookinfoResponse.Content, $pattern)
+                                $webhookurls = $matches | ForEach-Object { $_.Groups[1].Value }
+                                if ($webhookurls -ne "") {
+                                    Write-Host "    ChannelID: $($channelId)"
+                                    Write-Host "    Connector Details:"
+                                    Write-Host "        MailboxName: $($connector.MailboxName)"
+                                    Write-Host "        OwnerEmail: $($connector.OwnerEmail)"
+                                    Write-Host "        Description: $($connector.Description)"
+                                    Write-Host "        ConnectorConfigurationId: $($configId)"
+                                    Write-Host "        AddedByDescription: $($connector.AddedByDescription)"
+                                    Write-Host "        CorrectiveAction: $($connector.CorrectiveAction)"
+                                    Write-Host "        IsUpdateAllowedForUser: $($connector.IsUpdateAllowedForUser)"
+                                    Write-Host "        Webhooks: $webhookurls"
+                            }
+                        }
+            
+                    }
+                }
+            }
+        }
+    }
+#}
+
+function Create-Webhook{
+        <#
+        .SYNOPSIS
+            This module creates a webhook in a defined channel and provides the URL.   
+            Author: Matt Eidelberg (@Tyl0us)
+            License: MIT
+            Required Dependencies: None
+            Optional Dependencies: None
+    
+        .DESCRIPTION
+            
+            This module creates a webhook in a defined channel and provides the URL. 
+    
+    
+        .PARAMETER Tokens
+    
+            Pass the $tokens global variable after authenticating to this parameter
+        
+        .PARAMETER Channel
+    
+            The channel name to create the webhook in
+
+        .PARAMETER Teams
+
+            The team name that the channel resides in 
+           
+        .PARAMETER Name
+    
+            The name you want to call the created webhook
+
+        .PARAMETER ConnectorType
+    
+            The the type of connector to use for the webhook (IncomingWebhook, Jira , Jenkins, AzureDevOps)
+      
+        .EXAMPLE
+            
+            C:\PS> Create-Webhook -Tokens $tokens -Channel "Channel Name" -Teams "Team Name" -Name "Evil-Hook" -ConnectorType IncomingWebhook
+            -----------
+             This module creates a webhook in a defined channel and provides the URL.
+    
+        #>
+        Param (
+            [Parameter(Position = 0, Mandatory = $False)]
+            [object[]]
+            $Tokens,
+            [Parameter(Position = 1, Mandatory = $True)]
+            [string]
+            $Channel = "",
+            [Parameter(Position = 2, Mandatory = $False)]
+            [string]
+            $Teams = "",
+            [Parameter(Position = 3, Mandatory = $True)]
+            [string]
+            $Name = "",
+            [Parameter(Position = 4, Mandatory = $True)]
+            [ValidateSet("IncomingWebhook","Jira","Jenkins","AzureDevOps")]
+            [String]$ConnectorType
+            )
+            if(!$Tokens){
+                if ($global:tokens){
+                    $tokens = $global:tokens   
+                } else {
+                    # Login
+                    Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                    Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+                    while($auth -notlike "Yes"){
+                        Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+                        $answer = Read-Host 
+                        $answer = $answer.ToLower()
+                        if ($answer -eq "yes" -or $answer -eq "y") {
+                            Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                            $tokens = Get-GraphTokens -ExternalCall
+                            $auth = "Yes"
+                        } elseif ($answer -eq "no" -or $answer -eq "n") {
+                            Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                            return
+                        } else {
+                            Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+                        }
+                    }
+                }
+            }
+
+        $accesstoken = $tokens.access_token   
+        [string]$refreshtoken = $tokens.refresh_token 
+        $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
+        $grantType = "refresh_token"
+
+        if ($ConnectorType -eq "IncomingWebhook") {
+            $GroupName = "General"
+            $ProviderName = "IncomingWebhook"
+            $connectorurl = "IncomingWebhook"
+        } if ($ConnectorType -eq "Jira") {
+            $GroupName = "$channelName"
+            $ProviderName = "JIRA"
+            $connectorurl = "JIRA"
+        } if ($ConnectorType -eq "Jenkins") {
+            $GroupName = "$channelName"
+            $ProviderName = "JenkinsCI"
+            $connectorurl = "JenkinsCI"
+        }if ($ConnectorType -eq "AzureDevOps") {
+            $GroupName = "$channelName"
+            $ProviderName = "TeamFoundationServer"
+            $connectorurl = "TeamFoundationServer"
+        }
+        Write-Host "Connector Type Selected: $ConnectorType"
+
+        $body = @{
+            client_id           = $clientId
+            scope               = $scope
+            grant_type          = $grantType
+            refresh_token       = $refreshToken
+            client_info         = 1
+            "client-request-id" = (New-Guid).ToString()
+        }
+        $response = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$tenantid/oauth2/v2.0/token" -Method Post -ContentType "application/x-www-form-urlencoded;charset=utf-8" -Body $body
+        $token2 = $response.access_token
+
+        $scope2 = "https://api.spaces.skype.com/.default openid profile offline_access"
+        $grantType = "refresh_token"
+
+        $body = @{
+            client_id           = $clientId
+            scope               = $scope2
+            grant_type          = $grantType
+            refresh_token       = $refreshToken
+            client_info         = 1
+            "client-request-id" = (New-Guid).ToString()
+        }
+        $response2 = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$tenantid/oauth2/v2.0/token" -Method Post -ContentType "application/x-www-form-urlencoded;charset=utf-8" -Body $body
+        $SStoken = $response2.access_token
+
+
+        ###Since we are looping through every channel we need to purge these values each time
+        if ($WebSession) {
+            Write-Host "WebSessions exists clearing old data"
+            $WebSession.Headers.Clear()
+            Remove-Variable -Name WebSession
+            Remove-Variable -Name SuperAwesomeSession
+            Remove-Variable -Name Cookie
+            Remove-Variable -Name Cookie1
+            Remove-Variable -Name tempSessions
+        }
+        else {
+        }
+
+        $headers = @{
+            "Host"             = "outlook.office.com"
+            "Cache-Control"    = "no-cache"
+            "Pragma"           = "no-cache"
+            "Sec-Ch-Ua-Mobile" = "?0"
+            "Authorization"    = "Bearer $token2"
+            "Sstoken"          = "$SStoken"
+            "User-Agent"       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+        }
+
+        $response3 = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/Manage/AuthorizeUsingToken?client=SkypeSpaces" -Method Get -SessionVariable WebSession -headers $headers
+        $url = 'https://outlook.office.com'
+        $WebSession.Headers.Clear()
+
+        ### addded logic to loop through all teams, to get the teams ID and then the channels and their IDs
+        $access_token = $tokens.access_token   
+        $teamsheaders = @{
+            Authorization  = "Bearer $access_token"
+            "Content-Type" = "application/json"
+        }
+        $teamsResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/me/joinedTeams" -Headers $teamsheaders
+        foreach ($team in $teamsResponse.value) {
+            $teamId = $team.id
+            $teamName = $team.displayName
+            if (-not $Teams -or $teamName -eq $Teams) {
+                $channelsResponse = Invoke-RestMethod -Headers $teamsheaders -Uri "https://graph.microsoft.com/v1.0/teams/$teamId/channels" -Method Get -ErrorAction Stop
+                foreach ($channelinfo in $channelsResponse.value) {
+                    if ($channelinfo.displayName -eq $Channel) {
+                        $channelId = $channelinfo.id
+                        $channelName = $channelinfo.displayName
+                        $channelFound = $true
+                        break 
+                    }
+                }
+                if ($channelFound) {
+                    break 
+                } elseif (-not $Teams) {
+                    continue
+                } else {
+                    Write-Host -ForegroundColor Red "Error: Channel '$Channel' not found in team '$Teams'. Please ensure the channel name is correct."
+                    break
+                }
+            }
+        }
+                $channelsResponse = Invoke-RestMethod -Headers $teamsheaders -Uri "https://graph.microsoft.com/v1.0/teams/$teamId/channels" -Method Get -ErrorAction Stop
+                foreach ($channelinfo in $channelsResponse.value) {
+                    if ($channelinfo.displayName -eq "General" ) {
+                        $GeneralchannelId = $channelinfo.id
+                    }
+                }
+                foreach ($channelinfo in $channelsResponse.value) {
+                    if ($channelinfo.displayName -eq $($Channel)) {
+                        $channelId = $channelinfo.id
+                        $channelName = $channelinfo.displayName
+                        Write-Host "Team Name: $($team.displayName)"
+                        $teamId = $team.id
+                        Write-Host "Channel Name: $($channelinfo.displayName)"
+
+                        $headers2 = @{
+                            "Host"       = "outlook.office.com"
+                            "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                        }
+                        ### Set the cookie Value you needs to be the team Channel ID
+                        $Cookie = New-Object System.Net.Cookie
+                        $Cookie.Name = "SkypeSpacesTeamId"
+                        $Cookie.Value = "$channelId" 
+                        $Cookie.Domain = "outlook.office.com"
+                        $WebSession.Cookies.Add($Cookie)
+
+                        $token3 = $response2.access_token
+
+                        ### This is where we get a SkypeSpaceToken that allows us to query the configuration API
+                        $headers3 = @{
+                            "Authorization" = "Bearer $token3"
+                            "User-Agent"    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                            "Origin"        = "https://teams.microsoft.com"
+
+                        }
+                        $response6 = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/authsvc/v1.0/authz" -Method POST -headers $headers3
+                        $jsonResponse = $response6.Content | ConvertFrom-Json
+                        $skypeToken = $jsonResponse.Tokens.skypeToken
+
+                        ### Create a temp copy of the websessions then replace the SkypeSpaceToken for the ConfigurationManager API
+                        $tempSessions = $WebSession
+
+                        $cookieName = "SkypeSpacesToken" 
+                        $newValue = "$skypeToken" 
+                        $SuperAwesomeSession = New-Object System.Net.CookieContainer
+                        foreach ($cookie in $websession.Cookies.GetCookies($url)) {
+                            if ($cookie.Name -ne "SkypeSpacesToken") {
+                                $SuperAwesomeSession.Add($cookie)
+                            }
+                        }
+
+                        $webSession.Cookies = $SuperAwesomeSession
+                        $Cookie1 = New-Object System.Net.Cookie
+                        $Cookie1.Name = "SkypeSpacesToken" 
+                        $Cookie1.Value = "$skypeToken"
+                        $Cookie1.Domain = "outlook.office.com"
+                        $tempSessions.Cookies.Add($Cookie1)
+
+
+
+                        $headers4 = @{
+                            "Host"       = "outlook.office.com"
+                            "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                        }
+                        $WHresponse = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/$connectorurl/Manage/New?MailboxAddress=$teamId%40$tenantid&client=SkypeSpaces&SSThread=$channelId&HostName=teams.microsoft.com&culture=en-us&ssApiHost=amer.ng.msg.teams.microsoft.com&iframe=true&SSTheme=default" -Method Get -WebSession $WebSession -headers $headers4 
+                        $pattern = '<input\s+name="__RequestVerificationToken"\s+type="hidden"\s+value="([^"]+)"'
+                        $matches = [regex]::Matches($WHresponse.Content, $pattern)
+
+                        ### Check if there's at least one match and print the first token value
+                        if ($matches.Count -gt 0) {
+                            $tokenValue = $matches[0].Groups[1].Value
+                        }
+                        else {
+                            Write-Host "Token value not found."
+                        }
+                        $AltIDpattern = 'id="AlternateId" name="AlternateId" type="hidden" value="([^"]+)"'
+                        $AltIDmatches = [regex]::Matches($WHresponse.Content, $AltIDpattern)
+
+                        ### Check if there's at least one match and print the first value
+                        if ($AltIDmatches.Count -gt 0) {
+                            $AltIDvalue = $AltIDmatches[0].Groups[1].Value
+                        }
+                        else {
+                            Write-Host "Alt value not found."
+                        }
+                        
+                        $ForwardToEmailpattern = 'id="ForwardToEmail" name="ForwardToEmail" type="hidden" value="([^"]+)"'
+                        $ForwardToEmailmatches = [regex]::Matches($WHresponse.Content, $ForwardToEmailpattern)
+
+                        ### Check if there's at least one match and print the first email value
+                        if ($ForwardToEmailmatches.Count -gt 0) {
+                            $ForwardToEmailValue = $ForwardToEmailmatches[0].Groups[1].Value
+                        }
+                        else {
+                            Write-Host "Token value not found."
+                        }
+
+                        ### To get the right SkpyeSpaceToken
+                        $WebSession.Headers.Clear()
+                        Remove-Variable -Name tempSessions
+                        Remove-Variable -Name SuperAwesomeSession
+
+                        $tempSessions = $WebSession
+
+                        $cookieName = "SkypeSpacesToken" 
+                        $newValue = "$skypeToken" 
+                        $SuperAwesomeSession = New-Object System.Net.CookieContainer
+                        foreach ($cookie in $websession.Cookies.GetCookies($url)) {
+                            if ($cookie.Name -ne "SkypeSpacesToken") {
+                                $SuperAwesomeSession.Add($cookie)
+                            }
+                        }
+
+                        $webSession.Cookies = $SuperAwesomeSession
+                        $Cookie1 = New-Object System.Net.Cookie
+                        $Cookie1.Name = "SkypeSpacesToken" 
+                        $Cookie1.Value = "$skypeToken"
+                        $Cookie1.Domain = "outlook.office.com"
+                        $tempSessions.Cookies.Add($Cookie1)
+
+
+                        $WebSession.Headers.Clear()
+                        Remove-Variable -Name tempSessions
+                        Remove-Variable -Name SuperAwesomeSession
+        
+                        $tempSessions = $WebSession
+        
+                        $cookieName = "SkypeSpacesTeamId" 
+                        $newValue = "$GeneralchannelId" 
+                        $SuperAwesomeSession = New-Object System.Net.CookieContainer
+                        foreach ($cookie in $websession.Cookies.GetCookies($url)) {
+                            if ($cookie.Name -ne "SkypeSpacesTeamId") {
+                                $SuperAwesomeSession.Add($cookie)
+                            }
+                        }
+        
+                        $webSession.Cookies = $SuperAwesomeSession
+                        $Cookie1 = New-Object System.Net.Cookie
+                        $Cookie1.Name = "SkypeSpacesTeamId" 
+                        $Cookie1.Value = "$GeneralchannelId"
+                        $Cookie1.Domain = "outlook.office.com"
+                        $tempSessions.Cookies.Add($Cookie1)
+
+                        $webhookname= $name
+                        $length = 16
+                        $characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+                        $randomString = -join ((1..$length) | ForEach-Object { Get-Random -InputObject $characters.ToCharArray() })
+                        #Write-Output $randomString
+
+                    
+                        $Creationheaders = @{
+                            "Host"       = "outlook.office.com"
+                            "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
+                        }
+                        $LF = "`r`n";
+                        $boundary = "----WebKitFormBoundary$randomString"
+
+                        $bodyLines = ( 
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"__RequestVerificationToken`"$LF",
+                            "$tokenValue",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"ConnectorConfigurationId`"",
+                            "$LF",    
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"AlternateId`"$LF",
+                            "$AltIDvalue",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"ForwardToEmail`"$LF",
+                            "$ForwardToEmailValue$LF",
+                            "$LF",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"GroupName`"$LF",
+                            "$GroupName",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"IsOwnerOfConfiguration`"$LF",
+                            "True",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"IsNewProfile`"$LF",
+                            "True",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"ProviderName`"$LF",
+                            "$ProviderName",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"IsConnectedAccountsSupported`"$LF",
+                            "False",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"GroupName`"$LF",
+                            "$GroupName",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"AlternateId`"$LF",
+                            "$AltIDvalue",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"IsIncomingWebhookType`"$LF",
+                            "True",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"IsCreateFlow`"$LF",
+                            "False",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"FriendlyName`"$LF",
+                            "$webhookname",
+                            "--$boundary",
+                            "Content-Disposition: form-data; name=`"customImage`"; filename=`"`"",
+                            "Content-Type: application/octet-stream$LF$LF",
+                            "--$boundary--$LF" 
+                        ) -join $LF
+        
+
+                        $webhookcreation = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/$connectorurl/Manage/Create?Client=SkypeSpaces&MailboxAddress=$teamId%40$tenantid&Culture=en-us&HostName=teams.microsoft.com&iFrame=true&SSApiHost=amer.ng.msg.teams.microsoft.com&SSThread=$channelId&SSTheme=default&enableConnectorApps=true&isDesktopClient=false" -Method POST -headers $Creationheaders -ContentType "multipart/form-data; boundary=`"$boundary`"" -Body $bodyLines -WebSession $WebSession
+                        if ($ConnectorType -eq "IncomingWebhook"){
+                            $pattern = '<button[^>]+onclick="CopyToClipboard\(''webhookUrl'', ''(https://[^'']+)'','
+                        } else {
+                            $pattern = '<button[^>]+onclick="CopyToClipboard\(''webhookUrl1'', ''(https://[^'']+)'','
+                        }
+                        $matches = [regex]::Matches($webhookcreation.Content, $pattern)
+
+                        ### Check if there's at least one match and print the first token value
+                        if ($matches.Count -gt 0) {
+                            $Webhook_Address = $matches[0].Groups[1].Value
+                            Write-Host "Webhook Creation Successful"
+                            Write-Host "Webhook Name: $webhookname"
+                            Write-Host "Webhook Address: $Webhook_Address"
+                        }
+                        else {
+                            Write-Host "Error Webhook Address Not Found."
+                        }
+             break
+        }     
+    }
+}
+
+function Send-TeamsMessage{
+    <#
+    .SYNOPSIS
+        This module sends a message using Microsoft Team's webhooks, without needing any authentication. 
+        Author: Matt Eidelberg (@Tyl0us)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+        This module sends a message using Microsoft Team's webhooks, without needing any authentication. 
+
+
+    .PARAMETER webhookUrl
+
+        The full webhook url to use to send a message to. e.g. https://acmedomain.webhook.office.com/... Can also pass a $varible containing the url as well.
+
+    .PARAMETER MessagecardFilePath
+
+        The full path to the message template file you want to send.
+  
+    .EXAMPLE
+        
+        C:\PS> Send-TeamsMessage -webhookUrl $url -MessagecardFilePath .\message.txt
+        -----------
+        This module sends a message using Microsoft Team's webhooks, without needing any authentication.
+
+    #>
+    Param (
+        [Parameter(Position = 0, Mandatory = $True)]
+        [string]
+        $webhookUrl = "",
+        [Parameter(Position = 1, Mandatory = $True)]
+        [string]
+        $MessagecardFilePath = ""
+        )
+       
+        # Read the contents of the file into the $Messagecard variable
+        $Messagecard = Get-Content -Path $MessagecardFilePath | Out-String
+
+        $response = Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $Messagecard -ContentType 'application/json'
+
+        if ($($response) -eq "1") {
+            Write-Host -ForegroundColor Yellow "Message sent"
+        }
+}
+
+
 function Get-TeamsChat{
     <#
     .SYNOPSIS
@@ -6104,6 +7345,17 @@ Invoke-SearchTeams`t`t-`t Can search all Teams messages in all channels that are
 Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory
 Get-Inbox`t`t`t-`t Gets inbox items
 Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
+    "
+    Write-Host -ForegroundColor green "-------------------- Teams Modules -------------------"
+    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor green "Get-TeamsApps`t`t`t-`t This module enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel.
+Get-TeamsChannels`t`t-`t This module enumerates all accessible teams and the channels a user has access to. 
+Find-ChannelEmails`t`t-`t This module enumerates all accessible teams and the channels looking for any email addresses assoicated with them. 
+Get-ChannelUsersEnum`t`t-`t This module enumerates a defined channel to see how many people are in a channel and who they are.
+Get-ChannelEmail`t`t-`t This module enumerates a defined channel for an email address and sets the sender type to Anyone. If there is no email address create one and sets the sender type to Anyone.
+Get-Webhooks`t`t`t-`t This module enumerates all accessible channels looking for any webhooks and their configuration information, including its the url.
+Create-Webhook`t`t`t-`t This module creates a webhook in a defined channel and provides the URL.
+Send-TeamsMessage`t`t-`t This module sends a message using Microsoft Team's webhooks, without needing any authentication
     "
     Write-Host -ForegroundColor green "--------------------- GraphRunner Module ----------------------"
     Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
