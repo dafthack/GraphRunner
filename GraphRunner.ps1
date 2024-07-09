@@ -7497,7 +7497,7 @@ Invoke-SearchMailbox`t`t-`t Has the ability to do deep searches across a user’
 Invoke-SearchTeams`t`t-`t Can search all Teams messages in all channels that are readable by the current user.
 Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory
 Get-Inbox`t`t`t-`t Gets inbox items
-Invoke-CreateInboxForwardingRule`t`t`t-`t Creates a 
+Invoke-CreateInboxForwardingRule -`t Creates an inbox forwarding rule that forwards all emails matching a specified term to an email address. 
 Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
     "
     Write-Host -ForegroundColor green "-------------------- Teams Modules -------------------"
