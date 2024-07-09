@@ -1536,7 +1536,7 @@ Function Invoke-CreateInboxForwardingRule {
             if ($answer -eq "yes" -or $answer -eq "y") {
                 Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
                 # Using the Teams client ID to get a token scoped to MailboSettings.ReadWrite
-                $tokens = Get-GraphTokens -ExternalCall -Client "Custom" -ClientID "1fec8e78-bce4-4aaf-ab1b-5451cc387264" -Browser $Browser -Device $Device
+                $tokens = Get-GraphTokens -ExternalCall -Client "Custom" -ClientID "1fec8e78-bce4-4aaf-ab1b-5451cc387264"
                 $auth = "Yes"
             }
             elseif ($answer -eq "no" -or $answer -eq "n") {
