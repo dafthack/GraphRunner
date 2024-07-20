@@ -2942,6 +2942,125 @@ function Get-TeamsChat{
     }
 }
 
+
+function Invoke-BlockedPasswordPol {
+    <#
+    .SYNOPSIS
+        Retrieves the Blocked Password Policy and lists any blocked passwords
+        Author: Ocel0t
+        License: MIT
+        Required Dependencies: Az.Accounts
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        Retrieves the Blocked Password Policy and lists any blocked passwords. Does need to Connect-AzAccount to get the Portal Token,
+	Tried doing it with GRAPH and ran into issues with the Audience or would 403. 
+
+    .EXAMPLES
+        C:\PS> Invoke-BlockedPasswordPol 
+    #>
+    Param(
+        [Parameter(Position = 0, Mandatory = $False)]
+        [object[]]$Tokens = ""
+    )
+
+    if ($Tokens) {
+        Write-Host -ForegroundColor Yellow "[*] Using the provided access tokens."
+    } else {
+        # Login
+        Write-Host -ForegroundColor Yellow "[*] First, you need to login."
+        Write-Host -ForegroundColor Yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+        while ($auth -notlike "Yes") {
+            Write-Host -ForegroundColor Cyan "[*] Do you want to authenticate now (yes/no)?"
+            $answer = Read-Host
+            $answer = $answer.ToLower()
+            if ($answer -eq "yes" -or $answer -eq "y") {
+                Write-Host -ForegroundColor Yellow "[*] Running Get-GraphTokens now..."
+                $tokens = Get-GraphTokens -ExternalCall
+                $auth = "Yes"
+            } elseif ($answer -eq "no" -or $answer -eq "n") {
+                Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                return
+            } else {
+                Write-Host -ForegroundColor Red "Invalid input. Please enter Yes or No."
+            }
+        }
+    }
+
+    try {
+        # Set the Resource to the Azure Portal (main.iam.ad.ext.azure.com)
+        $resource = '74658136-14ec-4630-ad9b-26e160ff0fc6'
+
+        # Get the current Azure context
+        $currentAzureContext = Get-AzContext
+        if (-not $currentAzureContext) {
+            Write-Host -ForegroundColor Yellow "[*] No active Azure context found. Logging in..."
+            Connect-AzAccount
+            $currentAzureContext = Get-AzContext
+            if (-not $currentAzureContext) {
+                Write-Host -ForegroundColor Red "Failed to get an active Azure context. Exiting..."
+                return
+            }
+        }
+
+        # Get the token for the Azure Portal
+        $PortalToken = [Microsoft.Azure.Commands.Common.Authentication.AzureSession]::Instance.AuthenticationFactory.Authenticate(
+            $currentAzureContext.Account,
+            $currentAzureContext.Environment,
+            $currentAzureContext.Tenant.Id.ToString(),
+            $null,
+            [Microsoft.Azure.Commands.Common.Authentication.ShowDialog]::Never,
+            $null,
+            $resource
+        ).AccessToken
+
+        if (-not $PortalToken) {
+            Write-Host -ForegroundColor Red "Failed to get a token for the specific resource. Exiting..."
+            return
+        }
+
+        # Define the URI for the API call
+        $uri = 'https://main.iam.ad.ext.azure.com/api/AuthenticationMethods/PasswordPolicy'
+
+        # Define the headers with the acquired token
+        $headers = @{
+            'Authorization' = "Bearer $PortalToken"
+            'Host' = 'main.iam.ad.ext.azure.com'
+            'X-Ms-Client-Session-Id' = '96df58d08c6c4e65a09db0ef9c2fa7cc'
+            'X-Ms-Command-Name' = 'AuthenticationMethods - GetPasswordPolicy'
+            'Accept-Language' = 'en'
+            'X-Ms-Effective-Locale' = 'en.en-us'
+            'Content-Type' = 'application/json'
+            'Accept' = '*/*'
+            'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.127 Safari/537.36'
+            'X-Ms-Client-Request-Id' = 'e32db59b-b100-49ce-a8d6-590145143001'
+            'Origin' = 'https://portal.azure.com'
+            'Sec-Fetch-Site' = 'same-site'
+            'Sec-Fetch-Mode' = 'cors'
+            'Sec-Fetch-Dest' = 'empty'
+            'Accept-Encoding' = 'gzip, deflate, br'
+            'Priority' = 'u=1, i'
+        }
+
+        # Send the request to the API
+        Write-Host -ForegroundColor Yellow "Sending request to URI: $uri"
+        $response = Invoke-RestMethod -Uri $uri -Method Get -Headers $headers
+
+        # Print the entire response
+        Write-Host "Successfully retrieved the password policy."
+        $response | Format-List -Property *
+
+        # Expand and print the customBannedPasswords field
+        if ($response.customBannedPasswords) {
+            Write-Host "Custom Banned Passwords:"
+            $response.customBannedPasswords | ForEach-Object { Write-Host $_ }
+        }
+
+    } catch {
+        Write-Error "Failed to retrieve the password policy: $_"
+    }
+}
+
 Function Get-AzureADUsers{
     <#
     .SYNOPSIS
