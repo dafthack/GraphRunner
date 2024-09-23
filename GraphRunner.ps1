@@ -6413,10 +6413,9 @@ function Invoke-SearchSharePointAndOneDrive{
 
         while ($done -ne $true) {
             if ($done -eq "yes") {
-                Write-Host -ForegroundColor Cyan "[*] Do you want to download any more files? (Yes/No)"
+                Write-Host -ForegroundColor Cyan "[*] Do you want to download any more files? (Yes/No/All)"
                 $anotherDownload = Read-Host
                 $anotherDownload = $anotherDownload.ToLower()
-
                 if ($anotherDownload -eq "yes" -or $anotherDownload -eq "y") {
                     Write-Host -ForegroundColor Cyan '[*] Enter the result number(s) of the file(s) that you want to download. Ex. "0,10,24"'
                     $resulttodownload = Read-Host
@@ -6429,11 +6428,17 @@ function Invoke-SearchSharePointAndOneDrive{
                     Write-Output "[*] Quitting..."
                     $done = $true
                     break
+                } elseif ($answer -eq "all") {
+                    Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
+                        for ($res=0; $res -lt $itemnumber; $res++){
+                            $specificfileinfo = $resultarray[$res]
+                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                        }
                 } else {
                     Write-Output "Invalid input. Please enter Yes or No."
                 }
             } else {
-                Write-Host -ForegroundColor Cyan "[*] Do you want to download any of these files? (Yes/No)"
+                Write-Host -ForegroundColor Cyan "[*] Do you want to download any of these files? (Yes/No/All)"
                 $answer = Read-Host
                 $answer = $answer.ToLower()
 
@@ -6450,6 +6455,14 @@ function Invoke-SearchSharePointAndOneDrive{
                     Write-Output "[*] Quitting..."
                     $done = $true
                     break
+
+                } elseif ($answer -eq "all") {
+                    $done = "yes"
+                    Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
+                        for ($res=0; $res -lt $itemnumber; $res++){
+                            $specificfileinfo = $resultarray[$res]
+                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                        }
                 } else {
                     Write-Output "Invalid input. Please enter Yes or No."
                 }
