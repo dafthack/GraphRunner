@@ -818,24 +818,32 @@ function Invoke-ImmersiveFileReader{
         $FileID,
         [Parameter(Mandatory = $False)]
         [object[]]
-        $Tokens
-    )
-    if ($Device) {
-        if ($Browser) {
-            $UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+        $Tokens,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+        [String]$Device,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+        [String]$Browser
+        )
+        if ($Device) {
+            if ($Browser) {
+                $UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+            }
+            else {
+                $UserAgent = Invoke-ForgeUserAgent -Device $Device
+            }
         }
         else {
-            $UserAgent = Invoke-ForgeUserAgent -Device $Device
+           if ($Browser) {
+                $UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+           } 
+           else {
+                $UserAgent = Invoke-ForgeUserAgent
+           }
         }
-    }
-    else {
-        if ($Browser) {
-            $UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-        } 
-        else {
-            $UserAgent = Invoke-ForgeUserAgent
-        }
-    }
+        $Headers=@{}
+        $Headers["User-Agent"] = $UserAgent
     if($Tokens){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
     }
@@ -859,13 +867,10 @@ function Invoke-ImmersiveFileReader{
                 }
             }
     }
-
-    $Headers=@{}
-    $Headers["User-Agent"] = $UserAgent
     $Headers["Host"] = 'southcentralus1-mediap.svc.ms'
     $Headers["Accept-Language"] = "en-US"
     
-    Invoke-RefreshToSharePointToken -domain $SharePointDomain -ClientId "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0" -Tokens $tokens
+    Invoke-RefreshToSharePointToken -domain $SharePointDomain -ClientId "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0" -Tokens $tokens -Device $Device -Browser $Browser
    
     try {
         $request = Invoke-WebRequest -UseBasicParsing -Headers $Headers -Method GET -Uri "https://southcentralus1-mediap.svc.ms/transform/imreader?provider=spo&inputFormat=txt&cs=fFNQTw&docid=https%3A%2F%2F$($SharePointDomain)%3A443%2F_api%2Fv2.0%2Fdrives%2F$($DriveID)%2Fitems%2F$($FileID)%3Fversion%3DPublished&access_token=$($global:SharePointToken.access_token)&nocache=true"
@@ -2975,13 +2980,39 @@ Function Get-AzureADUsers{
     [Parameter(Position = 0, Mandatory = $true)]
     [object[]]
     $Tokens = "",
-    [Parameter(Position = 1, Mandatory = $true)]
+    [Parameter(Mandatory=$false)]
+    [string]$Resource = "https://graph.microsoft.com/",
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device = "Windows",
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser = "Edge",
+    [Parameter(Mandatory=$False)]
+    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",  
+    [Parameter(Mandatory = $true)]
     [string]
-    $outfile = "",
+    $outfile = "AzureADUsers.log",
     [switch]
     $GraphRun
     )
     $access_token = $tokens.access_token
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if(!$GraphRun){
     Write-Host "[*] Gathering the users from the tenant."
     }
@@ -2989,7 +3020,12 @@ Function Get-AzureADUsers{
     $userlist = @()
     do{
         try{
-		$request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri $usersEndpoint -Headers @{"Authorization" = "Bearer $access_token"}
+            $Headers = @{
+                "Authorization" = "Bearer $access_token"
+                "User-Agent" = $UserAgent
+            }
+
+		    $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri $usersEndpoint -Headers $Headers
         }catch {
 		if($_.Exception.Response.StatusCode.value__ -match "429"){
                 Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
@@ -4806,11 +4842,37 @@ function Invoke-GraphRecon{
         [Parameter(Position = 0, Mandatory = $False)]
         [object[]]
         $Tokens = "",
+        [Parameter(Mandatory=$false)]
+        [string]$Resource = "https://graph.microsoft.com/",
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+        [String]$Device,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+        [String]$Browser,
+        [Parameter(Mandatory=$False)]
+        [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
         [switch]
         $GraphRun,
         [switch]
         $PermissionEnum
     )
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if($Tokens){
         if(!$GraphRun){
             Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
@@ -6270,9 +6332,30 @@ function Invoke-SearchSharePointAndOneDrive{
     [switch]
     $PageResults,
     [switch]
-    $GraphRun
+    $GraphRun,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser
     )
-
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if($Tokens){
         #Suppressing output if GraphRun module is used
         if (!$GraphRun){
@@ -6308,6 +6391,7 @@ function Invoke-SearchSharePointAndOneDrive{
     $headers = @{
     "Authorization" = "Bearer $access_token"
     "Content-Type" = "application/json"
+    "User-Agent" = $UserAgent
     }
 
     # Define the search query
@@ -6422,7 +6506,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     $resultstodl = $resulttodownload.split(",")
                     foreach ($res in $resultstodl){
                         $specificfileinfo = $resultarray[$res]
-                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
                     }
                 } elseif ($anotherDownload -eq "no" -or $anotherDownload -eq "n") {
                     Write-Output "[*] Quitting..."
@@ -6432,7 +6516,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
                         for ($res=0; $res -lt $itemnumber; $res++){
                             $specificfileinfo = $resultarray[$res]
-                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
                         }
                 } else {
                     Write-Output "Invalid input. Please enter Yes or No."
@@ -6931,7 +7015,17 @@ function Invoke-GraphRunner{
     [Parameter(Position = 0, Mandatory = $false)]
     [object[]]
     $Tokens = "",
-    [Parameter(Position = 1, Mandatory = $false)]
+    [Parameter(Mandatory=$false)]
+    [string]$Resource = "https://graph.microsoft.com/",
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device = "Windows",
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser = "Edge",
+    [Parameter(Mandatory=$False)]
+    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+    [Parameter(Mandatory = $false)]
     [string]
     $DetectorFile = ".\default_detectors.json",
     [switch]
@@ -6951,7 +7045,6 @@ function Invoke-GraphRunner{
     [switch]
     $DisableTeams
     )
-    
     if($Tokens){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
     }
@@ -6987,19 +7080,19 @@ function Invoke-GraphRunner{
     # GraphRecon
     if(!$DisableRecon){
         Write-Host -ForegroundColor yellow "[*] Now running Invoke-GraphRecon."
-        Invoke-GraphRecon -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$folderName\recon.txt"
+        Invoke-GraphRecon -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun | Out-File -Encoding ascii "$folderName\recon.txt"
     }
 
     # Users
     if(!$DisableUsers){
         Write-Host -ForegroundColor yellow "[*] Now getting all users"
-        Get-AzureADUsers -Tokens $tokens -GraphRun -outfile "$folderName\users.txt"
+        Get-AzureADUsers -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun -outfile "$folderName\users.txt"
     }
 
     # Groups
     if(!$DisableGroups){
         Write-Host -ForegroundColor yellow "[*] Now getting all groups"
-        Get-SecurityGroups -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
+        Get-SecurityGroups -Tokens $tokens -ClientID $ClientID -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
     }
 
     # CAPS
