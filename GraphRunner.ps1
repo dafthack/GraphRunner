@@ -6533,7 +6533,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     $resultstodl = $resulttodownload.split(",")
                     foreach ($res in $resultstodl){
                         $specificfileinfo = $resultarray[$res]
-                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
                     }
                 } elseif ($answer -eq "no" -or $answer -eq "n") {
                     Write-Output "[*] Quitting..."
@@ -6545,7 +6545,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
                         for ($res=0; $res -lt $itemnumber; $res++){
                             $specificfileinfo = $resultarray[$res]
-                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
                         }
                 } else {
                     Write-Output "Invalid input. Please enter Yes or No."
@@ -6597,16 +6597,39 @@ function Invoke-DriveFileDownload{
     $DriveItemIDs = "",
     [Parameter(Position = 2, Mandatory = $true)]
     [string]
-    $FileName = ""
+    $FileName = "",
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser
     )
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     $access_token = $tokens.access_token
     $itemarray = $driveitemids.split(":")
     $downloadUrl = ("https://graph.microsoft.com/v1.0/drives/" + $itemarray[0] + "/items/" + $itemarray[1] + "/content")
     $downloadheaders = @{
     "Authorization" = "Bearer $access_token"
+    "User-Agent" = $UserAgent
     }
     Write-Host -ForegroundColor yellow "[*] Now downloading $FileName"
-    Invoke-RestMethod -Uri $downloadUrl -Headers $downloadheaders -OutFile $filename
+    Invoke-RestMethod -Uri $downloadUrl -Headers $downloadheaders -OutFile $filename -Device $Device -Browser $Browser -$headers
 }
 
 
