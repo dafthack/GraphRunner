@@ -3105,10 +3105,30 @@ Function Invoke-DumpCAPS{
     [object[]]
     $Tokens = "",
     [switch]
-    $GraphRun
-
+    $GraphRun,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser
     )
-
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if($Tokens){
         if(!$GraphRun){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
@@ -3119,6 +3139,7 @@ Function Invoke-DumpCAPS{
         $refreshbody = @{
                 "resource" = "https://graph.windows.net/"
                 "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+                "User-Agent" = $UserAgent
                 "grant_type" =    "refresh_token"
                 "refresh_token" = $RefreshToken
                 "scope"=         "openid"
@@ -3145,7 +3166,6 @@ Function Invoke-DumpCAPS{
             "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
             "resource" =      "https://graph.windows.net/"
         }
-        $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
         $Headers=@{}
         $Headers["User-Agent"] = $UserAgent
         $authResponse = Invoke-RestMethod `
@@ -3192,6 +3212,7 @@ Function Invoke-DumpCAPS{
 
     $HeadersAuth = @{
         Authorization = "Bearer $access_token"
+        "User-Agent" = $UserAgent
     }
 
     $CAPSUrl = "https://graph.windows.net/$tenantid/policies?api-version=1.61-internal"
@@ -7115,7 +7136,7 @@ function Invoke-GraphRunner{
     # Groups
     if(!$DisableGroups){
         Write-Host -ForegroundColor yellow "[*] Now getting all groups"
-        Get-SecurityGroups -Tokens $tokens -ClientID $ClientID -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
+        Get-SecurityGroups -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
     }
 
     # CAPS
