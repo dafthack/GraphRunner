@@ -7048,6 +7048,54 @@ function Invoke-GraphRunner{
 
         A json file containing KQL queries. See the default_detectors.json file in the repo as an example.
 
+    .PARAMETER Resource
+        Specifies the Microsoft Graph resource URL. Default is "https://graph.microsoft.com/".
+
+    .PARAMETER Device
+        Indicates the device type for user agent string. Options are: Mac, Windows, AndroidMobile, iPhone. Default is Windows.
+
+    .PARAMETER Browser
+        Specifies the browser type for user agent string. Options include: Android, IE, Chrome, Firefox, Edge, Safari. Default is Edge.
+
+    .PARAMETER ClientID
+        The Client ID for authentication. Default is set to "d3590ed6-52b3-4102-aeff-aad2292ab01c".
+
+    .PARAMETER DisableRecon
+        If set, disables Graph Reconnaissance.
+
+    .PARAMETER DisableUsers
+        If set, disables Azure AD user enumeration.
+
+    .PARAMETER DisableGroups
+        If set, disables security group enumeration.
+
+    .PARAMETER DisableCAPS
+        If set, disables CAPS data dumping.
+
+    .PARAMETER DisableApps
+        If set, disables application enumeration.
+
+    .PARAMETER DisableEmail
+        If set, disables email search.
+
+    .PARAMETER DisableSharePoint
+        If set, disables SharePoint and OneDrive search.
+
+    .PARAMETER DisableTeams
+        If set, disables Teams search.
+
+    .PARAMETER Delay
+        Adds a delay between operations in milliseconds. Valid range is 0-10000.
+
+    .PARAMETER Jitter
+        Adds variability to the delay. Must be between 0.0 and 1.0.
+
+    .EXAMPLE
+        C:\PS> Invoke-GraphRunner -Tokens $tokens
+        -----------
+        Runs through the account with many of the enumeration and pillage modules using the default_detectors.json file.
+#>
+
     .EXAMPLE
         
         C:\PS> Invoke-GraphRunner -Tokens $tokens
@@ -7087,7 +7135,13 @@ function Invoke-GraphRunner{
     [switch]
     $DisableSharePoint,
     [switch]
-    $DisableTeams
+    $DisableTeams,
+    [ValidateRange(0,10000)]
+    [Int]
+    $Delay = 0,
+    [ValidateRange(0.0, 1.0)]
+    [Double]
+    $Jitter = .3
     )
     if($Tokens){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
@@ -7126,31 +7180,36 @@ function Invoke-GraphRunner{
         Write-Host -ForegroundColor yellow "[*] Now running Invoke-GraphRecon."
         Invoke-GraphRecon -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun | Out-File -Encoding ascii "$folderName\recon.txt"
     }
-
+    # sleep for our semi-randomized interval
+    Start-Sleep -Seconds $RandNo.Next((1-$Jitter)*$Delay, (1+$Jitter)*$Delay)
     # Users
     if(!$DisableUsers){
         Write-Host -ForegroundColor yellow "[*] Now getting all users"
         Get-AzureADUsers -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun -outfile "$folderName\users.txt"
     }
-
+    # sleep for our semi-randomized interval
+    Start-Sleep -Seconds $RandNo.Next((1-$Jitter)*$Delay, (1+$Jitter)*$Delay)
     # Groups
     if(!$DisableGroups){
         Write-Host -ForegroundColor yellow "[*] Now getting all groups"
         Get-SecurityGroups -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
     }
-
+    # sleep for our semi-randomized interval
+    Start-Sleep -Seconds $RandNo.Next((1-$Jitter)*$Delay, (1+$Jitter)*$Delay)
     # CAPS
     if(!$DisableCAPS){
         Write-Host -ForegroundColor yellow "[*] Now getting conditional access policies"
         Invoke-DumpCAPS -Tokens $tokens -ResolveGuids -GraphRun | Out-File -Encoding ascii "$folderName\caps.txt"
     }
-
+    # sleep for our semi-randomized interval
+    Start-Sleep -Seconds $RandNo.Next((1-$Jitter)*$Delay, (1+$Jitter)*$Delay)
     # Apps
     if(!$DisableApps){
         Write-Host -ForegroundColor yellow "[*] Now getting applications"
         Invoke-DumpApps -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$foldername\apps.txt"
     }
-
+    # sleep for our semi-randomized interval
+    Start-Sleep -Seconds $RandNo.Next((1-$Jitter)*$Delay, (1+$Jitter)*$Delay)
     # Email
     if(!$DisableEmail){
         $mailout = "$folderName\interesting-mail.csv"
@@ -7160,7 +7219,8 @@ function Invoke-GraphRunner{
             Invoke-SearchMailbox -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -MessageCount 500 -OutFile $mailout -GraphRun -PageResults
         }
     }
-    
+    # sleep for our semi-randomized interval
+    Start-Sleep -Seconds $RandNo.Next((1-$Jitter)*$Delay, (1+$Jitter)*$Delay)
     # SharePoint and OneDrive Tests
     if(!$DisableSharePoint){
         $spout = "$folderName\interesting-files.csv"
@@ -7170,7 +7230,8 @@ function Invoke-GraphRunner{
             Invoke-SearchSharePointAndOneDrive  -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -PageResults -ResultCount 500 -ReportOnly -OutFile $spout -GraphRun
         }
     }
-    
+    # sleep for our semi-randomized interval
+    Start-Sleep -Seconds $RandNo.Next((1-$Jitter)*$Delay, (1+$Jitter)*$Delay)
     # Teams
     if(!$DisableTeams){
         $teamsout = "$folderName\interesting-teamsmessages.csv"
