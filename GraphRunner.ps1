@@ -7095,14 +7095,6 @@ function Invoke-GraphRunner{
         -----------
         Runs through the account with many of the enumeration and pillage modules using the default_detectors.json file.
 #>
-
-    .EXAMPLE
-        
-        C:\PS> Invoke-GraphRunner -Tokens $tokens
-        -----------
-        Runs through the account with many of the enumeration and pillage modules using the default_detectors.json file.
-    #>
-
     param(
     [Parameter(Position = 0, Mandatory = $false)]
     [object[]]
