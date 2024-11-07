@@ -6356,10 +6356,10 @@ function Invoke-SearchSharePointAndOneDrive{
     $GraphRun,
     [Parameter(Mandatory=$False)]
     [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
-    [String]$Device,
+    [String]$Device = 'Windows',
     [Parameter(Mandatory=$False)]
     [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
-    [String]$Browser
+    [String]$Browser = 'Edge'
     )
     if ($Device) {
 		if ($Browser) {
@@ -6527,7 +6527,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     $resultstodl = $resulttodownload.split(",")
                     foreach ($res in $resultstodl){
                         $specificfileinfo = $resultarray[$res]
-                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
+                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
                     }
                 } elseif ($anotherDownload -eq "no" -or $anotherDownload -eq "n") {
                     Write-Output "[*] Quitting..."
@@ -6537,7 +6537,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
                         for ($res=0; $res -lt $itemnumber; $res++){
                             $specificfileinfo = $resultarray[$res]
-                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
+                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
                         }
                 } else {
                     Write-Output "Invalid input. Please enter Yes or No."
@@ -6554,7 +6554,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     $resultstodl = $resulttodownload.split(",")
                     foreach ($res in $resultstodl){
                         $specificfileinfo = $resultarray[$res]
-                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
+                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
                     }
                 } elseif ($answer -eq "no" -or $answer -eq "n") {
                     Write-Output "[*] Quitting..."
@@ -6566,7 +6566,7 @@ function Invoke-SearchSharePointAndOneDrive{
                     Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
                         for ($res=0; $res -lt $itemnumber; $res++){
                             $specificfileinfo = $resultarray[$res]
-                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser -$headers
+                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
                         }
                 } else {
                     Write-Output "Invalid input. Please enter Yes or No."
@@ -6650,7 +6650,7 @@ function Invoke-DriveFileDownload{
     "User-Agent" = $UserAgent
     }
     Write-Host -ForegroundColor yellow "[*] Now downloading $FileName"
-    Invoke-RestMethod -Uri $downloadUrl -Headers $downloadheaders -OutFile $filename -Device $Device -Browser $Browser -$headers
+    Invoke-RestMethod -Uri $downloadUrl -Headers $downloadheaders -OutFile $filename
 }
 
 
