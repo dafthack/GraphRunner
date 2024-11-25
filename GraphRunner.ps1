@@ -3605,6 +3605,209 @@ Function Invoke-DumpApps{
         }
 }
 
+function Get-DirectoryRoles{
+    <#
+    .SYNOPSIS
+
+        Gather the Administrative directory roles and members from the microsoft EntraId      
+        Author: Roman Delgado (@romisfrag)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+        
+       Gather the Administrative roles (builtins and customs) from the microsoft EntraId and their members
+
+    .PARAMETER AccessToken
+
+        Pass the $tokens.access_token global variable after authenticating to this parameter
+
+    .PARAMETER OutputFile
+
+        The path to the CSV file where the Administrative directory roles and members will be exported.
+
+    .EXAMPLE
+        
+        C:\PS> Get-DirectoryRoles -Tokens $tokens -OutputFile "directory_roles.csv"
+        -----------
+        This will dump all security groups to the specified CSV file.
+        -----------
+    #>
+    param (
+        [Parameter(Mandatory = $False)]
+        [object] $Tokens,
+        [Parameter(Mandatory = $False)]
+        [string] $OutputFile = "directory_roles.csv", # Default value is "directory_roles.csv"
+        [Parameter(Mandatory = $False)]
+        [switch] $BuiltIns,
+        [Parameter(Mandatory = $False)]
+        [switch] $Customs,
+        [Parameter(Mandatory = $False)]
+        [switch] $GraphRun,
+        [Parameter(Mandatory = $False)]
+        [string] $RefreshToken,
+        [Parameter(Mandatory = $False)]
+        [string] $tenantid = $global:tenantid,
+        [Parameter(Mandatory = $False)]
+        [ValidateSet("Yammer", "Outlook", "MSTeams", "Graph", "AzureCoreManagement", "AzureManagement", "MSGraph", "DODMSGraph", "Custom", "Substrate")]
+        [String[]] $Client = "MSGraph",
+        [Parameter(Mandatory = $False)]
+        [String] $ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
+        [Parameter(Mandatory = $False)]
+        [String] $Resource = "https://graph.microsoft.com",
+        [Parameter(Mandatory = $False)]
+        [ValidateSet('Mac', 'Windows', 'AndroidMobile', 'iPhone')]
+        [String] $Device = "Windows",
+        [Parameter(Mandatory = $False)]
+        [ValidateSet('Android', 'IE', 'Chrome', 'Firefox', 'Edge', 'Safari')]
+        [String] $Browser = "Edge", # Default value is "Edge"
+        [Parameter(Mandatory = $False)]
+        [switch] $AutoRefresh,
+        [Parameter(Mandatory = $False)]
+        $RefreshInterval = (60 * 10) # 10 minutes
+    )
+
+    if ($Tokens) {
+        if (!$GraphRun) {
+            Write-Host -ForegroundColor Yellow "[*] Using the provided access tokens."
+        }
+    } else {
+        # Login
+        Write-Host -ForegroundColor Yellow "[*] First, you need to log in."
+        Write-Host -ForegroundColor Yellow "[*] If you already have tokens, you can use the -Tokens parameter to pass them to this function."
+        while ($auth -notlike "Yes") {
+            Write-Host -ForegroundColor Cyan "[*] Do you want to authenticate now (yes/no)?"
+            $answer = Read-Host
+            $answer = $answer.ToLower()
+            if ($answer -eq "yes" -or $answer -eq "y") {
+                Write-Host -ForegroundColor Yellow "[*] Running Get-GraphTokens now..."
+                $tokens = Get-GraphTokens -ExternalCall
+                $auth = "Yes"
+            } elseif ($answer -eq "no" -or $answer -eq "n") {
+                Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                return
+            } else {
+                Write-Host -ForegroundColor Red "Invalid input. Please enter Yes or No."
+            }
+        }
+    }
+    
+    $accessToken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
+    $headers = @{
+        Authorization = "Bearer $accessToken"
+    }
+    
+    if (!$GraphRun) {
+        Write-Host -ForegroundColor Yellow "[*] Retrieving a list of directory_roles and their members from the directory..."
+    }
+    
+    $graphApiUrl = "https://graph.microsoft.com/v1.0"
+    $directoryRolesUrl = "$graphApiUrl/roleManagement/directory/roleDefinitions"
+    
+    $directoryRoleWithMemberIDs = @()
+    $startTime = Get-Date
+    $refresh_Interval = [TimeSpan]::FromSeconds($RefreshInterval)
+
+    
+    do {
+        try {
+            $directoryRolesResponse = Invoke-RestMethod -Uri $directoryRolesUrl -Headers $headers -Method Get
+            $directoryRoles = $directoryRolesResponse.value
+        } catch {
+            Write-Host -ForegroundColor Red "[*] An error occurred while retrieving directory roles: $($_.Exception.Message)"
+            return
+        }
+
+        foreach ($directoryRole in $directoryRoles) {
+            if ((Get-Date) - $startTime -ge $refresh_interval) {
+                Write-Host -ForegroundColor Yellow "[*] Pausing script for token refresh..."
+                $reftokens = Invoke-RefreshGraphTokens -RefreshToken $refreshToken -AutoRefresh -tenantid $global:tenantid -Resource $Resource -Client $Client -ClientID $ClientID -Browser $Browser -Device $Device
+                $accessToken = $reftokens.access_token
+                [string]$refreshToken = $reftokens.refresh_token
+                $headers = @{
+                    Authorization = "Bearer $accessToken"
+                }
+                Write-Host -ForegroundColor Yellow "[*] Resuming script..."
+                $startTime = Get-Date
+            }
+            
+            
+            if($($Customs -And $directoryRole.isBuiltIn) -Or $($BuiltIns -And !$directoryRole.isBuiltIn)){
+                continue
+            }
+            
+
+            $directoryRoleId = $directoryRole.id
+            $membersUrl = "$graphApiUrl/roleManagement/directory/roleAssignments/?`$filter=roleDefinitionId+eq+'$directoryRoleId'&`$expand=principal"
+    
+            try {
+                $membersResponse = Invoke-RestMethod -Uri $membersUrl -Headers $headers -Method Get
+                $members = $membersResponse.value
+            } catch {
+                if ($_.Exception.Response.StatusCode.value__ -match "429") {
+                    Write-Host -ForegroundColor Red "[*] Being throttled... sleeping for 5 seconds"
+                    Start-Sleep -Seconds 5
+                } else {
+                    Write-Host -ForegroundColor Red "[*] An error occurred while retrieving members for directory role $($directoryRole.displayName): $($_.Exception.Message)"
+                }
+            }
+            
+            [System.Collections.Hashtable[]]$retrieved_members = @()
+            foreach ($member in $members) {
+                $principalType = $member.principal.'@odata.type'
+                if ($principalType -eq "#microsoft.graph.user"){
+                    $retrieved_members += @{
+                        "name"=$member.principal.userPrincipalName;
+                        "type"="User"
+                    }
+                } elseif($principalType -eq "#microsoft.graph.servicePrincipal"){
+                    $retrieved_members += @{
+                        "name"=$member.principal.appDisplayName;
+                        "type"="ServicePrincipal"
+                    }
+                } elseif($principalType -eq "#microsoft.graph.group"){
+                    $retrieved_members += @{
+                        "name"=$member.principal.displayName;
+                        "type"="Group"
+                    }
+                } else {
+                    #This should never happend or we should put a case for this above
+                    Write-Host -ForegroundColor Red "[*] An error occurred while retrieving members for directory role $($directoryRole.displayName) the principal if id $($member.principal) is of type $($principalType): $($_.Exception.Message)"
+                }
+            }
+            $directoryRoleInfo = @{
+                DirectoryRoleName = $directoryRole.displayName
+                DirectoryRoleId = $directoryRole.id
+                MembersName = $($retrieved_members | Foreach-Object {"$($_['type']):$($_['name'])"}) -join ' '
+            }
+    
+            Write-Output ("Group Name: " + $directoryRoleInfo["DirectoryRoleName"] + " | Directory Role ID: " + $directoryRoleInfo["DirectoryRoleId"])
+            Write-Output ("Members: " + $directoryRoleInfo["MembersName"])
+            Write-Output ""
+            Write-Output ("=" * 80)
+            $directoryRoleWithMemberIDs += New-Object PSObject -Property $directoryRoleInfo
+        }
+        
+        if ($directoryRolesResponse.'@odata.nextLink') {
+            $directoryRolesUrl = $directoryRolesResponse.'@odata.nextLink'
+            if (!$GraphRun) {
+                Write-Host -ForegroundColor Yellow "[*] Processing more directory roles..."
+            }
+        } else {
+            $directoryRolesUrl = $null
+        }
+    } while ($directoryRolesUrl)
+    
+    if ($OutputFile) {
+        # Export security groups to a CSV file
+        $directoryRoleWithMemberIDs | Export-Csv -Path $OutputFile -NoTypeInformation
+        Write-Host -ForegroundColor Green "Directory Roles exported to $OutputFile."
+    }
+
+    return $groupsWithMemberIDs
+}
 
 
 function Get-SecurityGroups{
