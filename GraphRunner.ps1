@@ -4806,7 +4806,7 @@ function Invoke-InviteGuest{
 
     # Construct the JSON payload
     $invitationData = @{
-        invitedUserEmailAddress = $EmailAddress
+        invitedUserEmailAddress = [System.Web.HttpUtility]::UrlEncode($EmailAddress)
         invitedUserDisplayname = $Displayname
         inviteRedirectUrl = $RedirectUrl
         sendInvitationMessage = [System.Convert]::ToBoolean($SendInvitationMessage)
