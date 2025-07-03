@@ -4859,7 +4859,7 @@ function Invoke-GraphRecon{
             C:\PS> Invoke-GraphRecon -Tokens $tokens -PermissionEnum
     #>
 
-    param(
+      param(
         [Parameter(Position = 0, Mandatory = $False)]
         [object[]]
         $Tokens = "",
@@ -4897,282 +4897,216 @@ function Invoke-GraphRecon{
     if($Tokens){
         if(!$GraphRun){
             Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
-            Write-Host -ForegroundColor Yellow "[*] Refreshing token to the Azure AD Graph API..."
         }
         
-        $RefreshToken = $tokens.refresh_token
-        $authUrl = "https://login.microsoftonline.com/$tenantid"
-        $refreshbody = @{
-                "resource" = "https://graph.windows.net"
-                "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-                "grant_type" =    "refresh_token"
-                "refresh_token" = $RefreshToken
-                "scope"=         "user_impersonation"
-            }
-
-    try{
-    $reftokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Body $refreshbody
-    }
-    catch{
-    $details=$_.ErrorDetails.Message | ConvertFrom-Json
-    Write-Output $details.error
-    }
-    if($reftokens)
-            {
-               $aadtokens = $reftokens
-               $access_token = $aadtokens.access_token
-            }
+        # Use the existing tokens directly since they're already scoped to graph.microsoft.com
+        $access_token = $tokens.access_token
     }
     else{
 
-    # Login
+        # Login
         Write-Host -ForegroundColor yellow "[*] Initiating a device code login."
 
-    $body = @{
-        "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-        "resource" =      "https://graph.windows.net"
-    }
-    $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
-    $Headers=@{}
-    $Headers["User-Agent"] = $UserAgent
-    $authResponse = Invoke-RestMethod `
-        -UseBasicParsing `
-        -Method Post `
-        -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
-        -Headers $Headers `
-        -Body $body
-    Write-Host -ForegroundColor yellow $authResponse.Message
+        $body = @{
+            "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+            "resource" =      "https://graph.microsoft.com"
+            "scope" =         "Directory.Read.All Organization.Read.All User.Read"
+        }
+        $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+        $Headers=@{}
+        $Headers["User-Agent"] = $UserAgent
+        $authResponse = Invoke-RestMethod `
+            -UseBasicParsing `
+            -Method Post `
+            -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+            -Headers $Headers `
+            -Body $body
+        Write-Host -ForegroundColor yellow $authResponse.Message
 
-    $continue = "authorization_pending"
-    while($continue)
-            {
+        $continue = "authorization_pending"
+        while($continue)
+        {
     
-        $body=@{
-            "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-            "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
-            "code" =       $authResponse.device_code
+            $body=@{
+                "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+                "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+                "code" =       $authResponse.device_code
             "scope" = "user_impersonation"
-        }
-        try{
+            }
+            try{
         $aadtokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
-        }
-        catch{
-        $details=$_.ErrorDetails.Message | ConvertFrom-Json
-        $continue = $details.error -eq "authorization_pending"
-        Write-Output $details.error
-        }
+            }
+            catch{
+                $details=$_.ErrorDetails.Message | ConvertFrom-Json
+                $continue = $details.error -eq "authorization_pending"
+                Write-Output $details.error
+            }
         if($aadtokens)
             {
                 Write-Host "[*] Successful auth"
                 $access_token = $aadtokens.access_token
                 break
             }
-        Start-Sleep -Seconds 3
-    }
-    }
-
-    # Generate unique GUIDs
-    $messageId = [guid]::NewGuid()
-    $trackingHeader = [guid]::NewGuid()
-    $clientId = "50afce61-c917-435b-8c6d-60aa5a8b8aa7"
-
-
-
-$soapRequest = @"
-<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
-  <s:Header>
-    <a:Action s:mustUnderstand="1">http://provisioning.microsoftonline.com/IProvisioningWebService/MsolConnect</a:Action>
-    <a:MessageID>urn:uuid:$messageId</a:MessageID>
-    <a:ReplyTo>
-      <a:Address>http://www.w3.org/2005/08/addressing/anonymous</a:Address>
-    </a:ReplyTo>
-    <UserIdentityHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <BearerToken xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$access_token</BearerToken>
-      <LiveToken i:nil="true" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService"/>
-    </UserIdentityHeader>
-    <ClientVersionHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <ClientId xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$clientId</ClientId>
-      <Version xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">1.2.183.57</Version>
-    </ClientVersionHeader>
-    <ContractVersionHeader xmlns="http://becwebservice.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <BecVersion xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">Version47</BecVersion>
-    </ContractVersionHeader>
-    <TrackingHeader xmlns="http://becwebservice.microsoftonline.com/">$trackingHeader</TrackingHeader>
-    <a:To s:mustUnderstand="1">https://provisioningapi.microsoftonline.com/provisioningwebservice.svc</a:To>
-  </s:Header>
-  <s:Body>
-    <MsolConnect xmlns="http://provisioning.microsoftonline.com/">
-      <request xmlns:b="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-        <b:BecVersion>Version4</b:BecVersion>
-        <b:TenantId i:nil="true"/>
-        <b:VerifiedDomain i:nil="true"/>
-      </request>
-    </MsolConnect>
-  </s:Body>
-</s:Envelope>
-"@
-
-    if(!$GraphRun){
-        Write-Host -ForegroundColor yellow "[*] Now trying to query the MS provisioning API for organization settings."
-    }
-    # Send the SOAP request to the provisioningwebservice
-    $response = Invoke-WebRequest -UseBasicParsing -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $soapRequest
-
-
-    if ($response -match '<DataBlob[^>]*>(.*?)<\/DataBlob>') {
-        $dataBlob = $Matches[1]
-    } else {
-        Write-Host "DataBlob not found in the response."
+            Start-Sleep -Seconds 3
+        }
     }
 
-    $messageID = [guid]::NewGuid()
-    $trackingHeader = [guid]::NewGuid()
-
-$GetCompanyInfoSoapRequest = @"
-<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
-  <s:Header>
-    <a:Action s:mustUnderstand="1">http://provisioning.microsoftonline.com/IProvisioningWebService/GetCompanyInformation</a:Action>
-    <a:MessageID>$MessageID</a:MessageID>
-    <a:ReplyTo>
-      <a:Address>http://www.w3.org/2005/08/addressing/anonymous</a:Address>
-    </a:ReplyTo>
-    <UserIdentityHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <BearerToken xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">Bearer $access_token</BearerToken>
-      <LiveToken i:nil="true" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService"/>
-    </UserIdentityHeader>
-    <BecContext xmlns="http://becwebservice.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <DataBlob xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$dataBlob</DataBlob>
-      <PartitionId xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">70</PartitionId>
-    </BecContext>
-    <ClientVersionHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <ClientId xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$ClientId</ClientId>
-      <Version xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">1.2.183.57</Version>
-    </ClientVersionHeader>
-    <ContractVersionHeader xmlns="http://becwebservice.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <BecVersion xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">Version47</BecVersion>
-    </ContractVersionHeader>
-    <TrackingHeader xmlns="http://becwebservice.microsoftonline.com/">$TrackingHeader</TrackingHeader>
-    <a:To s:mustUnderstand="1">https://provisioningapi.microsoftonline.com/provisioningwebservice.svc</a:To>
-  </s:Header>
-  <s:Body>
-    <GetCompanyInformation xmlns="http://provisioning.microsoftonline.com/">
-      <request xmlns:b="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-        <b:BecVersion>Version16</b:BecVersion>
-        <b:TenantId i:nil="true"/>
-        <b:VerifiedDomain i:nil="true"/>
-      </request>
-    </GetCompanyInformation>
-  </s:Body>
-</s:Envelope>
-"@
-
-    $companyinfo = Invoke-WebRequest -UseBasicParsing -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $GetCompanyInfoSoapRequest
-
-
-    $xml = [xml]$companyInfo
-
-    # Define namespaces
-    $ns = New-Object Xml.XmlNamespaceManager($xml.NameTable)
-    $ns.AddNamespace("s", "http://www.w3.org/2003/05/soap-envelope")
-    $ns.AddNamespace("b", "http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService")
-    $ns.AddNamespace("c", "http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration")
-    $ns.AddNamespace("d", "http://schemas.microsoft.com/2003/10/Serialization/Arrays")
-    $ns.AddNamespace("ns", "http://schemas.microsoft.com/online/serviceextensions/2009/08/ExtensibilitySchema.xsd")
-
-
-    # Extract data using XPath
-    $displayName = $xml.SelectSingleNode("//c:DisplayName", $ns).InnerText
-    $street = $xml.SelectSingleNode("//c:Street", $ns).InnerText
-    $city = $xml.SelectSingleNode("//c:City", $ns).InnerText
-    $state = $xml.SelectSingleNode("//c:State", $ns).InnerText
-    $postalCode = $xml.SelectSingleNode("//c:PostalCode", $ns).InnerText
-    $Country = $xml.SelectSingleNode("//c:CountryLetterCode", $ns).InnerText
-    $TechnicalContact = $xml.SelectSingleNode("//c:TechnicalNotificationEmails", $ns).InnerText
-    $Telephone = $xml.SelectSingleNode("//c:TelephoneNumber", $ns).InnerText
-    $InitialDomain = $xml.SelectSingleNode("//c:InitialDomain", $ns).InnerText
-    $DirSync = $xml.SelectSingleNode("//c:DirectorySynchronizationEnabled", $ns).InnerText
-    $DirSyncStatus = $xml.SelectSingleNode("//c:DirectorySynchronizationStatus", $ns).InnerText
-    $DirSyncClientMachine = $xml.SelectSingleNode("//c:DirSyncClientMachineName", $ns).InnerText
-    $DirSyncServiceAccount = $xml.SelectSingleNode("//c:DirSyncServiceAccount", $ns).InnerText
-    $PasswordSync = $xml.SelectSingleNode("//c:PasswordSynchronizationEnabled", $ns).InnerText
-    $PasswordReset = $xml.SelectSingleNode("//c:SelfServePasswordResetEnabled", $ns).InnerText
-    $UsersPermToConsent = $xml.SelectSingleNode("//c:UsersPermissionToUserConsentToAppEnabled", $ns).InnerText
-    $UsersPermToReadUsers = $xml.SelectSingleNode("//c:UsersPermissionToReadOtherUsersEnabled", $ns).InnerText
-    $UsersPermToCreateLOBApps = $xml.SelectSingleNode("//c:UsersPermissionToCreateLOBAppsEnabled", $ns).InnerText
-    $UsersPermToCreateGroups = $xml.SelectSingleNode("//c:UsersPermissionToCreateGroupsEnabled", $ns).InnerText
-
-    if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    Write-Host -ForegroundColor Yellow "Main Contact Info"
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    # --- Microsoft Graph API Organization Recon ---
+    $headers = @{
+        "Authorization" = "Bearer $access_token"
+        "Content-Type" = "application/json"
     }
-    # Display the extracted data
-    Write-Output "Display Name: $displayName"
-    Write-Output "Street: $street"
-    Write-Output "City: $city"
-    Write-Output "State: $state"
-    Write-Output "Postal Code: $postalCode"
-    Write-Output "Country: $country"
-    Write-Output "Technical Notification Email: $TechnicalContact"
-    Write-Output "Telephone Number: $Telephone"
-    if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    Write-Host -ForegroundColor Yellow "Directory Sync Settings"
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    }
-    Write-Output "Initial Domain: $initialDomain"
-    Write-Output "Directory Sync Enabled: $dirSync"
-    Write-Output "Directory Sync Status: $dirSyncStatus"
-    Write-Output "Directory Sync Client Machine: $dirSyncClientMachine"
-    Write-Output "Directory Sync Service Account: $dirSyncServiceAccount"
-    Write-Output "Password Sync Enabled: $passwordSync"
-    if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    Write-Host -ForegroundColor Yellow "User Settings"
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    }
-    Write-Output "Self-Service Password Reset Enabled: $passwordReset"
-    Write-Output "Users Can Consent to Apps: $UsersPermToConsent"
-    Write-Output "Users Can Read Other Users: $UsersPermToReadUsers"
-    Write-Output "Users Can Create Apps: $UsersPermToCreateLOBApps"
-    Write-Output "Users Can Create Groups: $UsersPermToCreateGroups"
 
+    try {
+        # Get current user information first to test authentication
+        $me = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me" -Headers $headers -Method Get
+        
+        # Try to get organization info - this might fail due to permissions
+        try {
+            $org = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/organization" -Headers $headers -Method Get
+            $org = $org.value[0]
+            
+            if(!$GraphRun){
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow "Main Contact Info"
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+            }
+            Write-Output "Display Name: $($org.displayName)"
+            Write-Output "Street: $($org.street)"
+            Write-Output "City: $($org.city)"
+            Write-Output "State: $($org.state)"
+            Write-Output "Postal Code: $($org.postalCode)"
+            Write-Output "Country: $($org.country)"
+            Write-Output "Technical Notification Email: $($org.technicalNotificationMails)"
+            Write-Output "Telephone Number: $($org.telephoneNumber)"
+        } catch {
+            Write-Host -ForegroundColor Yellow "[*] Organization endpoint not accessible, trying alternative methods..."
+            
+            # Try to get tenant info from user's context
+            $tenantId = $me.userPrincipalName.Split('@')[1]
+            Write-Output "Tenant Domain: $tenantId"
+            Write-Output "User Principal Name: $($me.userPrincipalName)"
+            Write-Output "Display Name: $($me.displayName)"
+        }
+        
+        # Try to get domains information
+        try {
+            $domains = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/domains" -Headers $headers -Method Get
+            $initialDomain = $domains.value | Where-Object { $_.isInitial } | Select-Object -First 1 -ExpandProperty id
+            
+            if(!$GraphRun){
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow "Directory Sync Settings"
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+            }
+            Write-Output "Initial Domain: $initialDomain"
+            
+            # Get directory sync information from organization
+            $syncEnabled = $null
+            $syncStatus = $null
+            
+            if ($org) {
+                $syncEnabled = $org.onPremisesSyncEnabled
+                $syncStatus = $org.onPremisesDirectorySynchronizationEnabled
+            }
+            
+            # If organization endpoint didn't provide sync info, try alternative
+            if ($syncEnabled -eq $null) {
+                try {
+                    $onPremSync = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/organization?`$select=onPremisesSyncEnabled,onPremisesDirectorySynchronizationEnabled" -Headers $headers -Method Get
+                    if ($onPremSync.value) {
+                        $orgSync = $onPremSync.value[0]
+                        $syncEnabled = $orgSync.onPremisesSyncEnabled
+                        $syncStatus = $orgSync.onPremisesDirectorySynchronizationEnabled
+                    }
+                } catch {
+                    # Continue with user-based detection
+                }
+            }
+            
+            # Display sync information
+            if ($syncEnabled -ne $null) {
+                Write-Output "Directory Sync Enabled: $syncEnabled"
+            }
+            if ($syncStatus -ne $null) {
+                Write-Output "Directory Sync Status: $syncStatus"
+            }
+            
+            # Check for actual synced users to verify sync status
+            try {
+                $users = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/users?`$top=10&`$select=onPremisesSyncEnabled,onPremisesDomainName,onPremisesSamAccountName" -Headers $headers -Method Get
+                $syncedUsers = $users.value | Where-Object { $_.onPremisesSyncEnabled -eq $true }
+                if ($syncedUsers.Count -gt 0) {
+                    Write-Output "Directory Sync Active: Yes (found $($syncedUsers.Count) synced users)"
+                    Write-Output "Sample Synced User Domain: $($syncedUsers[0].onPremisesDomainName)"
+                } else {
+                    Write-Output "Directory Sync Active: No (no synced users found)"
+                }
+            } catch {
+                Write-Output "Directory Sync Active: Unable to determine"
+            }
+            
+            # Try to get additional sync details from beta endpoint
+            try {
+                $dirSyncStatus = Invoke-RestMethod -Uri "https://graph.microsoft.com/beta/directorySync" -Headers $headers -Method Get
+                if ($dirSyncStatus.lastSyncDateTime) {
+                    Write-Output "Directory Sync Last Sync: $($dirSyncStatus.lastSyncDateTime)"
+                }
+                if ($dirSyncStatus.status) {
+                    Write-Output "Directory Sync Detailed Status: $($dirSyncStatus.status)"
+                }
+            } catch {
+                # Beta endpoint not available, skip
+            }
+            
+        } catch {
+            Write-Host -ForegroundColor Yellow "[*] Domains endpoint not accessible"
+        }
+        
+        # Try to get authorization policy for user permissions
+        try {
+            $authpolicy = Invoke-RestMethod -Uri "https://graph.microsoft.com/beta/policies/authorizationPolicy" -Headers $headers -Method Get
+            $authpolicy = $authpolicy.value[0]
+            
+            if(!$GraphRun){
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow "User Settings"
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+            }
+            Write-Output "Users Can Consent to Apps: $($authpolicy.defaultUserRolePermissions.allowedToCreateApps)"
+            Write-Output "Users Can Read Other Users: $($authpolicy.defaultUserRolePermissions.allowedToReadOtherUsers)"
+            Write-Output "Users Can Create Apps: $($authpolicy.defaultUserRolePermissions.allowedToCreateApps)"
+            Write-Output "Users Can Create Groups: $($authpolicy.defaultUserRolePermissions.allowedToCreateSecurityGroups)"
+        } catch {
+            Write-Host -ForegroundColor Yellow "[*] Authorization policy endpoint not accessible"
+        }
+        
+        if(!$GraphRun){
+            Write-Host -ForegroundColor Yellow ("=" * 80) 
+        }
+    } catch {
+        Write-Host -ForegroundColor Red "Error with Microsoft Graph API calls: $_"
+        Write-Host -ForegroundColor Yellow "[*] This might be due to insufficient permissions or token scope issues"
+    }
 
-    # Select the ServiceParameter nodes
-    $serviceParameters = $xml.SelectNodes("//ns:ServiceParameter", $ns)
-    if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    Write-Host -ForegroundColor Yellow "Additional Service Parameters"
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    }
-    # Loop through each ServiceParameter node and extract the Name and Value
-    foreach ($parameter in $serviceParameters) {
-        $name = $parameter.Name
-        $value = $parameter.Value
-        Write-Output "$name : $value"
-    }
-    if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    }
+    # Variables needed for permission enumeration
     $accesstoken = $tokens.access_token
     $refreshtoken = $tokens.refresh_token
         
     $graphApiEndpoint = "https://graph.microsoft.com/v1.0/me"
     $estimateAccessEndpoint = "https://graph.microsoft.com/beta/roleManagement/directory/estimateAccess"
-    $authpolicyEndpoint = "https://graph.microsoft.com/beta/policies/authorizationPolicy "
+    $authpolicyEndpoint = "https://graph.microsoft.com/beta/policies/authorizationPolicy"
 
     $headers = @{
-        "Authorization" = "Bearer $accessToken"
+        "Authorization" = "Bearer $access_token"
         "Content-Type" = "application/json"
     }
-    
-
 
     try {
         $authpolicy = Invoke-RestMethod -Uri $authpolicyEndpoint -Headers $headers -Method Get
         if(!$GraphRun){
         Write-Host -ForegroundColor Yellow "Authorization Policy Info"
-        Write-Host -ForegroundColor Yellow ("=" * 80) 
+            Write-Host -ForegroundColor Yellow ("=" * 80) 
         }
         # Display the extracted data
         Write-Output ("Allowed to create app registrations (Default User Role Permissions): " + $authpolicy.value.defaultUserRolePermissions.allowedToCreateApps)
@@ -5198,7 +5132,7 @@ $GetCompanyInfoSoapRequest = @"
 
 
     if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
+        Write-Host -ForegroundColor Yellow ("=" * 80) 
     }
 
     if($PermissionEnum){
@@ -5593,7 +5527,7 @@ $GetCompanyInfoSoapRequest = @"
             }
 
             # Split resource actions into batches of 20
-            $batchSize = 20
+             $batchSize = 20
             $batchCount = [math]::Ceiling($resourceActions.Count / $batchSize)
 
             # Create arrays to separate "Allowed" and other access types
@@ -5660,6 +5594,7 @@ $GetCompanyInfoSoapRequest = @"
     
     }
 }
+
 
 function Invoke-SearchUserAttributes {
     <#
@@ -7671,7 +7606,7 @@ Get-SecurityGroups`t`t-`t Gets security groups and members
 Get-UpdatableGroups`t`t-`t Gets groups that may be able to be modified by the current user
 Get-DynamicGroups`t`t-`t Finds dynamic groups and displays membership rules
 Get-SharePointSiteURLs`t`t-`t Gets a list of SharePoint site URLs visible to the current user
-Invoke-GraphOpenInboxFinder`t-`t Checks each user’s inbox in a list to see if they are readable
+Invoke-GraphOpenInboxFinder`t-`t Checks each userâ€™s inbox in a list to see if they are readable
 Get-TenantID`t`t`t-`t Retreives the tenant GUID from the domain name
     "
     Write-Host -ForegroundColor green "--------------------- Persistence Modules ---------------------"
@@ -7685,7 +7620,7 @@ Invoke-AddGroupMember`t`t-`t Adds a member to a group
     Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
     Write-Host -ForegroundColor green "Invoke-SearchSharePointAndOneDrive -`t Search across all SharePoint sites and OneDrive drives visible to the user
 Invoke-ImmersiveFileReader`t-`t Open restricted files with the immersive reader
-Invoke-SearchMailbox`t`t-`t Has the ability to do deep searches across a user’s mailbox and can export messages
+Invoke-SearchMailbox`t`t-`t Has the ability to do deep searches across a userâ€™s mailbox and can export messages
 Invoke-SearchTeams`t`t-`t Can search all Teams messages in all channels that are readable by the current user.
 Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory
 Get-Inbox`t`t`t-`t Gets inbox items
