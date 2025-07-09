@@ -6154,6 +6154,11 @@ function Get-SharePointSiteURLs {
     $moreResultsAvailable = $true
     $batchNumber = 1
 
+    if ($BatchSize -gt 1000) {
+        Write-Host -ForegroundColor yellow "[*] BatchSize $BatchSize is above the API max (1000). Setting BatchSize to 1000."
+        $BatchSize = 1000
+    }
+
     Write-Host -ForegroundColor yellow "[*] Now getting SharePoint site URLs..."
 
     $lastStatusLength = 0
