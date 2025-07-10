@@ -6269,73 +6269,60 @@ function Invoke-HTTPServer{
 
 }
 
-
-function Get-SharePointSiteURLs{
-
-      <#
-        .SYNOPSIS
-            Uses the Graph Search API to find SharePoint site URLs
-            Author: Beau Bullock (@dafthack)
-            License: MIT
-            Required Dependencies: None
-            Optional Dependencies: None
-
-        .DESCRIPTION
-        
-           Uses the Graph Search API to find SharePoint site URLs
-
-        .EXAMPLES      
-        
-            C:\PS> Get-SharePointSiteURLs -Tokens $tokens
-    #>
-
+function Get-SharePointSiteURLs {
     Param(
         [Parameter(Position = 0, Mandatory = $False)]
-        [object[]]
-        $Tokens = ""
+        [object[]]$Tokens = "",
+        [Parameter(Position = 1, Mandatory = $False)]
+        [int]$BatchSize = 200,
+        [Parameter(Position = 2, Mandatory = $False)]
+        [int]$MaxSites = 0 # 0 means no limit
     )
 
-    if($Tokens){
+    if ($Tokens) {
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
-    }
-    else{
-         # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
-         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
-         while($auth -notlike "Yes"){
-                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
-                $answer = $answer.ToLower()
-                if ($answer -eq "yes" -or $answer -eq "y") {
-                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
-                    $tokens = Get-GraphTokens -ExternalCall
-                    $auth = "Yes"
-                } elseif ($answer -eq "no" -or $answer -eq "n") {
-                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
-                    return
-                } else {
-                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
-                }
+    } else {
+        Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+        Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
+        while ($auth -notlike "Yes") {
+            Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+            $answer = Read-Host 
+            $answer = $answer.ToLower()
+            if ($answer -eq "yes" -or $answer -eq "y") {
+                Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                $tokens = Get-GraphTokens -ExternalCall
+                $auth = "Yes"
+            } elseif ($answer -eq "no" -or $answer -eq "n") {
+                Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                return
+            } else {
+                Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
             }
+        }
     }
-    $accesstoken = $tokens.access_token   
+
+    $accessToken = $tokens.access_token   
     [string]$refreshToken = $tokens.refresh_token 
 
-
-    # Define the base URL and search URL
     $baseUrl = "https://graph.microsoft.com/v1.0"
     $searchUrl = "$baseUrl/search/query"
-
-    # Define the initial query
     $query = "*"
     $sharepointDrives = @()
-    $seenDriveIds = @()
+    $seenSiteIds = @{}
+    $from = 0
+    $moreResultsAvailable = $true
+    $batchNumber = 1
 
+    if ($BatchSize -gt 1000) {
+        Write-Host -ForegroundColor yellow "[*] BatchSize $BatchSize is above the API max (1000). Setting BatchSize to 1000."
+        $BatchSize = 1000
+    }
 
-        # Construct the request URL with query parameters
-        $url = "$searchUrl"
+    Write-Host -ForegroundColor yellow "[*] Now getting SharePoint site URLs..."
 
-        # Define the query request body
+    $lastStatusLength = 0
+
+    while ($moreResultsAvailable) {
         $requestBody = @{
             requests = @(
                 @{
@@ -6343,47 +6330,68 @@ function Get-SharePointSiteURLs{
                     query = @{
                         queryString = $query
                     }
-                    from = "0"
-                    size = "500"
+                    from = "$from"
+                    size = "$BatchSize"
                     fields = @("parentReference", "webUrl")
                 }
             )
         }
 
-        # Make a request to the Search API
         $headers = @{
             "Authorization" = "Bearer $accessToken"
         }
-        Write-Host -ForegroundColor yellow "[*] Now getting SharePoint site URLs..."
-        $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Post -ContentType "application/json" -Body ($requestBody | ConvertTo-Json -Depth 10)
 
-        # Extract drive IDs and web URLs from the results
-        $newDrives = $response.value
+        $response = Invoke-RestMethod -Uri $searchUrl -Headers $headers -Method Post -ContentType "application/json" -Body ($requestBody | ConvertTo-Json -Depth 10)
+        $hitsContainer = $response.value[0].hitsContainers
 
-        foreach($hit in $newDrives.hitsContainers){
-            $siteId = $hit.resource.parentReference.siteId
-            $webUrl = $hit.resource.webUrl
-        
-            # Filter out duplicates based on drive ID
-            if ($siteId -notin $seenDriveIds){
-                $sharepointDrives += $hit
-            }
-            else{
-                $seenDriveIds += $hit
-            }
-        
+        if ($null -eq $hitsContainer) {
+            break
         }
 
-    $sorted = $sharepointDrives.hits | Sort-Object {$_.resource.webUrl}
+        foreach ($hit in $hitsContainer.hits) {
+            $siteId = $hit.resource.parentReference.siteId
+            $webUrl = $hit.resource.webUrl
+            if ($siteId -and (-not $seenSiteIds.ContainsKey($siteId))) {
+                $sharepointDrives += $hit
+                $seenSiteIds[$siteId] = $true
 
-    # Display the list of unique drive IDs and web URLs
-    if ($sorted.count -gt 0){
-        Write-Host -ForegroundColor yellow ("[*] Found a total of " + $sorted.count + " site URLs.")
+                # Check max sites
+                if ($MaxSites -gt 0 -and $sharepointDrives.Count -ge $MaxSites) {
+                    break
+                }
+            }
+        }
+
+        $statusMsg = ("[*] Batch ${batchNumber}: Fetched $($sharepointDrives.Count) unique URLs so far...")
+        $padLength = [Math]::Max(0, $lastStatusLength - $statusMsg.Length)
+        $padding = " " * $padLength
+        Write-Host -NoNewline -ForegroundColor cyan ("`r$statusMsg$padding")
+        [System.Console]::Out.Flush()
+        $lastStatusLength = $statusMsg.Length
+
+        if ($MaxSites -gt 0 -and $sharepointDrives.Count -ge $MaxSites) {
+            $moreResultsAvailable = $false
+            break
+        }
+
+        $moreResultsAvailable = $hitsContainer.moreResultsAvailable
+        $from += $BatchSize
+        $batchNumber++
+    }
+
+    # Newline to avoid overwriting final output
+    Write-Host ""
+
+    $sorted = $sharepointDrives | Sort-Object { $_.resource.webUrl }
+
+    if ($sorted.Count -gt 0) {
+        Write-Host -ForegroundColor yellow ("[*] Found a total of " + $sorted.Count + " site URLs.")
         foreach ($drive in $sorted) {
             Write-Output "Web URL: $($drive.resource.webUrl)"
         }
+    } else {
+        Write-Host -ForegroundColor red "[!] No SharePoint site URLs found."
     }
-
 }
 
 function Invoke-SearchSharePointAndOneDrive{
