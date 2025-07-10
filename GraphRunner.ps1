@@ -4834,7 +4834,166 @@ function Invoke-InviteGuest{
     }
 }
 
+function Check-FrontDoorWAF {
+    param (
+        [Parameter(Position = 0, Mandatory = $false)]
+        [object[]]$Tokens = "",
 
+        [Parameter(Mandatory = $false)]
+        [string]$OutputFile = "waf_remoteaddr_audit.txt"
+    )
+
+    # Validate token
+    if ($Tokens -and $Tokens[0].access_token) {
+        Write-Host -ForegroundColor Yellow "[*] Using the provided access tokens."
+        $AccessToken = $Tokens[0].access_token
+    }
+    else {
+        Write-Host -ForegroundColor Red "[!] No valid access token provided. Exiting..."
+        return
+    }
+
+    if ($Tokens.resource -ne "https://management.azure.com/") {
+        Write-Host -ForegroundColor Red "[!] The provided token is not scoped for the Azure Management API."
+        Write-Host -ForegroundColor Yellow "[*] You must first re-authenticate using:"
+        Write-Host -ForegroundColor Cyan "    Get-GraphTokens -resource 'https://management.azure.com/'"
+        return
+    }
+    Write-Host -ForegroundColor Yellow "[*] Using the provided management API access token."
+
+    # Fetch all subscriptions
+    try {
+        Write-Host -ForegroundColor Yellow "[*] Fetching subscriptions..."
+        $subsUri = "https://management.azure.com/subscriptions?api-version=2020-01-01"
+        $subsResult = Invoke-RestMethod -Uri $subsUri -Headers @{Authorization = "Bearer $AccessToken"}
+
+        if ($subsResult.value.Count -eq 0) {
+            Write-Host -ForegroundColor Red "[!] No subscriptions found for this token."
+            return
+        }
+    }
+    catch {
+        Write-Host -ForegroundColor Red "[!] Failed to fetch subscriptions."
+        Write-Host -ForegroundColor Yellow "    Status: $($_.Exception.Response.StatusCode.value__)"
+        return
+    }
+
+    # Clear previous results
+    $summary = @()
+    $allFindings = @()
+
+    # Loop through each subscription
+    foreach ($sub in $subsResult.value) {
+        $SubscriptionId = $sub.subscriptionId
+        Write-Host -ForegroundColor Cyan "`n[+] Scanning Subscription: $($sub.displayName) [$SubscriptionId]"
+
+        # List resource groups
+        $rgUri = "https://management.azure.com/subscriptions/${SubscriptionId}/resourcegroups?api-version=2022-09-01"
+
+        try {
+            $resourceGroups = (Invoke-RestMethod -Uri $rgUri -Headers @{Authorization = "Bearer $AccessToken"}).value
+        }
+        catch {
+            Write-Host -ForegroundColor Red "[!] Failed to list resource groups for subscription: $($sub.displayName)"
+            Write-Host -ForegroundColor Yellow "    URL: $rgUri"
+            Write-Host -ForegroundColor Yellow "    StatusCode: $($_.Exception.Response.StatusCode.value__)"
+            Write-Host -ForegroundColor Yellow "    StatusDescription: $($_.Exception.Response.StatusDescription)`n"
+            continue  # Move on to next subscription
+        }
+
+        if ($resourceGroups.count -eq 0){
+            Write-Host "No resource groups found"
+        }
+
+        foreach ($rg in $resourceGroups) {
+            $rgName = $rg.name
+
+            # List Front Door WAF policies in this RG
+            $wafUri = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/${rgName}/providers/Microsoft.Network/frontDoorWebApplicationFirewallPolicies?api-version=2022-05-01"
+            try {
+                $policies = (Invoke-RestMethod -Uri $wafUri -Headers @{Authorization = "Bearer $AccessToken"}).value
+            }
+            catch {
+                Write-Host -ForegroundColor Red "[!] Failed to list WAF policies in RG: $rgName (Subscription: $($sub.displayName))"
+                continue
+            }
+
+            foreach ($policy in $policies) {
+                $policyName = $policy.name
+
+                # Fetch the full WAF policy
+                $policyDetailUri = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$rgName/providers/Microsoft.Network/frontDoorWebApplicationFirewallPolicies/${policyName}?api-version=2022-05-01"
+                try {
+                    $policyDetail = Invoke-RestMethod -Uri $policyDetailUri -Headers @{Authorization = "Bearer $AccessToken"}
+                }
+                catch {
+                    Write-Host -ForegroundColor Red "[!] Failed to fetch details for WAF policy: $policyName in RG: $rgName"
+                    continue
+                }
+
+                $rules = $policyDetail.properties.customRules.rules
+
+                $matches = foreach ($rule in $rules) {
+                    foreach ($cond in $rule.matchConditions) {
+                        if ($cond.matchVariable -eq "RemoteAddr" -and (-not ($cond.matchVariable -eq "SocketAddr"))) {
+                            $finding = [PSCustomObject]@{
+                                Subscription   = $sub.displayName
+                                ResourceGroup  = $rgName
+                                WAFName        = $policyName
+                                RuleName       = $rule.name
+                                Operator       = $cond.operator
+                                MatchVariable  = $cond.matchVariable
+                                MatchValues    = ($cond.matchValue -join ', ')
+                            }
+                            $allFindings += $finding
+                            $finding
+                        }
+                    }
+                }
+
+                if ($matches) {
+                    Write-Host "`n[!] VULNERABLE RULES FOUND in policy [$policyName] (RG: $rgName)" -ForegroundColor Yellow
+                    $matches | Select-Object -Property ResourceGroup,WAFName,RuleName,Operator,MatchVariable,MatchValues | Format-Table -AutoSize
+                    $summary += [PSCustomObject]@{
+                        Subscription    = $sub.displayName
+                        ResourceGroup   = $rgName
+                        WAFName         = $policyName
+                        VulnerableRules = $matches.Count
+                    }
+                } else {
+                    $summary += [PSCustomObject]@{
+                        Subscription    = $sub.displayName
+                        ResourceGroup   = $rgName
+                        WAFName         = $policyName
+                        VulnerableRules = 0
+                    }
+                }
+            }
+        }
+    }
+
+    # Summary
+    Write-Host "`n----------------------------------------------------------------------`n"
+    Write-Host "`n=== Summary of WAF RemoteAddr Matches (Excluding SocketAddr Rules) ===" -ForegroundColor Cyan
+    $summary | Select-Object -Property ResourceGroup,WAFName,VulnerableRules | Format-Table -AutoSize
+
+    # Save to file
+
+    "------------- Azure Front Door WAF RemoteAddr Checks -------------`n" | Out-File $OutputFile
+
+    $uniqueSubscriptions = $summary | Select-Object -ExpandProperty Subscription -Unique
+    foreach ($sub in $uniqueSubscriptions){
+        "[*] Subscription: $sub" | Out-File -Append $OutputFile
+        "=== RemoteAddr Rule Matches (Filtered) ===" | Out-File -Append $OutputFile
+        $allFindings | Where-Object { $_.Subscription -eq $sub} | Select-Object -Property ResourceGroup,WAFName,RuleName,Operator,MatchVariable,MatchValues | Format-Table -AutoSize | Out-String | Out-File -Append $OutputFile
+        "`n=== Summary ===" | Out-File -Append $OutputFile
+        $summary | Where-Object { $_.Subscription -eq $sub} | Select-Object -Property ResourceGroup,WAFName,VulnerableRules | Format-Table -AutoSize | Out-String | Out-File -Append $OutputFile
+        "`n`n" | Out-File -Append $OutputFile
+    }
+
+    Write-Host -ForegroundColor Yellow "`nResults saved to: $OutputFile"
+    Write-Host -ForegroundColor Cyan "`nNote: to run additional modules, please re-authenticate to Graph using Get-GraphTokens`n"
+}
 
 function Invoke-GraphRecon{
 
