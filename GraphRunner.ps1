@@ -7739,81 +7739,81 @@ function Invoke-ImportTokens {
         [pscustomobject]@{access_token=$AccessToken;refresh_token=$RefreshToken}
     )
 }
-function List-GraphRunnerModules{
+function List-GraphRunnerModules {
     <#
     .SYNOPSIS 
     A module to list all of the GraphRunner modules
     #>
 
-    Write-Host -foregroundcolor green "[*] Listing GraphRunner modules..."
+    Write-Host -ForegroundColor Green "[*] Listing GraphRunner modules..."
 
-    Write-Host -ForegroundColor green "-------------------- Authentication Modules -------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Get-GraphTokens`t`t`t-`t Authenticate as a user to Microsoft Graph
-Invoke-RefreshGraphTokens`t-`t Use a refresh token to obtain new access tokens
-Get-AzureAppTokens`t`t-`t Complete OAuth flow as an app to obtain access tokens
-Invoke-RefreshAzureAppTokens`t-`t Use a refresh token and app credentials to refresh a token
-Invoke-AutoTokenRefresh`t-`t Refresh tokens at an interval.
-    "
-    Write-Host -ForegroundColor green "----------------- Recon & Enumeration Modules -----------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Invoke-GraphRecon`t`t-`t Performs general recon for org info, user settings, directory sync settings, etc
-Invoke-DumpCAPS`t`t`t-`t Gets conditional access policies
-Invoke-DumpApps`t`t`t-`t Gets app registrations and external enterprise apps along with consent and scope info
-Get-AzureADUsers`t`t-`t Gets user directory
-Get-SecurityGroups`t`t-`t Gets security groups and members
-Get-UpdatableGroups`t`t-`t Gets groups that may be able to be modified by the current user
-Get-DynamicGroups`t`t-`t Finds dynamic groups and displays membership rules
-Get-SharePointSiteURLs`t`t-`t Gets a list of SharePoint site URLs visible to the current user
-Invoke-GraphOpenInboxFinder`t-`t Checks each userâ€™s inbox in a list to see if they are readable
-Get-TenantID`t`t`t-`t Retreives the tenant GUID from the domain name
-    "
-    Write-Host -ForegroundColor green "--------------------- Persistence Modules ---------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Invoke-InjectOAuthApp`t`t-`t Injects an app registration into the tenant
-Invoke-SecurityGroupCloner`t-`t Clones a security group while using an identical name and member list but can inject another user as well
-Invoke-InviteGuest`t`t-`t Invites a guest user to the tenant
-Invoke-AddGroupMember`t`t-`t Adds a member to a group
-    "
-    Write-Host -ForegroundColor green "----------------------- Pillage Modules -----------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Invoke-SearchSharePointAndOneDrive -`t Search across all SharePoint sites and OneDrive drives visible to the user
-Invoke-ImmersiveFileReader`t-`t Open restricted files with the immersive reader
-Invoke-SearchMailbox`t`t-`t Has the ability to do deep searches across a userâ€™s mailbox and can export messages
-Invoke-SearchTeams`t`t-`t Can search all Teams messages in all channels that are readable by the current user.
-Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory
-Get-Inbox`t`t`t-`t Gets inbox items
-Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
-    "
-    Write-Host -ForegroundColor green "-------------------- Teams Modules -------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Get-TeamsApps`t`t`t-`t This module enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel.
-Get-TeamsChannels`t`t-`t This module enumerates all accessible teams and the channels a user has access to. 
-Find-ChannelEmails`t`t-`t This module enumerates all accessible teams and the channels looking for any email addresses assoicated with them. 
-Get-ChannelUsersEnum`t`t-`t This module enumerates a defined channel to see how many people are in a channel and who they are.
-Get-ChannelEmail`t`t-`t This module enumerates a defined channel for an email address and sets the sender type to Anyone. If there is no email address create one and sets the sender type to Anyone.
-Get-Webhooks`t`t`t-`t This module enumerates all accessible channels looking for any webhooks and their configuration information, including its the url.
-Create-Webhook`t`t`t-`t This module creates a webhook in a defined channel and provides the URL.
-Send-TeamsMessage`t`t-`t This module sends a message using Microsoft Team's webhooks, without needing any authentication
-    "
-    Write-Host -ForegroundColor green "--------------------- GraphRunner Module ----------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Invoke-GraphRunner`t`t-`t Runs Invoke-GraphRecon, Get-AzureADUsers, Get-SecurityGroups, Invoke-DumpCAPS, Invoke-DumpApps, and then uses the default_detectors.json file to search with Invoke-SearchMailbox, Invoke-SearchSharePointAndOneDrive, and Invoke-SearchTeams."
+    Write-Host -ForegroundColor Green "-------------------- Authentication Modules -------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Get-GraphTokens`t`t`t-`t Authenticate as a user to Microsoft Graph"
+    Write-Host -ForegroundColor Green "Invoke-RefreshGraphTokens`t-`t Use a refresh token to obtain new access tokens"
+    Write-Host -ForegroundColor Green "Get-AzureAppTokens`t`t-`t Complete OAuth flow as an app to obtain access tokens"
+    Write-Host -ForegroundColor Green "Invoke-RefreshAzureAppTokens`t-`t Use a refresh token and app credentials to refresh a token"
+    Write-Host -ForegroundColor Green "Invoke-AutoTokenRefresh`t-`t Refresh tokens at an interval."
 
-    Write-Host -ForegroundColor green "-------------------- Supplemental Modules ---------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App
-Invoke-DeleteGroup`t`t-`t Delete a group
-Invoke-RemoveGroupMember`t-`t Module for removing users/members from groups
-Invoke-DriveFileDownload`t-`t Has the ability to download single files from as the current user.
-Invoke-CheckAccess`t`t-`t Check if tokens are valid
-Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow by standing up a web server and listening for auth code
-Invoke-HTTPServer`t`t-`t A basic web server to use for accessing the emailviewer that is output from Invoke-SearchMailbox
-Invoke-BruteClientIDAccess`t-`t Test different CLientID's against MSGraph to determine permissions
-Invoke-ImportTokens`t`t-`t Import tokens from other tools for use in GraphRunner
-Get-UserObjectID`t`t-`t Retrieves an object ID for a user
-    "
-    Write-Host -ForegroundColor green ("=" * 80)
-    Write-Host -ForegroundColor green '[*] For help with individual modules run Get-Help <module name> -detailed'
-    Write-Host -ForegroundColor green '[*] Example: Get-Help Invoke-InjectOAuthApp -detailed'
+    Write-Host -ForegroundColor Green "----------------- Recon & Enumeration Modules -----------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Invoke-GraphRecon`t`t-`t Performs general recon for org info, user settings, directory sync settings, etc"
+    Write-Host -ForegroundColor Green "Invoke-DumpCAPS`t`t`t-`t Gets conditional access policies"
+    Write-Host -ForegroundColor Green "Invoke-DumpApps`t`t`t-`t Gets app registrations and external enterprise apps along with consent and scope info"
+    Write-Host -ForegroundColor Green "Get-AzureADUsers`t`t-`t Gets user directory"
+    Write-Host -ForegroundColor Green "Get-SecurityGroups`t`t-`t Gets security groups and members"
+    Write-Host -ForegroundColor Green "Get-UpdatableGroups`t`t-`t Gets groups that may be able to be modified by the current user"
+    Write-Host -ForegroundColor Green "Get-DynamicGroups`t`t-`t Finds dynamic groups and displays membership rules"
+    Write-Host -ForegroundColor Green "Get-SharePointSiteURLs`t`t-`t Gets a list of SharePoint site URLs visible to the current user"
+    Write-Host -ForegroundColor Green "Invoke-GraphOpenInboxFinder`t-`t Checks each user's inbox in a list to see if they are readable"
+    Write-Host -ForegroundColor Green "Get-TenantID`t`t`t-`t Retrieves the tenant GUID from the domain name"
+
+    Write-Host -ForegroundColor Green "--------------------- Persistence Modules ---------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Invoke-InjectOAuthApp`t`t-`t Injects an app registration into the tenant"
+    Write-Host -ForegroundColor Green "Invoke-SecurityGroupCloner`t-`t Clones a security group while using an identical name and member list but can inject another user as well"
+    Write-Host -ForegroundColor Green "Invoke-InviteGuest`t`t-`t Invites a guest user to the tenant"
+    Write-Host -ForegroundColor Green "Invoke-AddGroupMember`t`t-`t Adds a member to a group"
+
+    Write-Host -ForegroundColor Green "----------------------- Pillage Modules -----------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Invoke-SearchSharePointAndOneDrive`t-`t Search across all SharePoint sites and OneDrive drives visible to the user"
+    Write-Host -ForegroundColor Green "Invoke-ImmersiveFileReader`t-`t Open restricted files with the immersive reader"
+    Write-Host -ForegroundColor Green "Invoke-SearchMailbox`t`t-`t Deep searches across a user's mailbox and can export messages"
+    Write-Host -ForegroundColor Green "Invoke-SearchTeams`t`t-`t Search all Teams messages in all channels that are readable by the current user"
+    Write-Host -ForegroundColor Green "Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory"
+    Write-Host -ForegroundColor Green "Get-Inbox`t`t`t-`t Gets inbox items"
+    Write-Host -ForegroundColor Green "Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations"
+
+    Write-Host -ForegroundColor Green "-------------------- Teams Modules ----------------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Get-TeamsApps`t`t`t-`t Enumerates Teams chat channels and grabs URLs of installed apps"
+    Write-Host -ForegroundColor Green "Get-TeamsChannels`t`t-`t Enumerates all accessible teams and channels"
+    Write-Host -ForegroundColor Green "Find-ChannelEmails`t`t-`t Looks for any email addresses associated with teams/channels"
+    Write-Host -ForegroundColor Green "Get-ChannelUsersEnum`t`t-`t Enumerates a channel's user list"
+    Write-Host -ForegroundColor Green "Get-ChannelEmail`t`t-`t Checks/creates a channel email address and sets sender permissions"
+    Write-Host -ForegroundColor Green "Get-Webhooks`t`t`t-`t Finds webhooks in channels and their configurations"
+    Write-Host -ForegroundColor Green "Create-Webhook`t`t`t-`t Creates a webhook in a channel and provides the URL"
+    Write-Host -ForegroundColor Green "Send-TeamsMessage`t`t-`t Sends a message via Teams webhook (no auth required)"
+
+    Write-Host -ForegroundColor Green "--------------------- GraphRunner Module ----------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Invoke-GraphRunner`t`t-`t Runs multiple recon and pillage modules and searches using default_detectors.json"
+
+    Write-Host -ForegroundColor Green "-------------------- Supplemental Modules ---------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App"
+    Write-Host -ForegroundColor Green "Invoke-DeleteGroup`t`t-`t Delete a group"
+    Write-Host -ForegroundColor Green "Invoke-RemoveGroupMember`t-`t Remove users/members from groups"
+    Write-Host -ForegroundColor Green "Invoke-DriveFileDownload`t-`t Download single files as the current user"
+    Write-Host -ForegroundColor Green "Invoke-CheckAccess`t`t-`t Check if tokens are valid"
+    Write-Host -ForegroundColor Green "Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow via local web server"
+    Write-Host -ForegroundColor Green "Invoke-HTTPServer`t`t-`t Basic web server for viewing SearchMailbox output"
+    Write-Host -ForegroundColor Green "Invoke-BruteClientIDAccess`t-`t Tests various ClientIDs against MS Graph"
+    Write-Host -ForegroundColor Green "Invoke-ImportTokens`t`t-`t Import tokens from other tools into GraphRunner"
+    Write-Host -ForegroundColor Green "Get-UserObjectID`t`t-`t Retrieves a user's object ID"
+
+    Write-Host -ForegroundColor Green ("=" * 80)
+    Write-Host -ForegroundColor Green '[*] For help with individual modules run Get-Help <module name> -Detailed'
+    Write-Host -ForegroundColor Green '[*] Example: Get-Help Invoke-InjectOAuthApp -Detailed'
 }
