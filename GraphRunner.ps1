@@ -4193,6 +4193,58 @@ function Get-UpdatableGroups{
             $results | Export-Csv -Path $OutputFile -NoTypeInformation
             Write-Host -ForegroundColor Green ("[*] Exported updatable groups to $OutputFile")
         }
+
+        # Extended logic to map applications assigned to each updatable group
+        $groupAppAssignments = @()
+
+        foreach ($group in $results) {
+            Write-Host -ForegroundColor Cyan "[*] Getting app assignments for group: $($group.displayName)"
+
+            $assignmentsUri = "https://graph.microsoft.com/v1.0/groups/$($group.id)/appRoleAssignments"
+
+            try {
+                $appRoleAssignments = Invoke-RestMethod -Uri $assignmentsUri -Headers $headers -Method Get
+
+                foreach ($assignment in $appRoleAssignments.value) {
+                    # Lookup the assigned application's display name
+                    $spUri = "https://graph.microsoft.com/v1.0/servicePrincipals/$($assignment.resourceId)"
+                    $sp = $null
+
+                    try {
+                        $sp = Invoke-RestMethod -Uri $spUri -Headers $headers -Method Get
+                    } catch {
+                        Write-Host -ForegroundColor Red "[!] Failed to retrieve Service Principal $($assignment.resourceId): $($_.Exception.Message)"
+                        continue
+                    }
+
+                    $groupAppAssignments += [PSCustomObject]@{
+                        GroupName       = $group.displayName
+                        GroupId         = $group.id
+                        AppDisplayName  = $sp.displayName
+                        AppId           = $sp.appId
+                        AppAssignmentId = $assignment.id
+                    }
+                }
+
+                if (-not $appRoleAssignments.value) {
+                    $groupAppAssignments += [PSCustomObject]@{
+                        GroupName       = $group.displayName
+                        GroupId         = $group.id
+                        AppDisplayName  = ""
+                        AppId           = ""
+                        AppAssignmentId = ""
+                    }
+                }
+
+            } catch {
+                Write-Host -ForegroundColor Red "[!] Failed to retrieve appRoleAssignments for group $($group.displayName): $($_.Exception.Message)"
+            }
+        }
+
+        # Export application assignment details
+        $appsOut = "Group_App_Assignments.csv"
+        $groupAppAssignments | Export-Csv -Path $appsOut -NoTypeInformation
+        Write-Host -ForegroundColor Green "[*] Exported group application assignments to $appsOut"
     } catch {
         Write-Host -ForegroundColor Red "An error occurred: $_"
     }
@@ -4413,6 +4465,74 @@ function Invoke-AddGroupMember {
     }
 }
 
+function Get-GroupIdsFromFile {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-Not (Test-Path $Path)) {
+        throw "File '$Path' does not exist."
+    }
+
+    try {
+        $groupIds = Get-Content -Path $Path | Where-Object { $_.Trim() -ne "" }
+        return $groupIds
+    } catch {
+        throw "Failed to read from '$Path': $_"
+    }
+}
+
+function Invoke-AddUserToAllUpdatableGroups {
+    <#
+    .SYNOPSIS
+        Adds a user to all the updatable groups from a file containing updatable group IDs
+        Author: Phil Miller (@mr-pmillz)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+
+        Adds a user to all the updatable groups from a file containing updatable group IDs
+
+    .PARAMETER GroupIdFile
+
+        File containing updatable group IDs
+
+    .PARAMETER UserId
+
+        The ID of the object that you want to remove from the group
+
+    .PARAMETER Tokens
+
+        Token object for auth
+
+    .EXAMPLES
+
+        C:\PS> Invoke-AddUserToAllUpdatableGroups -Tokens $tokens -GroupIdFile updatable_groups.txt -userId 7a3d8bfe-e4c7-46c0-93ec-ef2b1c8a0b4a
+    #>
+
+    param (
+        [string]
+        $groupIdFile,
+        [string]
+        $userId,
+        [object[]]
+        $Tokens = ""
+    )
+
+    # Read group IDs from file
+    $groupIds = Get-GroupIdsFromFile -Path $groupIdFile
+
+    # Loop through them
+    foreach ($groupId in $groupIds) {
+        Write-Host "Adding user ID $userId to group ID: $groupId"
+        Invoke-AddGroupMember -Tokens $tokens -groupID $groupId -userId $userId
+    }
+}
+
 
 function Invoke-RemoveGroupMember {
     
@@ -4496,6 +4616,54 @@ function Invoke-RemoveGroupMember {
     }
 }
 
+function Invoke-RemoveUserFromAllUpdatableGroups {
+    <#
+    .SYNOPSIS
+        Removes a user from all the updatable groups from a file containing updatable group IDs
+        Author: Phil Miller (@mr-pmillz)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+
+        Removes a user to all the updatable groups from a file containing updatable group IDs
+
+    .PARAMETER Tokens
+
+        Token object for auth
+
+    .PARAMETER GroupIdFile
+
+        File containing updatable group IDs
+
+    .PARAMETER UserId
+
+        The ID of the object that you want to remove from the group
+
+    .EXAMPLES
+
+        C:\PS> Invoke-AddGuestUserToAllUpdatableGroups -Tokens $tokens -GroupIDFile updatable_groups.txt -userId 7a3d8bfe-e4c7-46c0-93ec-ef2b1c8a0b4a
+    #>
+
+    param (
+        [string]
+        $groupIdFile,
+        [string]
+        $userId,
+        [object[]]
+        $Tokens = ""
+    )
+
+    # Read group IDs from file
+    $groupIds = Get-GroupIdsFromFile -Path $groupIdFile
+
+    # Loop through them
+    foreach ($groupId in $groupIds) {
+        Write-Host "Removing user ID $userId from group ID: $groupId"
+        Invoke-RemoveGroupMember -Tokens $tokens -groupID $groupId -userId $userId
+    }
+}
 
 function Get-EntraIDGroupInfo {
     <#
