@@ -4643,7 +4643,7 @@ function Invoke-RemoveUserFromAllUpdatableGroups {
 
     .EXAMPLES
 
-        C:\PS> Invoke-AddGuestUserToAllUpdatableGroups -Tokens $tokens -GroupIDFile updatable_groups.txt -userId 7a3d8bfe-e4c7-46c0-93ec-ef2b1c8a0b4a
+        C:\PS> Invoke-RemoveUserFromAllUpdatableGroups -Tokens $tokens -GroupIDFile updatable_groups.txt -userId 7a3d8bfe-e4c7-46c0-93ec-ef2b1c8a0b4a
     #>
 
     param (
