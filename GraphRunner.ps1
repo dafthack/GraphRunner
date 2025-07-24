@@ -4274,7 +4274,10 @@ function Get-DynamicGroups{
     Param(
         [Parameter(Position = 0, Mandatory = $False)]
         [object[]]
-        $Tokens = ""
+        $Tokens = "",
+        [Parameter()]
+        [string]
+        $OutputFile = "Dynamic_groups.csv"  # Set the default value to "Dynamic_groups.csv"
     )
 
     if($Tokens){
@@ -4377,6 +4380,10 @@ function Get-DynamicGroups{
         Write-Output ("=" * 80)
     }
 
+    if ($OutputFile) {
+        $results | Export-Csv -Path $OutputFile -NoTypeInformation
+        Write-Host -ForegroundColor Green ("[*] Exported dynamic groups to $OutputFile")
+    }
 
 }
 function Invoke-AddGroupMember {
