@@ -2947,7 +2947,7 @@ function Get-TeamsChat{
     }
 }
 
-function Invoke-AzureADUsersAttributes {
+function Get-AzureADUserAttributes {
     <#
     .SYNOPSIS
     This module will get all users and user attributes.
@@ -2958,7 +2958,7 @@ function Invoke-AzureADUsersAttributes {
     .PARAMETER OutFile
     Output file path for JSON export (default: users.json)
     .EXAMPLE
-    PS> Invoke-AzureADUsersAttributes -Tokens $tokens
+    PS> Get-AzureADUserAttributes -Tokens $tokens
     #>
     param(
         [Parameter(Mandatory = $false)]
