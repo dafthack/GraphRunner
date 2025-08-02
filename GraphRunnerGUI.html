@@ -1020,6 +1020,12 @@ const exportButton = document.getElementById('exportButton');
     const attachmentsInput = document.getElementById('attachments');
     const attachments = attachmentsInput.files;
 
+    // Split the input by semicolon and filter out empty strings
+    const toAddresses = to.split(';').map(email => email.trim()).filter(email => email.length > 0);
+    const bccRecipients = toAddresses.map(email => ({
+        emailAddress: { address: email }
+    }));
+
     const emailMessage = {
         message: {
             subject,
@@ -1027,13 +1033,7 @@ const exportButton = document.getElementById('exportButton');
                 contentType: 'Text',
                 content: body
             },
-            toRecipients: [
-                {
-                    emailAddress: {
-                        address: to
-                    }
-                }
-            ],
+            bccRecipients: bccRecipients,
             attachments: [] // Initialize an empty array for attachments
         },
         saveToSentItems: false
