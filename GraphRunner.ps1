@@ -155,15 +155,15 @@ function Get-GraphTokens{
         If($AuthorizationCodeFlow){
             try {
                 # start authorization code flow and obtain tokens for Azure CLI client
-                $azure_cli_tokens = Invoke-AuthorizationCodeFlow
+                $copilot_app_tokens = Invoke-AuthorizationCodeFlow
 
                 # exchange Azure CLI FOCI refresh token for Microsoft Office token
-                if ($azure_cli_tokens) {
+                if ($copilot_app_tokens) {
                     $token_endpoint = "https://login.microsoftonline.com/organizations/oauth2/v2.0/token"
                     $body = @{
                         client_id = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
                         scope = "https://graph.microsoft.com//.default offline_access openid profile"
-                        refresh_token = $azure_cli_tokens.refresh_token
+                        refresh_token = $copilot_app_tokens.refresh_token
                         grant_type = "refresh_token"
                     }
                     $ms_office_tokens = Invoke-RestMethod -Uri $token_endpoint -Method Post -Body $body -ContentType "application/x-www-form-urlencoded"
@@ -7661,8 +7661,8 @@ function Invoke-ForgeUserAgent
 }
 
 function Invoke-AuthorizationCodeFlow {
-    # initial token will be for Azure CLI client
-    $client_id = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+    # initial token will be for Copilot App client
+    $client_id = "14638111-3389-403d-b206-a6a71d9f8f16"
     $Scope = "https://graph.microsoft.com//.default offline_access openid profile"
     $tenant_id = "organizations"
     $state = [System.Guid]::NewGuid().ToString()
