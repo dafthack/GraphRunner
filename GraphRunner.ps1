@@ -1092,9 +1092,13 @@ Function Get-AzureAppTokens{
     $request = Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/x-www-form-urlencoded" -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body
     }
     catch{
-    $details=$_.ErrorDetails.Message | ConvertFrom-Json
-    $continue = $details.error -eq "authorization_pending"
-    Write-Output $details.error
+    if (-not [string]::IsNullOrEmpty($_.ErrorDetails.Message)) {
+        $details = $_.ErrorDetails.Message | ConvertFrom-Json
+        $continue = $details.error -eq "authorization_pending"
+        Write-Output $details.error
+    } else {
+        Write-Output "Error: $_"
+    }
     }
     if($request)
         {
@@ -1102,8 +1106,12 @@ Function Get-AzureAppTokens{
                 $global:apptokens = $request.Content | ConvertFrom-Json
             }
             catch{
-                $details=$_.ErrorDetails.Message | ConvertFrom-Json
-                Write-Output $details.error
+                if (-not [string]::IsNullOrEmpty($_.ErrorDetails.Message)) {
+                    $details = $_.ErrorDetails.Message | ConvertFrom-Json
+                    Write-Output $details.error
+                } else {
+                    Write-Output "Error: $_"
+                }
                 return
             }
             Write-Output "---Here is your access token---"
@@ -1313,32 +1321,47 @@ Function Invoke-AutoOAuthFlow{
 
     Write-Host "Listening for incoming requests on http://localhost:$port/"
 
-    $oauthcodes  = @()
-    while ($true) {
-        $context = $listener.GetContext() # This blocks until a request is received
+    $oauthcodes = @()
+    while ($listener.IsListening) {
+        try {
+            $context = $listener.GetContext() # This blocks until a request is received
+        } catch {
+            if (-not $listener.IsListening) { break }
+            Write-Host "[-] Listener error: $_"
+            continue
+        }
+
         $request = $context.Request
         $response = $context.Response
 
         # Capture the OAuth code from the query parameters
         $queryParams = [System.Web.HttpUtility]::ParseQueryString($request.Url.Query)
         $oauthCode = $queryParams["code"]
-            
-        Write-Host "Captured OAuth code: $oauthCode"
 
         # Respond to the client
         $responseText = "OAuth code captured successfully."
         $responseBytes = [System.Text.Encoding]::UTF8.GetBytes($responseText)
-        $response.OutputStream.Write($responseBytes, 0, $responseBytes.Length)
-        $response.Close()
-            
-        if($oauthCode -notin $oauthcodes){
-        Get-AzureAppTokens -ClientId $ClientID -ClientSecret $ClientSecret -RedirectUri $RedirectUri -scope $Scope -AuthCode $oauthCode
+        try {
+            $response.OutputStream.Write($responseBytes, 0, $responseBytes.Length)
+            $response.Close()
+        } catch {
+            Write-Host "[-] Error sending HTTP response: $_"
         }
-        else{
+
+        if ([string]::IsNullOrEmpty($oauthCode)) {
+            continue
+        }
+
+        Write-Host "Captured OAuth code: $oauthCode"
+
+        if ($oauthCode -notin $oauthcodes) {
+            $oauthcodes += $oauthCode
+            Get-AzureAppTokens -ClientId $ClientID -ClientSecret $ClientSecret -RedirectUri $RedirectUri -scope $Scope -AuthCode $oauthCode
+            $listener.Stop()
+            break
+        } else {
             Write-Host "[*] Skipping OAuth code we've already seen..."
         }
-        $oauthcodes += $oauthCode
-
     }
 
 }
