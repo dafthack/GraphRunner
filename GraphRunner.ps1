@@ -5954,8 +5954,8 @@ Function Invoke-SearchMailbox{
     [string]
     $SearchTerm = "",
     [Parameter(Position = 2, Mandatory = $false)]
-    [string]
-    $MessageCount = "25",
+    [int]
+    $MessageCount = 25,
     [Parameter(Position = 3, Mandatory = $false)]
     [string]
     $OutFile = "",
@@ -6005,77 +6005,248 @@ Function Invoke-SearchMailbox{
     "Content-Type" = "application/json"
     }
 
-    # Define the search query
-    $searchQuery = @{ requests = @( @{
-        entityTypes = @("message")
-        query = @{
-            queryString = $searchTerm
+    function Get-MailboxSearchHeaderValue {
+        param(
+            [object[]]$Headers,
+            [string]$Name
+        )
+
+        if (-not $Headers) {
+            return $null
         }
-        from = 0
-        size = $MessageCount
-        enableTopResults = "true"
+
+        $header = $Headers | Where-Object { $_.name -eq $Name } | Select-Object -First 1
+        if ($header) {
+            return $header.value
         }
-    )
+
+        return $null
     }
 
-    # Convert the search query to JSON format
-    $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
+    function Get-MailboxSearchRecipientValues {
+        param(
+            [object[]]$Recipients
+        )
 
-    # Perform the HTTP POST request to search emails
-    $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
-    
-    # Process the response and display the summary
-    $total = $response.value[0].hitsContainers[0].total
-    if(!$GraphRun){
-        Write-Host -ForegroundColor yellow "[*] Found $total matches for search term $searchTerm"
+        $values = @()
+        foreach ($recipient in @($Recipients)) {
+            if ($recipient.emailAddress.address) {
+                $values += $recipient.emailAddress.address
+            }
+            elseif ($recipient.emailAddress.name) {
+                $values += $recipient.emailAddress.name
+            }
+        }
+
+        return @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     }
-    else{
-        if([int]$total -gt 0){
-            Write-Host -ForegroundColor yellow "[*] Found $total matches for detector: $DetectorName"
+
+    function Get-MailboxSearchSenderInfo {
+        param(
+            [object]$Message
+        )
+
+        $rawAddress = $null
+        $displayValue = $null
+
+        if ($Message.from.emailAddress.address) {
+            $rawAddress = $Message.from.emailAddress.address
+        }
+        elseif ($Message.sender.emailAddress.address) {
+            $rawAddress = $Message.sender.emailAddress.address
+        }
+
+        if ($Message.from.emailAddress.name) {
+            $displayValue = $Message.from.emailAddress.name
+        }
+        elseif ($Message.sender.emailAddress.name) {
+            $displayValue = $Message.sender.emailAddress.name
+        }
+        elseif ($rawAddress -and $rawAddress -notmatch '^/O=') {
+            $displayValue = $rawAddress
+        }
+
+        if ([string]::IsNullOrWhiteSpace($displayValue)) {
+            $fromHeader = Get-MailboxSearchHeaderValue -Headers $Message.internetMessageHeaders -Name "From"
+            if ($fromHeader) {
+                $displayValue = $fromHeader
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($displayValue) -and $rawAddress) {
+            $displayValue = $rawAddress
+        }
+
+        if ([string]::IsNullOrWhiteSpace($displayValue)) {
+            $displayValue = "(Unknown Sender)"
+        }
+
+        return [PSCustomObject]@{
+            Display = $displayValue
+            Raw = $rawAddress
         }
     }
-        
-    if ($total -eq 0){return}
-        
-        $moreresults = "True"
-        while ($moreresults -like "True") {
-            $moreresults = $response.value[0].hitsContainers[0].moreResultsAvailable
-            $resultsList = @()
-            foreach ($hit in $response.value[0].hitsContainers[0].hits) {
-            $subject = $hit.resource.subject
-            $sender = $hit.resource.sender.emailAddress.address
-            $receivers = $hit.resource.replyTo | ForEach-Object { $_.emailAddress.Name }
-            $date = $hit.resource.sentDateTime
-            $preview = $hit.resource.bodyPreview
 
-            $LogInfo = @{
-                        "Detector Name" = $DetectorName
-                        "Subject" = $subject
-                        "Sender" = $sender
-                        "Receivers" = $receivers
-                        "Date" = $date
-                        "Preview" = $preview
+    function Get-HydratedMailboxSearchRecord {
+        param(
+            [object]$Hit,
+            [hashtable]$RequestHeaders
+        )
+
+        $itemId = $Hit.hitId
+        if ([string]::IsNullOrWhiteSpace($itemId)) {
+            return $null
+        }
+
+        try {
+            $odataSafeItemId = $itemId.Replace("'","''")
+            $message = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages('$odataSafeItemId')?`$select=id,subject,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,sentDateTime,receivedDateTime,bodyPreview,hasAttachments,internetMessageHeaders,body" -Headers $RequestHeaders -Method Get
+        }
+        catch {
+            Write-Verbose "Unable to hydrate mailbox search result $itemId."
+            return $null
+        }
+
+        $subject = $message.subject
+        if ([string]::IsNullOrWhiteSpace($subject)) {
+            $subject = "(No Subject)"
+        }
+
+        $senderInfo = Get-MailboxSearchSenderInfo -Message $message
+
+        $recipients = Get-MailboxSearchRecipientValues -Recipients $message.toRecipients
+        if ($recipients.Count -eq 0) {
+            $recipients = Get-MailboxSearchRecipientValues -Recipients $message.ccRecipients
+        }
+        if ($recipients.Count -eq 0) {
+            $recipients = Get-MailboxSearchRecipientValues -Recipients $message.bccRecipients
+        }
+        if ($recipients.Count -eq 0) {
+            $recipients = Get-MailboxSearchRecipientValues -Recipients $message.replyTo
+        }
+        if ($recipients.Count -eq 0) {
+            $recipients = @("(No Recipients)")
+        }
+
+        $date = $message.receivedDateTime
+        if ([string]::IsNullOrWhiteSpace($date)) {
+            $date = $message.sentDateTime
+        }
+        if ([string]::IsNullOrWhiteSpace($date)) {
+            $date = "(Unknown Date)"
+        }
+
+        $preview = $message.bodyPreview
+        if ([string]::IsNullOrWhiteSpace($preview)) {
+            $preview = "(No Preview)"
+        }
+
+        return [PSCustomObject]@{
+            ItemId = $itemId
+            Subject = $subject
+            Sender = $senderInfo.Display
+            SenderRaw = $senderInfo.Raw
+            Receivers = $recipients
+            Date = $date
+            Preview = $preview
+            Message = $message
+        }
+    }
+
+    $searchOffset = 0
+    $pageNumber = 1
+    $graphReportedTotal = $null
+    $moreresults = $true
+    $download = $null
+    $downloadFolderName = $null
+    $downloadedAnyMessages = $false
+    $csvHeadersWritten = $false
+
+    while ($moreresults) {
+        $searchQuery = @{
+            requests = @(
+                @{
+                    entityTypes = @("message")
+                    query = @{
+                        queryString = $searchTerm
                     }
-
-            $resultsList += New-Object PSObject -Property $LogInfo
-
-            if(!$GraphRun){
-
-            Write-Output "Subject: $subject | Sender: $sender | Receivers: $($receivers -join ', ') | Date: $date | Message Preview: $preview"
-            Write-Host ("=" * 80) 
-            }
-            }
-            if($OutFile){
-                if(!$GraphRun){
-                    Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
+                    from = $searchOffset
+                    size = $MessageCount
                 }
+            )
+        }
+
+        $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
+        $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
+        $hitsContainer = $response.value[0].hitsContainers[0]
+        $hits = @($hitsContainer.hits)
+
+        if ($null -eq $graphReportedTotal) {
+            $graphReportedTotal = $hitsContainer.total
+        }
+
+        if ($graphReportedTotal -eq 0 -or $hits.Count -eq 0) {
+            if (!$GraphRun) {
+                Write-Host -ForegroundColor Yellow "[*] No messages were returned for the search term $searchTerm."
+            }
+            return
+        }
+
+        $resultsList = @()
+        $hydratedResults = @()
+        foreach ($hit in $hits) {
+            $hydratedRecord = Get-HydratedMailboxSearchRecord -Hit $hit -RequestHeaders $headers
+            if ($hydratedRecord) {
+                $hydratedResults += $hydratedRecord
+                $LogInfo = @{
+                    "Detector Name" = $DetectorName
+                    "Subject" = $hydratedRecord.Subject
+                    "Sender" = $hydratedRecord.Sender
+                    "Sender Raw" = $hydratedRecord.SenderRaw
+                    "Receivers" = ($hydratedRecord.Receivers -join ', ')
+                    "Date" = $hydratedRecord.Date
+                    "Preview" = $hydratedRecord.Preview
+                }
+
+                $resultsList += New-Object PSObject -Property $LogInfo
+            }
+        }
+
+        $hydratedCount = $resultsList.Count
+        if(!$GraphRun){
+            Write-Host -ForegroundColor yellow "[*] Graph reported $graphReportedTotal potential match(es) for search term $searchTerm. Page $pageNumber returned $($hits.Count) hit(s), $hydratedCount of which were successfully hydrated."
+        }
+        else{
+            if([int]$graphReportedTotal -gt 0){
+                Write-Host -ForegroundColor yellow "[*] Graph reported $graphReportedTotal potential match(es) for detector: $DetectorName. Page $pageNumber returned $($hits.Count) hit(s), $hydratedCount of which were successfully hydrated."
+            }
+        }
+
+        foreach ($result in $resultsList) {
+            if(!$GraphRun){
+                Write-Output "Subject: $($result.Subject) | Sender: $($result.Sender) | Receivers: $($result.Receivers) | Date: $($result.Date) | Message Preview: $($result.Preview)"
+                Write-Host ("=" * 80)
+            }
+        }
+
+        if($OutFile -and $resultsList.Count -gt 0){
+            if(!$GraphRun){
+                Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
+            }
+
+            if ($csvHeadersWritten) {
                 $resultsList | Export-Csv -Path $OutFile -NoTypeInformation -Append
             }
+            else {
+                $resultsList | Export-Csv -Path $OutFile -NoTypeInformation
+                $csvHeadersWritten = $true
+            }
+        }
 
-            if(!$GraphRun){
+        if(!$GraphRun){
             while($download -notlike "Yes"){
                 Write-Host -ForegroundColor Cyan "[*] Do you want to download these emails and their attachments? (Yes/No)"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Downloading messages..."
@@ -6085,11 +6256,11 @@ Function Invoke-SearchMailbox{
                         Write-Output "[*] Quitting..."
                     }
                     else{
-                        if($moreresults -like "False"){
-                            Write-Host -ForegroundColor Yellow "[*] No more results. Quitting..."
+                        if($hitsContainer.moreResultsAvailable){
+                            Write-Host -ForegroundColor yellow "[*] Trying to get next page..."
                         }
                         else{
-                            Write-Host -ForegroundColor yellow "[*] Trying to get next page..."
+                            Write-Host -ForegroundColor Yellow "[*] No more results. Quitting..."
                         }
                     }
                     break
@@ -6097,48 +6268,76 @@ Function Invoke-SearchMailbox{
                     Write-Output "Invalid input. Please enter Yes or No."
                 }
             }
+        }
 
-            if ($download -like "Yes"){
-                $emailFileNames = @()
-                $folderName = "mailsearch-" + (Get-Date -Format 'yyyyMMddHHmmss')
-                New-Item -Path $folderName -ItemType Directory | Out-Null
-                # Process the response and export email content
-                foreach ($hit in $response.value[0].hitsContainers[0].hits) {
-                $itemId = $hit.hitId
-                $subject = $hit.resource.subject
+        if ($download -like "Yes" -and $hydratedResults.Count -gt 0){
+            $emailFileNames = @()
+            if (-not $downloadFolderName) {
+                $downloadFolderName = "mailsearch-" + (Get-Date -Format 'yyyyMMddHHmmss')
+                New-Item -Path $downloadFolderName -ItemType Directory | Out-Null
+            }
 
-                # Remove special characters and replace spaces with underscores
+            foreach ($result in $hydratedResults) {
+                $messageDetails = $result.Message
+                $subject = $result.Subject
                 $cleanedSubject = $subject -replace '[^\w\s]', '' -replace '\s', '_'
-        
+                if ([string]::IsNullOrWhiteSpace($cleanedSubject)) {
+                    $cleanedSubject = "message"
+                }
 
-                # Fetch email details using the message ID
                 Write-Host "[*] Downloading $cleanedSubject"
-                $messageDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId" -Headers $headers -Method Get
                 $dateTimeString = $messageDetails.sentDateTime
-                $dateTime = [DateTime]::ParseExact($dateTimeString, "yyyy-MM-ddTHH:mm:ssZ", [System.Globalization.CultureInfo]::InvariantCulture)
+                $dateTime = $null
+                if (-not [string]::IsNullOrWhiteSpace($dateTimeString)) {
+                    $dateTime = [DateTime]::Parse($dateTimeString, [System.Globalization.CultureInfo]::InvariantCulture)
+                }
+                elseif (-not [string]::IsNullOrWhiteSpace($messageDetails.receivedDateTime)) {
+                    $dateTime = [DateTime]::Parse($messageDetails.receivedDateTime, [System.Globalization.CultureInfo]::InvariantCulture)
+                }
+                else {
+                    $dateTime = Get-Date
+                }
+
                 $numericDate = $dateTime.ToString("yyyyMMddHHmmss")
-                $filename = ($cleanedSubject + "-" + $numericDate +".json")
+                $filename = ($cleanedSubject + "-" + $numericDate + ".json")
                 $emailFileNames += $filename
-                # Save email details as a .msg file
-                $messageDetails | ConvertTo-Json | Out-File -FilePath "$folderName\$filename" -Encoding UTF8
+                $messageDetails | ConvertTo-Json -Depth 10 | Out-File -FilePath "$downloadFolderName\$filename" -Encoding UTF8
 
-                # Fetch and save attachments
                 if ($messageDetails.hasAttachments -like "True") {
-                        Write-Host ("[**] " + $messageDetails.subject + " has attachments.")
-                        $attachmentDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId/attachments" -Headers $headers -Method Get
+                    Write-Host ("[**] " + $messageDetails.subject + " has attachments.")
+                    $odataSafeItemId = $result.ItemId.Replace("'","''")
+                    $attachmentDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages('$odataSafeItemId')/attachments" -Headers $headers -Method Get
 
-                        foreach($item in $attachmentDetails.value){
+                    foreach($item in $attachmentDetails.value){
                         $attachmentContentBytes = [System.Convert]::FromBase64String($item.contentBytes)
-                        $attachmentFileName = ($CleanedSubject + "-attached-" + $item.name)
+                        $attachmentFileName = ($cleanedSubject + "-attached-" + $item.name)
                         Write-Host "[***] Downloading attachment $attachmentFileName"
-                        $attachmentContentBytes | Set-Content -Path "$folderName\$attachmentFileName" -Encoding Byte
-                        }
-        
+                        $attachmentContentBytes | Set-Content -Path "$downloadFolderName\$attachmentFileName" -Encoding Byte
+                    }
                 }
+            }
+
+            $emailFileNames | ConvertTo-Json | Out-File -FilePath "$downloadFolderName\filelist.json" -Encoding UTF8
+            $downloadedAnyMessages = $true
+        }
+
+        if (-not $PageResults) {
+            $moreresults = $false
+        }
+        else {
+            $moreresults = [bool]$hitsContainer.moreResultsAvailable
+            if ($moreresults) {
+                $searchOffset += $MessageCount
+                $pageNumber += 1
+                if (!$GraphRun -and $download -like "Yes") {
+                    $download = $null
                 }
-                # Export the email file names to filelist.json
-                $emailFileNames | ConvertTo-Json | Out-File -FilePath "$folderName\filelist.json" -Encoding UTF8
-                $htmlContent = @"
+            }
+        }
+    }
+
+    if ($downloadedAnyMessages -and $downloadFolderName) {
+        $htmlContent = @"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6236,23 +6435,11 @@ Function Invoke-SearchMailbox{
 </body>
 </html>
 "@
-        
-            $htmlContent | Out-File -FilePath "$folderName\emailviewer.html" -Encoding UTF8
-            Write-Host -ForegroundColor yellow "[*] Emails and attachments have been exported to the folder $folderName."
-            Write-Host -ForegroundColor yellow "[*] A simple emailviewer.html has been provided to view the exported emails."
-            Write-Host -ForegroundColor yellow "[*] To use it run the Invoke-HTTPServer module in the $folderName directory and then navigate to http://localhost:8000/emailviewer.html"
-        }
-        }
-        
-        
-        If(!$PageResults){
-            $moreresults = "False"
-        }
-        if ($PageResults -and ($moreresults -like "True")) {
-            $searchQuery.requests[0].from += $MessageCount
-            $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
-            $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
-        }
+
+        $htmlContent | Out-File -FilePath "$downloadFolderName\emailviewer.html" -Encoding UTF8
+        Write-Host -ForegroundColor yellow "[*] Emails and attachments have been exported to the folder $downloadFolderName."
+        Write-Host -ForegroundColor yellow "[*] A simple emailviewer.html has been provided to view the exported emails."
+        Write-Host -ForegroundColor yellow "[*] To use it run the Invoke-HTTPServer module in the $downloadFolderName directory and then navigate to http://localhost:8000/emailviewer.html"
     }
         
 }
