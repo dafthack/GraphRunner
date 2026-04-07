@@ -1443,13 +1443,29 @@ Function Get-Inbox{
     $access_token = $tokens.access_token   
     [string]$refresh_token = $tokens.refresh_token 
 
-    $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$userid/mailFolders/Inbox/messages?`$top=$TotalMessages" -Headers @{"Authorization" = "Bearer $access_token"}
+    try {
+        $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$userid/mailFolders/Inbox/messages?`$top=$TotalMessages" -Headers @{"Authorization" = "Bearer $access_token"}
+    } catch {
+        $statusCode = $null
+        if ($_.Exception.Response) {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+        }
+
+        if ($statusCode -eq 403) {
+            Write-Host -ForegroundColor Red "[*] Access denied while reading mailbox '$userid'."
+            Write-Host -ForegroundColor Yellow "[*] Your token may be missing the required mail scopes, or you may not have access to this mailbox."
+            Write-Host -ForegroundColor Yellow "[*] For shared or other users' mailboxes, ensure the token has permissions such as Mail.Read.Shared or Mail.ReadWrite.Shared and that mailbox access is allowed."
+        } else {
+            Write-Host -ForegroundColor Red ("[*] Failed to retrieve inbox messages: " + $_.Exception.Message)
+        }
+        return
+    }
     $out = $request.Content | ConvertFrom-Json
     $resultsList = @()
     foreach ($hit in $out.value) {
             $subject = $hit.subject
             $sender = $hit.sender.emailAddress.address
-            $receivers = $hit.toRecipients.emailAddres.address
+            $receivers = $hit.toRecipients.emailAddress.address
             $date = $hit.sentDateTime
             $preview = $hit.bodyPreview
             $body = $hit.body.content
@@ -6501,7 +6517,13 @@ function Get-SharePointSiteURLs{
     Param(
         [Parameter(Position = 0, Mandatory = $False)]
         [object[]]
-        $Tokens = ""
+        $Tokens = "",
+        [Parameter(Position = 1, Mandatory = $False)]
+        [int]
+        $BatchSize = 200,
+        [Parameter(Position = 2, Mandatory = $False)]
+        [int]
+        $MaxSites = 0
     )
 
     if($Tokens){
@@ -6527,24 +6549,31 @@ function Get-SharePointSiteURLs{
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
+    $accessToken = $tokens.access_token   
     [string]$refreshToken = $tokens.refresh_token 
 
-
-    # Define the base URL and search URL
     $baseUrl = "https://graph.microsoft.com/v1.0"
     $searchUrl = "$baseUrl/search/query"
-
-    # Define the initial query
     $query = "*"
     $sharepointDrives = @()
-    $seenDriveIds = @()
+    $seenSiteIds = @{}
+    $from = 0
+    $moreResultsAvailable = $true
+    $batchNumber = 1
 
+    if ($BatchSize -gt 1000) {
+        Write-Host -ForegroundColor yellow "[*] BatchSize exceeds the API max of 1000. Setting it to 1000."
+        $BatchSize = 1000
+    }
 
-        # Construct the request URL with query parameters
-        $url = "$searchUrl"
+    $headers = @{
+        "Authorization" = "Bearer $accessToken"
+    }
 
-        # Define the query request body
+    Write-Host -ForegroundColor yellow "[*] Now getting SharePoint site URLs..."
+    $lastStatusLength = 0
+
+    while ($moreResultsAvailable) {
         $requestBody = @{
             requests = @(
                 @{
@@ -6552,45 +6581,61 @@ function Get-SharePointSiteURLs{
                     query = @{
                         queryString = $query
                     }
-                    from = "0"
-                    size = "500"
+                    from = "$from"
+                    size = "$BatchSize"
                     fields = @("parentReference", "webUrl")
                 }
             )
         }
 
-        # Make a request to the Search API
-        $headers = @{
-            "Authorization" = "Bearer $accessToken"
+        $response = Invoke-RestMethod -Uri $searchUrl -Headers $headers -Method Post -ContentType "application/json" -Body ($requestBody | ConvertTo-Json -Depth 10)
+        $hitsContainer = $response.value[0].hitsContainers[0]
+
+        if ($null -eq $hitsContainer) {
+            break
         }
-        Write-Host -ForegroundColor yellow "[*] Now getting SharePoint site URLs..."
-        $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Post -ContentType "application/json" -Body ($requestBody | ConvertTo-Json -Depth 10)
 
-        # Extract drive IDs and web URLs from the results
-        $newDrives = $response.value
-
-        foreach($hit in $newDrives.hitsContainers){
+        foreach($hit in @($hitsContainer.hits)){
             $siteId = $hit.resource.parentReference.siteId
-            $webUrl = $hit.resource.webUrl
-        
-            # Filter out duplicates based on drive ID
-            if ($siteId -notin $seenDriveIds){
+            if ($siteId -and (-not $seenSiteIds.ContainsKey($siteId))) {
                 $sharepointDrives += $hit
+                $seenSiteIds[$siteId] = $true
+
+                if ($MaxSites -gt 0 -and $sharepointDrives.Count -ge $MaxSites) {
+                    break
+                }
             }
-            else{
-                $seenDriveIds += $hit
-            }
-        
         }
 
-    $sorted = $sharepointDrives.hits | Sort-Object {$_.resource.webUrl}
+        $statusMsg = "[*] Batch ${batchNumber}: Fetched $($sharepointDrives.Count) unique URLs so far..."
+        $padLength = [Math]::Max(0, $lastStatusLength - $statusMsg.Length)
+        $padding = " " * $padLength
+        Write-Host -NoNewline -ForegroundColor cyan ("`r$statusMsg$padding")
+        [System.Console]::Out.Flush()
+        $lastStatusLength = $statusMsg.Length
 
-    # Display the list of unique drive IDs and web URLs
+        if ($MaxSites -gt 0 -and $sharepointDrives.Count -ge $MaxSites) {
+            $moreResultsAvailable = $false
+        }
+        else {
+            $moreResultsAvailable = [bool]$hitsContainer.moreResultsAvailable
+            $from += $BatchSize
+            $batchNumber += 1
+        }
+    }
+
+    Write-Host ""
+
+    $sorted = $sharepointDrives | Sort-Object { $_.resource.webUrl }
+
     if ($sorted.count -gt 0){
         Write-Host -ForegroundColor yellow ("[*] Found a total of " + $sorted.count + " site URLs.")
         foreach ($drive in $sorted) {
             Write-Output "Web URL: $($drive.resource.webUrl)"
         }
+    }
+    else {
+        Write-Host -ForegroundColor red "[!] No SharePoint site URLs found."
     }
 
 }
