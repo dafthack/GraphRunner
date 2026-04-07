@@ -21,7 +21,7 @@ function Get-GraphTokens{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        Get-GraphTokens is the main user authentication module for GraphRunner. Upon authenticating it will store your tokens in the global $tokens variable as well as the tenant ID in $tenantid. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)     
     
     .PARAMETER UserPasswordAuth
@@ -484,7 +484,7 @@ function Invoke-InjectOAuthApp{
     
      .PARAMETER Tokens
         
-        Provide an already authenticated access token. 
+        Provide an already authenticated access token.
 
     .EXAMPLE
         
@@ -492,9 +492,9 @@ function Invoke-InjectOAuthApp{
         Description
         -----------
         This command will inject an app registration with the display name of "Win Defend for M365" with a scope of openid, Mail.Read, email, profile, and offline_access
-    
+
     .EXAMPLE
-        
+
         C:\PS> Invoke-InjectOAuthApp -AppName "Not a Backdoor" -ReplyUrl "http://localhost:10000" -scope "op backdoor" -Tokens $tokens
         Description
         -----------
@@ -782,7 +782,7 @@ function Invoke-ImmersiveFileReader{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        Simple module to read a file with the immersive reader.
 
     .PARAMETER SharePointDomain
@@ -1013,6 +1013,184 @@ Function Invoke-GraphOpenInboxFinder{
     }
 }
 
+
+
+Function Find-PermissiveCalendars{
+    <#
+    .SYNOPSIS
+
+        A module that can be used to find calendars in the tenant that are shared more permissively than free/busy visibility. This checks permissions similar to how Invoke-GraphOpenInboxFinder checks for readable inboxes. NOTE: You must have calendar read permissions to enumerate these settings with Microsoft Graph.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+
+       A module that can be used to find calendars in the tenant that are shared more permissively than free/busy visibility. By default it will enumerate all users in the tenant unless you provide a user list.
+
+    .PARAMETER Tokens
+
+        Provide an already authenticated access token.
+
+    .PARAMETER UserList
+
+        Optional userlist of users to check (one per line)
+
+    .PARAMETER OutFile
+
+        Optional CSV file to export results to
+
+    .EXAMPLE
+
+        C:\PS> Find-PermissiveCalendars -Tokens $tokens
+        Description
+        -----------
+        Using this module will attempt to enumerate calendar permissions for all users in the tenant and flag anything more permissive than free/busy.
+
+    .EXAMPLE
+
+        C:\PS> Find-PermissiveCalendars -Tokens $tokens -UserList userlist.txt -OutFile permissive-calendars.csv
+    #>
+
+    param(
+    [Parameter(Position = 0, Mandatory = $true)]
+    [object[]]
+    $Tokens = "",
+    [Parameter(Position = 1, Mandatory = $false)]
+    [string]
+    $UserList = "",
+    [Parameter(Position = 2, Mandatory = $false)]
+    [string]
+    $OutFile = ""
+    )
+
+    if($tokens){
+        $access_token = $tokens.access_token
+    }
+    else{
+        Write-Host -ForegroundColor yellow "[*] No tokens detected. Pass your authenticated tokens to this module with the -Tokens option."
+        return
+    }
+
+    if($UserList){
+        $CalendarUsers = @(Get-Content -Path $UserList)
+        Write-Host -ForegroundColor yellow "[*] Using the provided user list."
+    }
+    else{
+        Write-Host -ForegroundColor yellow "[*] No user list provided. Gathering users from the tenant."
+        $CalendarUsers = @()
+        $usersEndpoint = "https://graph.microsoft.com/v1.0/users?`$select=userPrincipalName&`$top=999"
+        do{
+            try{
+                $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri $usersEndpoint -Headers @{"Authorization" = "Bearer $access_token"}
+            }catch{
+                if($_.Exception.Response.StatusCode.value__ -match "429"){
+                    Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
+                    Start-Sleep -Seconds 5
+                    continue
+                }
+                Write-Host -ForegroundColor red "[*] Error gathering users: $($_.Exception.Message)"
+                return
+            }
+
+            $out = $request.Content | ConvertFrom-Json
+            $CalendarUsers += $out.value.userPrincipalName
+            if ($out.'@odata.nextLink') {
+                $usersEndpoint = $out.'@odata.nextLink'
+            }
+            else {
+                break
+            }
+        } while ($true)
+    }
+
+    if (!$CalendarUsers){return}
+
+    $resultsList = @()
+    $count = $CalendarUsers.count
+    $curr_usr = 0
+    $authzWarningShown = $false
+    Write-Host -ForegroundColor yellow "[*] Note: To enumerate other users' calendar permissions your token needs calendar read permissions such as Calendars.ReadBasic, Calendars.Read, or Calendars.ReadWrite."
+    Write-Output "`n`r"
+    Write-Output "[*] Checking calendar permissions for each user..."
+    Write-Output "`n`r"
+
+    foreach($calendarUser in $CalendarUsers)
+    {
+        Write-Host -nonewline "$curr_usr of $count calendars checked`r"
+        $curr_usr += 1
+        $encodedUser = [System.Uri]::EscapeDataString($calendarUser)
+
+        try {
+            $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$encodedUser/calendar/calendarPermissions" -Headers @{"Authorization" = "Bearer $access_token"}
+        }catch{
+            $statusCode = $null
+            if ($_.Exception.Response) {
+                $statusCode = $_.Exception.Response.StatusCode.Value__
+            }
+
+            if ($statusCode -eq 403 -and -not $authzWarningShown) {
+                Write-Host ""
+                Write-Host -ForegroundColor Red "[*] Access denied while reading calendar permissions."
+                Write-Host -ForegroundColor Yellow "[*] Your token may be missing the required calendar scopes, or you may not have access to enumerate these calendars."
+                $authzWarningShown = $true
+            }
+            continue
+        }
+
+        $permissions = ($request.Content | ConvertFrom-Json).value
+        foreach ($permission in @($permissions)) {
+            if ($permission.role -in @("none","freeBusyRead")) {
+                continue
+            }
+
+            if ($permission.isInsideOrganization -ne $true) {
+                continue
+            }
+
+            $grantedTo = $permission.emailAddress.name
+            if (!$grantedTo) {
+                $grantedTo = $permission.emailAddress.address
+            }
+            if (!$grantedTo) {
+                $grantedTo = "My Organization"
+            }
+
+            $isOrgWide = $false
+            if ($permission.id -eq "RGVmYXVsdA==" -or $grantedTo -eq "My Organization") {
+                $isOrgWide = $true
+            }
+
+            $logInfo = @{
+                "Calendar Owner" = $calendarUser
+                "Granted To" = $grantedTo
+                "Role" = $permission.role
+                "Inside Organization" = $permission.isInsideOrganization
+                "Org Wide Setting" = $isOrgWide
+            }
+
+            $resultsList += New-Object PSObject -Property $logInfo
+            Write-Host -ForegroundColor Green ("[*] Found permissive calendar access: " + $calendarUser + " -> " + $grantedTo + " (" + $permission.role + ")")
+        }
+    }
+
+    Write-Host ""
+    if ($resultsList.Count -gt 0) {
+        Write-Host -ForegroundColor Green ("[*] Found " + $resultsList.Count + " permissive calendar permission entries.")
+        foreach ($result in $resultsList) {
+            Write-Output ("Calendar Owner: " + $result."Calendar Owner" + " | Granted To: " + $result."Granted To" + " | Role: " + $result.Role + " | Org Wide Setting: " + $result."Org Wide Setting")
+            Write-Output ("=" * 80)
+        }
+        if($OutFile){
+            Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
+            $resultsList | Export-Csv -Path $OutFile -NoTypeInformation
+        }
+    }
+    else{
+        Write-Host -ForegroundColor yellow "[*] No overly permissive calendar permissions were found."
+    }
+}
 
 
 Function Get-AzureAppTokens{
@@ -4124,6 +4302,9 @@ function Get-UpdatableGroups{
         [Parameter(Mandatory = $False)]
         [string]
         $OutputFile = "Updatable_groups.csv",  # Set the default value to "Updatable_groups.csv"
+        [Parameter(Mandatory = $False)]
+        [string[]]
+        $Keyword,
         [Parameter(Mandatory=$False)]
         [switch]
         $AutoRefresh,
@@ -4143,6 +4324,9 @@ function Get-UpdatableGroups{
         $results = @()
 
         Write-Host -ForegroundColor yellow "[*] Now gathering groups and checking if each one is updatable."
+        if ($Keyword) {
+            Write-Host -ForegroundColor yellow ("[*] Limiting checks to groups matching keyword(s): " + ($Keyword -join ", "))
+        }
 
         $startTime = Get-Date
         $refresh_Interval = [TimeSpan]::FromSeconds($RefreshInterval)
@@ -4160,6 +4344,20 @@ function Get-UpdatableGroups{
                     }
                 }
                 foreach ($group in $response.value) {
+                    if ($Keyword) {
+                        $matchesKeyword = $false
+                        foreach ($item in $Keyword) {
+                            if (($group.displayName -and $group.displayName -like ("*" + $item + "*")) -or ($group.description -and $group.description -like ("*" + $item + "*"))) {
+                                $matchesKeyword = $true
+                                break
+                            }
+                        }
+
+                        if (-not $matchesKeyword) {
+                            continue
+                        }
+                    }
+
                     if ((Get-Date) - $startTime -ge $refresh_interval) {
                         Write-Host -ForegroundColor Yellow "[*] Pausing script for token refresh..."
                         $reftokens = Invoke-RefreshGraphTokens -RefreshToken $refreshToken -AutoRefresh -tenantid $global:tenantid -Resource $Resource -Client $Client -ClientID $ClientID -Browser $Browser -Device $Device
@@ -6549,7 +6747,7 @@ function Get-SharePointSiteURLs{
                 }
             }
     }
-    $accessToken = $tokens.access_token   
+    $accessToken = $tokens.access_token
     [string]$refreshToken = $tokens.refresh_token 
 
     $baseUrl = "https://graph.microsoft.com/v1.0"
@@ -8020,6 +8218,7 @@ function List-GraphRunnerModules {
     Write-Host -ForegroundColor Green "Get-DynamicGroups`t`t-`t Finds dynamic groups and displays membership rules"
     Write-Host -ForegroundColor Green "Get-SharePointSiteURLs`t`t-`t Gets a list of SharePoint site URLs visible to the current user"
     Write-Host -ForegroundColor Green "Invoke-GraphOpenInboxFinder`t-`t Checks each user's inbox in a list to see if they are readable"
+    Write-Host -ForegroundColor Green "Find-PermissiveCalendars`t-`t Finds calendars shared more permissively than free/busy visibility"
     Write-Host -ForegroundColor Green "Get-TenantID`t`t`t-`t Retrieves the tenant GUID from the domain name"
 
     Write-Host -ForegroundColor Green "--------------------- Persistence Modules ---------------------"
