@@ -11,7 +11,7 @@ To list GraphRunner modules run List-GraphRunnerModules
 "
 
 
-function Get-GraphTokens{
+function Get-GraphTokens {
     <#
         .SYNOPSIS
         Get-GraphTokens is the main user authentication module for GraphRunner. Upon authenticating it will store your tokens in the global $tokens variable as well as the tenant ID in $tenantid. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)
@@ -21,37 +21,30 @@ function Get-GraphTokens{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
        Get-GraphTokens is the main user authentication module for GraphRunner. Upon authenticating it will store your tokens in the global $tokens variable as well as the tenant ID in $tenantid. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)     
     
     .PARAMETER UserPasswordAuth
-        
         Provide a username and password for authentication instead of using a device code auth.
     
     .PARAMETER Client
-        
         Provide a Client to authenticate to. Use Custom to provide your own ClientID.
 
     .PARAMETER ClientID
-        
         Provide a ClientID to use with the Custom client option.
 
     .PARAMETER Resource
-
         Provide a resource to authenticate to such as https://graph.microsoft.com/
 
     .PARAMETER Device
-        
         Provide a device type to use such as Windows or Android.
 
     .PARAMETER Browser
-        
         Provide a Browser to spoof.
     
-
+    .PARAMETER CustomUserAgent
+        Provide a custom User Agent to abuse MFA enablement gaps.
 
     .EXAMPLE
-        
         C:\PS> Get-GraphTokens
         Description
         -----------
@@ -59,45 +52,56 @@ function Get-GraphTokens{
      #>
     [CmdletBinding()]
     param(
-    [Parameter(Position = 0,Mandatory=$False)]
-    [switch]$ExternalCall,
-    [Parameter(Position = 1,Mandatory=$False)]
-    [switch]$UserPasswordAuth,
-    [Parameter(Position = 2,Mandatory=$False)]
-    [ValidateSet("Yammer","Outlook","MSTeams","Graph","AzureCoreManagement","AzureManagement","MSGraph","DODMSGraph","Custom","Substrate")]
-    [String[]]$Client = "MSGraph",
-    [Parameter(Position = 3,Mandatory=$False)]
-    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",    
-    [Parameter(Position = 4,Mandatory=$False)]
-    [String]$Resource = "https://graph.microsoft.com",
-    [Parameter(Position = 5,Mandatory=$False)]
-    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
-    [String]$Device,
-    [Parameter(Position = 6,Mandatory=$False)]
-    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
-    [String]$Browser
+        [Parameter(Position = 0, Mandatory = $False)]
+        [switch]$ExternalCall,
+
+        [Parameter(Position = 1, Mandatory = $False)]
+        [switch]$UserPasswordAuth,
+
+        [Parameter(Position = 2, Mandatory = $False)]
+        [ValidateSet("Yammer", "Outlook", "MSTeams", "Graph", "AzureCoreManagement", "AzureManagement", "MSGraph", "DODMSGraph", "Custom", "Substrate")]
+        [String[]]$Client = "MSGraph",
+
+        [Parameter(Position = 3, Mandatory = $False)]
+        [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+
+        [Parameter(Position = 4, Mandatory = $False)]
+        [String]$Resource = "https://graph.microsoft.com",
+
+        [Parameter(Position = 5, Mandatory = $False)]
+        [ValidateSet('Mac', 'Windows', 'AndroidMobile', 'iPhone')]
+        [String]$Device,
+
+        [Parameter(Position = 6, Mandatory = $False)]
+        [ValidateSet('Android', 'IE', 'Chrome', 'Firefox', 'Edge', 'Safari')]
+        [String]$Browser,
+
+        [Parameter(Position = 7, Mandatory = $False)]
+        [String]$CustomUserAgent
     )
+
     if ($Device) {
-		if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
-		}
-		else {
-			$UserAgent = Invoke-ForgeUserAgent -Device $Device
-		}
-	}
-	else {
-	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
-	   else {
-			$UserAgent = Invoke-ForgeUserAgent
-	   }
-	}
-    if($UserPasswordAuth){
+        if ($Browser) {
+            $UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+        } else {
+            $UserAgent = Invoke-ForgeUserAgent -Device $Device
+        }
+    } else {
+        if ($Browser) {
+            $UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+        } else {
+            $UserAgent = Invoke-ForgeUserAgent
+        }
+    }
+
+    if ($CustomUserAgent) {
+        $UserAgent = $CustomUserAgent
+    }
+
+    if ($UserPasswordAuth) {
         Write-Host -ForegroundColor Yellow "[*] Initiating the User/Password authentication flow"
         $username = Read-Host -Prompt "Enter username"
         $password = Read-Host -Prompt "Enter password" -AsSecureString
-
         $passwordText = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
 
         $url = "https://login.microsoft.com/common/oauth2/token"
@@ -108,8 +112,7 @@ function Get-GraphTokens{
         }
         $body = "grant_type=password&password=$passwordText&client_id=$ClientID&username=$username&resource=$Resource&client_info=1&scope=openid"
 
-
-        try{
+        try {
             Write-Host -ForegroundColor Yellow "[*] Trying to authenticate with the provided credentials"
             $tokens = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
 
@@ -132,15 +135,14 @@ function Get-GraphTokens{
             Write-Output $details.error
         }
         $global:tokens = $tokens
-        if($ExternalCall){
+        if ($ExternalCall) {
             return $tokens
         }
     
-    }
-    else{
-        If($tokens){
+    } else {
+        If ($tokens) {
             $newtokens = $null
-            while($newtokens -notlike "Yes"){
+            while ($newtokens -notlike "Yes") {
                 Write-Host -ForegroundColor cyan "[*] It looks like you already tokens set in your `$tokens variable. Are you sure you want to authenticate again?"
                 $answer = Read-Host 
                 $answer = $answer.ToLower()
@@ -158,11 +160,12 @@ function Get-GraphTokens{
         }
 
         $body = @{
-            "client_id" =     $ClientID
-            "resource" =      $Resource
+            "client_id" = $ClientID
+            "resource" = $Resource
         }
-        $Headers=@{}
-        $Headers["User-Agent"] = $UserAgent
+        $Headers = @{
+            "User-Agent" = $UserAgent
+        }
         $authResponse = Invoke-RestMethod `
             -UseBasicParsing `
             -Method Post `
@@ -174,10 +177,10 @@ function Get-GraphTokens{
         $continue = "authorization_pending"
         while ($continue) {
             $body = @{
-                "client_id"   = $ClientID
-                "grant_type"  = "urn:ietf:params:oauth:grant-type:device_code"
-                "code"        = $authResponse.device_code
-                "scope"       = "openid"
+                "client_id" = $ClientID
+                "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+                "code" = $authResponse.device_code
+                "scope" = "openid"
             }
 
             try {
@@ -206,16 +209,16 @@ function Get-GraphTokens{
 
             if ($continue) {
                 Start-Sleep -Seconds 3
-            }
-            else{
+            } else {
                 $global:tokens = $tokens
-                if($ExternalCall){
+                if ($ExternalCall) {
                     return $tokens
                 }
             }
         }
     }
 }
+
 function Invoke-AutoTokenRefresh{
     <#
         .SYNOPSIS
