@@ -3981,15 +3981,15 @@ function Get-SecurityGroups{
     <#
     .SYNOPSIS
 
-        Gather the security groups and members from the directory.        
+        Gather groups and members from the directory.
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-       Gather the security groups and members from the directory.
+
+       Gather groups and members from the directory. Running without options pulls all groups, including both Microsoft 365 groups and security groups. Use -SecurityOnly to limit results to security groups or -M365Only to limit results to Microsoft 365 groups.
 
     .PARAMETER AccessToken
 
@@ -3997,15 +3997,31 @@ function Get-SecurityGroups{
 
     .PARAMETER OutputFile
 
-        The path to the CSV file where the security groups will be exported.
+        The path to the CSV file where the groups will be exported.
+
+    .PARAMETER SecurityOnly
+
+        Limit results to security groups only.
+
+    .PARAMETER M365Only
+
+        Limit results to Microsoft 365 groups only.
 
     .EXAMPLE
         
         C:\PS> Get-SecurityGroups -Tokens $tokens -OutputFile "security_groups.csv"
         -----------
-        This will dump all security groups to the specified CSV file.
+        This will dump all groups to the specified CSV file.
         -----------
         C:\PS> Get-SecurityGroups -Tokens $tokens -Client Custom -ClientID "cb1056e2-e479-49de-ae31-7812af012ed8" -Resource "https://graph.microsoft.com/ -Device AndroidMobile -Browser Android
+        -----------
+        C:\PS> Get-SecurityGroups -Tokens $tokens -SecurityOnly
+        -----------
+        This will dump only security groups.
+        -----------
+        C:\PS> Get-SecurityGroups -Tokens $tokens -M365Only
+        -----------
+        This will dump only Microsoft 365 groups.
     #>
     param (
         [Parameter(Mandatory = $False)]
@@ -4034,8 +4050,17 @@ function Get-SecurityGroups{
         [Parameter(Mandatory = $False)]
         [switch] $AutoRefresh,
         [Parameter(Mandatory = $False)]
+        [switch] $SecurityOnly,
+        [Parameter(Mandatory = $False)]
+        [switch] $M365Only,
+        [Parameter(Mandatory = $False)]
         $RefreshInterval = (60 * 10) # 10 minutes
     )
+
+    if ($SecurityOnly -and $M365Only) {
+        Write-Host -ForegroundColor Red "[*] Please use either -SecurityOnly or -M365Only, not both at the same time."
+        return
+    }
 
     if ($Tokens) {
         if (!$GraphRun) {
@@ -4068,12 +4093,23 @@ function Get-SecurityGroups{
         Authorization = "Bearer $accessToken"
     }
     
-    if (!$GraphRun) {
-        Write-Host -ForegroundColor Yellow "[*] Retrieving a list of security groups and their members from the directory..."
+    if ($SecurityOnly) {
+        $groupFilter = "?`$filter=securityEnabled eq true"
+        $groupScopeDescription = "security groups"
+    } elseif ($M365Only) {
+        $groupFilter = "?`$filter=groupTypes/any(c:c eq 'Unified')"
+        $groupScopeDescription = "Microsoft 365 groups"
+    } else {
+        $groupFilter = ""
+        $groupScopeDescription = "all groups"
     }
-    
+
+    if (!$GraphRun) {
+        Write-Host -ForegroundColor Yellow ("[*] Retrieving a list of " + $groupScopeDescription + " and their members from the directory...")
+    }
+
     $graphApiUrl = "https://graph.microsoft.com/v1.0"
-    $groupsUrl = "$graphApiUrl/groups?$filter=securityEnabled eq true"
+    $groupsUrl = "$graphApiUrl/groups$groupFilter"
     
     $groupsWithMemberIDs = @()
     $startTime = Get-Date
@@ -4142,9 +4178,9 @@ function Get-SecurityGroups{
     } while ($groupsUrl)
     
     if ($OutputFile) {
-        # Export security groups to a CSV file
+        # Export groups to a CSV file
         $groupsWithMemberIDs | Export-Csv -Path $OutputFile -NoTypeInformation
-        Write-Host -ForegroundColor Green "Security groups exported to $OutputFile."
+        Write-Host -ForegroundColor Green "Groups exported to $OutputFile."
     }
 
     return $groupsWithMemberIDs
