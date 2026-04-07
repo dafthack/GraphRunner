@@ -3997,6 +3997,168 @@ function Get-SecurityGroups{
     return $groupsWithMemberIDs
 }
 
+function Get-DirectoryRoles{
+    <#
+    .SYNOPSIS
+
+        Gather the activated directory roles and their assigned members.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+
+       Gather the activated directory roles and their assigned members. This uses the Microsoft Graph directoryRoles API, so it only returns roles that are activated in the tenant.
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+
+    .PARAMETER OutputFile
+
+        The path to the CSV file where the directory roles will be exported.
+
+    .EXAMPLE
+
+        C:\PS> Get-DirectoryRoles -Tokens $tokens -OutputFile "directory_roles.csv"
+        -----------
+        This will dump all activated directory roles and their members to the specified CSV file.
+    #>
+    param (
+        [Parameter(Mandatory = $False)]
+        [object] $Tokens,
+        [Parameter(Mandatory = $False)]
+        [string] $OutputFile = "directory_roles.csv",
+        [Parameter(Mandatory = $False)]
+        [switch] $GraphRun
+    )
+
+    if ($Tokens) {
+        if (!$GraphRun) {
+            Write-Host -ForegroundColor Yellow "[*] Using the provided access tokens."
+        }
+    } else {
+        Write-Host -ForegroundColor Yellow "[*] First, you need to log in."
+        Write-Host -ForegroundColor Yellow "[*] If you already have tokens, you can use the -Tokens parameter to pass them to this function."
+        while ($auth -notlike "Yes") {
+            Write-Host -ForegroundColor Cyan "[*] Do you want to authenticate now (yes/no)?"
+            $answer = Read-Host
+            $answer = $answer.ToLower()
+            if ($answer -eq "yes" -or $answer -eq "y") {
+                Write-Host -ForegroundColor Yellow "[*] Running Get-GraphTokens now..."
+                $tokens = Get-GraphTokens -ExternalCall
+                $auth = "Yes"
+            } elseif ($answer -eq "no" -or $answer -eq "n") {
+                Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                return
+            } else {
+                Write-Host -ForegroundColor Red "Invalid input. Please enter Yes or No."
+            }
+        }
+    }
+
+    $accessToken = $tokens.access_token
+    $headers = @{
+        Authorization = "Bearer $accessToken"
+    }
+
+    if (!$GraphRun) {
+        Write-Host -ForegroundColor Yellow "[*] Retrieving activated directory roles and their members from the directory..."
+    }
+
+    $graphApiUrl = "https://graph.microsoft.com/v1.0"
+    $rolesUrl = "$graphApiUrl/directoryRoles"
+    $directoryRolesWithMembers = @()
+
+    do {
+        try {
+            $rolesResponse = Invoke-RestMethod -Uri $rolesUrl -Headers $headers -Method Get
+            $roles = $rolesResponse.value
+        } catch {
+            Write-Host -ForegroundColor Red "[*] An error occurred while retrieving directory roles: $($_.Exception.Message)"
+            return
+        }
+
+        foreach ($role in $roles) {
+            $roleId = $role.id
+            $membersUrl = "$graphApiUrl/directoryRoles/$roleId/members"
+            $members = @()
+
+            try {
+                $membersResponse = Invoke-RestMethod -Uri $membersUrl -Headers $headers -Method Get
+                $members = @($membersResponse.value)
+            } catch {
+                if ($_.Exception.Response.StatusCode.value__ -match "429") {
+                    Write-Host -ForegroundColor Red "[*] Being throttled... sleeping for 5 seconds"
+                    Start-Sleep -Seconds 5
+                    try {
+                        $membersResponse = Invoke-RestMethod -Uri $membersUrl -Headers $headers -Method Get
+                        $members = @($membersResponse.value)
+                    } catch {
+                        Write-Host -ForegroundColor Red "[*] An error occurred while retrieving members for role $($role.displayName): $($_.Exception.Message)"
+                        continue
+                    }
+                } else {
+                    Write-Host -ForegroundColor Red "[*] An error occurred while retrieving members for role $($role.displayName): $($_.Exception.Message)"
+                    continue
+                }
+            }
+
+            $memberNames = @()
+            $memberIds = @()
+
+            foreach ($member in $members) {
+                $memberIds += $member.id
+                if ($member.userPrincipalName) {
+                    $memberNames += $member.userPrincipalName
+                } elseif ($member.mail) {
+                    $memberNames += $member.mail
+                } elseif ($member.displayName) {
+                    $memberNames += $member.displayName
+                } else {
+                    $memberNames += $member.id
+                }
+            }
+
+            $roleInfo = @{
+                RoleName = $role.displayName
+                RoleId = $roleId
+                RoleTemplateId = $role.roleTemplateId
+                Description = $role.description
+                MemberIds = $memberIds -join ","
+                Members = $memberNames -join ","
+            }
+
+            Write-Output ("Role Name: " + $role.displayName + " | Role ID: " + $roleId)
+            if ($memberNames.Count -gt 0) {
+                Write-Output ("Members: " + ($memberNames -join ', '))
+            } else {
+                Write-Output "Members: "
+            }
+            Write-Output ""
+            Write-Output ("=" * 80)
+            $directoryRolesWithMembers += New-Object PSObject -Property $roleInfo
+        }
+
+        if ($rolesResponse.'@odata.nextLink') {
+            $rolesUrl = $rolesResponse.'@odata.nextLink'
+            if (!$GraphRun) {
+                Write-Host -ForegroundColor Yellow "[*] Processing more directory roles..."
+            }
+        } else {
+            $rolesUrl = $null
+        }
+    } while ($rolesUrl)
+
+    if ($OutputFile) {
+        $directoryRolesWithMembers | Export-Csv -Path $OutputFile -NoTypeInformation
+        Write-Host -ForegroundColor Green "Directory roles exported to $OutputFile."
+    }
+
+    return $directoryRolesWithMembers
+}
+
 function Create-SecurityGroupWithMembers {
     param (
         [string] $AccessToken,
@@ -8213,6 +8375,7 @@ function List-GraphRunnerModules {
     Write-Host -ForegroundColor Green "Invoke-DumpCAPS`t`t`t-`t Gets conditional access policies"
     Write-Host -ForegroundColor Green "Invoke-DumpApps`t`t`t-`t Gets app registrations and external enterprise apps along with consent and scope info"
     Write-Host -ForegroundColor Green "Get-AzureADUsers`t`t-`t Gets user directory"
+    Write-Host -ForegroundColor Green "Get-DirectoryRoles`t`t-`t Gets activated directory roles and their members"
     Write-Host -ForegroundColor Green "Get-SecurityGroups`t`t-`t Gets security groups and members"
     Write-Host -ForegroundColor Green "Get-UpdatableGroups`t`t-`t Gets groups that may be able to be modified by the current user"
     Write-Host -ForegroundColor Green "Get-DynamicGroups`t`t-`t Finds dynamic groups and displays membership rules"
