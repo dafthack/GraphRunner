@@ -3425,34 +3425,612 @@ Function Get-AzureADUsers{
 
 
 
+function Get-CAPSStatusCode {
+    param(
+        [Parameter(Mandatory = $true)]
+        $ErrorRecord
+    )
+
+    if ($null -eq $ErrorRecord.Exception.Response) {
+        return $null
+    }
+
+    try {
+        return [int]$ErrorRecord.Exception.Response.StatusCode.value__
+    } catch {
+        try {
+            return [int]$ErrorRecord.Exception.Response.StatusCode
+        } catch {
+            return $null
+        }
+    }
+}
+
+function Get-CAPSTenantIdFromToken {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AccessToken
+    )
+
+    try {
+        $tokenPayload = $AccessToken.Split(".")[1].Replace('-', '+').Replace('_', '/')
+        while ($tokenPayload.Length % 4) { $tokenPayload += "=" }
+        $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
+        $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
+        $tokobj = $tokenArray | ConvertFrom-Json
+        return $tokobj.tid
+    } catch {
+        return $null
+    }
+}
+
+function Invoke-CAPSDeviceCodeAuth {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ClientId,
+        [Parameter(Mandatory = $true)]
+        [string]$Resource,
+        [Parameter(Mandatory = $false)]
+        [string]$Tenant = "common",
+        [Parameter(Mandatory = $false)]
+        [string]$UserAgent
+    )
+
+    $headers = @{}
+    if ($UserAgent) {
+        $headers["User-Agent"] = $UserAgent
+    }
+
+    $deviceCodeBody = @{
+        "client_id" = $ClientId
+        "resource" = $Resource
+    }
+
+    $authResponse = Invoke-RestMethod `
+        -UseBasicParsing `
+        -Method Post `
+        -Uri "https://login.microsoftonline.com/$Tenant/oauth2/devicecode?api-version=1.0" `
+        -Headers $headers `
+        -Body $deviceCodeBody
+
+    Write-Host -ForegroundColor Yellow $authResponse.message
+
+    $continue = "authorization_pending"
+    while ($continue) {
+        $tokenBody = @{
+            "client_id" = $ClientId
+            "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+            "code" = $authResponse.device_code
+            "resource" = $Resource
+        }
+
+        try {
+            $tokenResponse = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/$Tenant/oauth2/token?api-version=1.0" -Headers $headers -Body $tokenBody
+            if ($tokenResponse) {
+                return $tokenResponse
+            }
+        } catch {
+            $details = $null
+            if (-not [string]::IsNullOrEmpty($_.ErrorDetails.Message)) {
+                try { $details = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
+            }
+
+            if ($details -and $details.error -eq "authorization_pending") {
+                $continue = $true
+                Write-Output $details.error
+            } else {
+                throw
+            }
+        }
+
+        Start-Sleep -Seconds 3
+    }
+}
+
+function Invoke-CAPSRefreshTokenAuth {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TenantId,
+        [Parameter(Mandatory = $true)]
+        [string]$RefreshToken,
+        [Parameter(Mandatory = $true)]
+        [string]$Resource,
+        [Parameter(Mandatory = $false)]
+        [string]$ClientId = "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
+        [Parameter(Mandatory = $false)]
+        [string]$UserAgent
+    )
+
+    $headers = @{}
+    if ($UserAgent) {
+        $headers["User-Agent"] = $UserAgent
+    }
+
+    $body = @{
+        "resource" = $Resource
+        "client_id" = $ClientId
+        "grant_type" = "refresh_token"
+        "refresh_token" = $RefreshToken
+        "scope" = "openid"
+    }
+
+    return Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/$TenantId/oauth2/token" -Headers $headers -Body $body
+}
+
+function Invoke-CAPSPaginatedGet {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Headers,
+        [Parameter(Mandatory = $false)]
+        [string]$LegacyBaseUri
+    )
+
+    $items = @()
+    $nextUrl = $Uri
+
+    while ($nextUrl) {
+        $response = Invoke-RestMethod -Method Get -Uri $nextUrl -Headers $Headers
+        if ($response.value) {
+            $items += @($response.value)
+        }
+
+        $nextUrl = $response.'@odata.nextLink'
+        if (-not $nextUrl) {
+            $nextUrl = $response.'odata.nextLink'
+        }
+
+        if ($nextUrl -and -not ($nextUrl -match '^https?://') -and $LegacyBaseUri) {
+            $nextUrl = $LegacyBaseUri.TrimEnd('/') + "/" + $nextUrl.TrimStart('/')
+        }
+    }
+
+    return $items
+}
+
+function Get-CAPSTenantInfo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TenantId,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$ModernHeaders,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$LegacyHeaders
+    )
+
+    $info = [ordered]@{
+        tenantId = $TenantId
+        displayName = $null
+        domains = @()
+        countryCode = $null
+    }
+
+    if ($ModernHeaders) {
+        try {
+            $orgResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/organization" -Headers $ModernHeaders
+            if ($orgResponse.value -and $orgResponse.value.Count -gt 0) {
+                $org = $orgResponse.value[0]
+                $info.tenantId = $org.id
+                $info.displayName = $org.displayName
+                $info.domains = @($org.verifiedDomains | ForEach-Object { $_.name })
+                $info.countryCode = $org.countryLetterCode
+                return $info
+            }
+        } catch {}
+    }
+
+    if ($LegacyHeaders) {
+        try {
+            $tenantDetails = Invoke-RestMethod -Method Get -Uri "https://graph.windows.net/$TenantId/tenantDetails?api-version=1.61-internal" -Headers $LegacyHeaders
+            if ($tenantDetails.value -and $tenantDetails.value.Count -gt 0) {
+                $detail = $tenantDetails.value[0]
+                $info.displayName = $detail.displayName
+                $info.domains = @($detail.verifiedDomains | ForEach-Object { $_.name })
+            }
+        } catch {}
+    }
+
+    return $info
+}
+
+function Get-CAPSModernData {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Headers
+    )
+
+    $policies = $null
+    $apiUsed = "Microsoft Graph v1.0"
+    $actualApiUsed = $null
+
+    try {
+        $policies = Invoke-CAPSPaginatedGet -Uri "https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies" -Headers $Headers
+        $actualApiUsed = "Microsoft Graph v1.0"
+    } catch {
+        $statusCode = Get-CAPSStatusCode -ErrorRecord $_
+        if ($statusCode -notin @(401, 403)) {
+            throw
+        }
+
+        $policies = Invoke-CAPSPaginatedGet -Uri "https://graph.microsoft.com/beta/identity/conditionalAccess/policies" -Headers $Headers
+        $actualApiUsed = "Microsoft Graph beta"
+    }
+
+    $namedLocations = @()
+    try {
+        $namedLocations = Invoke-CAPSPaginatedGet -Uri "https://graph.microsoft.com/v1.0/identity/conditionalAccess/namedLocations" -Headers $Headers
+    } catch {}
+
+    $authStrengthPolicies = @()
+    try {
+        $authStrengthPolicies = Invoke-CAPSPaginatedGet -Uri "https://graph.microsoft.com/v1.0/policies/authenticationStrengthPolicies" -Headers $Headers
+    } catch {}
+
+    $authenticationMethodsPolicy = $null
+    try {
+        $authenticationMethodsPolicy = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy" -Headers $Headers
+    } catch {}
+
+    return @{
+        ApiUsed = $apiUsed
+        ActualApiUsed = $actualApiUsed
+        Data = [ordered]@{
+            conditionalAccessPolicies = @($policies)
+            namedLocations = @($namedLocations)
+            authenticationStrengthPolicies = @($authStrengthPolicies)
+            authenticationMethodsPolicy = $authenticationMethodsPolicy
+        }
+    }
+}
+
+function Get-CAPSLegacyData {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TenantId,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Headers
+    )
+
+    $baseUri = "https://graph.windows.net/$TenantId"
+    $allPolicies = Invoke-CAPSPaginatedGet -Uri "$baseUri/policies?api-version=1.61-internal" -Headers $Headers -LegacyBaseUri $baseUri
+
+    $conditionalAccessPolicies = @()
+    foreach ($policy in @($allPolicies)) {
+        if ($policy.policyType -ne "18") {
+            continue
+        }
+
+        $policyDetailParsed = $null
+        try {
+            $policyDetailParsed = $policy.policyDetail | ConvertFrom-Json
+        } catch {
+            $policyDetailParsed = $null
+        }
+
+        $legacyPolicy = [ordered]@{}
+        foreach ($prop in $policy.PSObject.Properties) {
+            $legacyPolicy[$prop.Name] = $prop.Value
+        }
+        $legacyPolicy["policyDetailParsed"] = $policyDetailParsed
+        $conditionalAccessPolicies += [pscustomobject]$legacyPolicy
+    }
+
+    $namedLocations = @()
+    try {
+        $namedLocations = Invoke-CAPSPaginatedGet -Uri "$baseUri/namedLocations?api-version=1.61-internal" -Headers $Headers -LegacyBaseUri $baseUri
+    } catch {}
+
+    return @{
+        ApiUsed = "Azure AD Graph (legacy) api-version=1.61-internal"
+        ActualApiUsed = "Azure AD Graph (legacy) api-version=1.61-internal"
+        Data = [ordered]@{
+            conditionalAccessPolicies = @($conditionalAccessPolicies)
+            allPolicies = @($allPolicies)
+            namedLocations = @($namedLocations)
+        }
+    }
+}
+
+function Get-CAPSSummary {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$Policies
+    )
+
+    $summary = [ordered]@{
+        totalPolicies = 0
+        enabledPolicies = 0
+        disabledPolicies = 0
+        reportOnlyPolicies = 0
+        unknownStatePolicies = 0
+    }
+
+    foreach ($policy in @($Policies)) {
+        $summary.totalPolicies += 1
+
+        $state = ""
+        if ($policy.state) {
+            $state = [string]$policy.state
+        }
+
+        switch -Regex ($state.ToLower()) {
+            '^enabled$' { $summary.enabledPolicies += 1 }
+            '^disabled$' { $summary.disabledPolicies += 1 }
+            '^enabledforreportingbutnotenforced$' { $summary.reportOnlyPolicies += 1 }
+            default { $summary.unknownStatePolicies += 1 }
+        }
+    }
+
+    return $summary
+}
+
+function Resolve-CAPSObjectId {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Guid,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$ModernHeaders,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$LegacyHeaders,
+        [Parameter(Mandatory = $false)]
+        [string]$TenantId
+    )
+
+    if ($Guid -notmatch '^[0-9a-fA-F-]{36}$') {
+        return $Guid
+    }
+
+    if ($ModernHeaders) {
+        try {
+            $resolvedObject = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/directoryObjects/$Guid" -Headers $ModernHeaders -ErrorAction Stop
+            if ($resolvedObject.userPrincipalName) {
+                return $resolvedObject.userPrincipalName
+            } elseif ($resolvedObject.displayName) {
+                return $resolvedObject.displayName
+            }
+        } catch {}
+    }
+
+    if ($LegacyHeaders -and $TenantId) {
+        return ResolveGUID $Guid $LegacyHeaders $TenantId
+    }
+
+    return $Guid
+}
+
+function Convert-CAPSArrayToDisplayString {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [object[]]$Values,
+        [Parameter(Mandatory = $false)]
+        [switch]$ResolveGuids,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$ModernHeaders,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$LegacyHeaders,
+        [Parameter(Mandatory = $false)]
+        [string]$TenantId
+    )
+
+    if (-not $Values) {
+        return ""
+    }
+
+    $outputValues = @()
+    foreach ($value in @($Values)) {
+        if ($null -eq $value) {
+            continue
+        }
+
+        $stringValue = [string]$value
+        if ($ResolveGuids -and $stringValue -match '^[0-9a-fA-F-]{36}$') {
+            $stringValue = Resolve-CAPSObjectId -Guid $stringValue -ModernHeaders $ModernHeaders -LegacyHeaders $LegacyHeaders -TenantId $TenantId
+        }
+
+        $outputValues += $stringValue
+    }
+
+    return ($outputValues -join ", ")
+}
+
+function Write-CAPSModernPolicyDisplay {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        $Policy,
+        [Parameter(Mandatory = $false)]
+        [switch]$ResolveGuids,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$ModernHeaders,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$LegacyHeaders,
+        [Parameter(Mandatory = $false)]
+        [string]$TenantId
+    )
+
+    Write-Output "Display Name: $($Policy.displayName)"
+    Write-Output "Policy State: $($Policy.state)"
+
+    $users = $Policy.conditions.users
+    if ($users) {
+        $includeUsers = Convert-CAPSArrayToDisplayString -Values $users.includeUsers -ResolveGuids:$ResolveGuids -ModernHeaders $ModernHeaders -LegacyHeaders $LegacyHeaders -TenantId $TenantId
+        $excludeUsers = Convert-CAPSArrayToDisplayString -Values $users.excludeUsers -ResolveGuids:$ResolveGuids -ModernHeaders $ModernHeaders -LegacyHeaders $LegacyHeaders -TenantId $TenantId
+        $includeGroups = Convert-CAPSArrayToDisplayString -Values $users.includeGroups -ResolveGuids:$ResolveGuids -ModernHeaders $ModernHeaders -LegacyHeaders $LegacyHeaders -TenantId $TenantId
+        $excludeGroups = Convert-CAPSArrayToDisplayString -Values $users.excludeGroups -ResolveGuids:$ResolveGuids -ModernHeaders $ModernHeaders -LegacyHeaders $LegacyHeaders -TenantId $TenantId
+        if ($includeUsers) { Write-Output "Included Users: $includeUsers" }
+        if ($excludeUsers) { Write-Output "Excluded Users: $excludeUsers" }
+        if ($includeGroups) { Write-Output "Included Groups: $includeGroups" }
+        if ($excludeGroups) { Write-Output "Excluded Groups: $excludeGroups" }
+    }
+
+    $applications = $Policy.conditions.applications
+    if ($applications) {
+        $includeApps = Convert-CAPSArrayToDisplayString -Values $applications.includeApplications
+        $excludeApps = Convert-CAPSArrayToDisplayString -Values $applications.excludeApplications
+        $includeActions = Convert-CAPSArrayToDisplayString -Values $applications.includeUserActions
+        if ($includeApps) { Write-Output "Included Applications: $includeApps" }
+        if ($excludeApps) { Write-Output "Excluded Applications: $excludeApps" }
+        if ($includeActions) { Write-Output "Included User Actions: $includeActions" }
+    }
+
+    if ($Policy.conditions.clientAppTypes) {
+        Write-Output "Client App Types: $($Policy.conditions.clientAppTypes -join ', ')"
+    }
+
+    if ($Policy.conditions.platforms) {
+        $includePlatforms = Convert-CAPSArrayToDisplayString -Values $Policy.conditions.platforms.includePlatforms
+        $excludePlatforms = Convert-CAPSArrayToDisplayString -Values $Policy.conditions.platforms.excludePlatforms
+        if ($includePlatforms) { Write-Output "Included Platforms: $includePlatforms" }
+        if ($excludePlatforms) { Write-Output "Excluded Platforms: $excludePlatforms" }
+    }
+
+    if ($Policy.conditions.locations) {
+        $includeLocations = Convert-CAPSArrayToDisplayString -Values $Policy.conditions.locations.includeLocations
+        $excludeLocations = Convert-CAPSArrayToDisplayString -Values $Policy.conditions.locations.excludeLocations
+        if ($includeLocations) { Write-Output "Included Locations: $includeLocations" }
+        if ($excludeLocations) { Write-Output "Excluded Locations: $excludeLocations" }
+    }
+
+    $grantControlStrings = @()
+    if ($Policy.grantControls.operator) {
+        $grantControlStrings += "Operator: $($Policy.grantControls.operator)"
+    }
+    if ($Policy.grantControls.builtInControls) {
+        $grantControlStrings += "BuiltInControls: $($Policy.grantControls.builtInControls -join ', ')"
+    }
+    if ($Policy.grantControls.authenticationStrength.displayName) {
+        $grantControlStrings += "AuthenticationStrength: $($Policy.grantControls.authenticationStrength.displayName)"
+    }
+    if ($Policy.grantControls.termsOfUse) {
+        $grantControlStrings += "TermsOfUse: $($Policy.grantControls.termsOfUse -join ', ')"
+    }
+    if ($grantControlStrings.Count -gt 0) {
+        Write-Output "Grant Controls: $($grantControlStrings -join ' | ')"
+    }
+
+    if ($Policy.sessionControls) {
+        $enabledSessionControls = @(
+            $Policy.sessionControls.PSObject.Properties |
+                Where-Object { $_.Name -notlike '@*' -and $null -ne $_.Value } |
+                ForEach-Object {
+                    if ($_.Value.PSObject.Properties.Name -contains 'isEnabled') {
+                        if ($_.Value.isEnabled -eq $true) { $_.Name }
+                    } elseif ($_.Value -eq $true) {
+                        $_.Name
+                    }
+                }
+        ) | Where-Object { $_ }
+
+        if ($enabledSessionControls.Count -gt 0) {
+            Write-Output "Session Controls: $($enabledSessionControls -join ', ')"
+        }
+    }
+}
+
+function Write-CAPSLegacyPolicyDisplay {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        $Policy,
+        [Parameter(Mandatory = $false)]
+        [switch]$ResolveGuids,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$LegacyHeaders,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$ModernHeaders,
+        [Parameter(Mandatory = $false)]
+        [string]$TenantId
+    )
+
+    $policyDetail = $Policy.policyDetailParsed
+    if (-not $policyDetail) {
+        try { $policyDetail = $Policy.policyDetail | ConvertFrom-Json } catch {}
+    }
+
+    Write-Output "Display Name: $($Policy.displayName)"
+    Write-Output "Policy Type: $($Policy.policyType)"
+    if ($policyDetail.State) {
+        Write-Output "Policy State: $($policyDetail.State)"
+    }
+    Write-Output "Conditions:`n"
+
+    foreach ($condition in $policyDetail.Conditions.PSObject.Properties) {
+        $conditionType = $condition.Name
+        $conditionData = $condition.Value
+        $conditionText = ""
+
+        foreach ($includeExclude in @("Include", "Exclude")) {
+            if ($conditionData.$includeExclude) {
+                $conditionValues = @()
+
+                foreach ($includeData in $conditionData.$includeExclude) {
+                    $includeType = $includeData.PSObject.Properties.Name
+                    $includeValues = $includeData.PSObject.Properties.Value -split ', '
+                    $includeValue = Convert-CAPSArrayToDisplayString -Values $includeValues -ResolveGuids:$ResolveGuids -ModernHeaders $ModernHeaders -LegacyHeaders $LegacyHeaders -TenantId $TenantId
+                    $conditionValues += "`t`t`t$includeType : $includeValue"
+                }
+
+                if ($conditionValues.Count -gt 0) {
+                    $conditionText += "`t`t$includeExclude :`n$($conditionValues -join "`n")`n"
+                }
+            }
+        }
+
+        if ($conditionText) {
+            Write-Output "`t$conditionType :`n$conditionText"
+        }
+    }
+
+    if ($policyDetail.Controls.Control) {
+        Write-Output "Controls: $($policyDetail.Controls.Control -join ', ')"
+    }
+}
+
 Function Invoke-DumpCAPS{
 <#
     .SYNOPSIS
-        Tool for dumping conditional access policies
+        Tool for dumping conditional access policies with modern Graph, beta, and legacy fallback support
         Author: Beau Bullock (@dafthack)
         License: MIT
         Required Dependencies: None
         Optional Dependencies: None
 
     .DESCRIPTION
-        
-       Tool for dumping conditional access policies       
-    
+
+       Tool for dumping conditional access policies. By default this prints enhanced terminal output. The function will try Microsoft Graph v1.0 first, then Graph beta, and finally fall back to the legacy Azure AD Graph CAPS endpoint when needed. Use -FullJsonOut to export the full structured CAPS data model, matching the cap-ai.py JSON envelope as closely as possible.
+
     .PARAMETER Tokens
-        
+
         Token object for auth
-    
+
     .PARAMETER ResolveGuids
-        
+
         Switch to resolve user and group guids if wanted
 
+    .PARAMETER FullJsonOut
+
+        Export the full structured CAPS JSON output instead of only displaying the enhanced terminal view.
+
+    .PARAMETER OutFile
+
+        Path to save the full structured CAPS JSON output when -FullJsonOut is used. Defaults to cap-policies.json.
+
     .EXAMPLE
-        
+
         C:\PS> Invoke-DumpCAPS -ResolveGuids
         Description
         -----------
         This command will dump conditional access policies from the tenant and resolve user and group guids.
-
 
     .EXAMPLE
 
@@ -3460,262 +4038,196 @@ Function Invoke-DumpCAPS{
         Description
         -----------
         Use a previously authenticated refresh token to dump CAPS
-    
+
+    .EXAMPLE
+
+        C:\PS> Invoke-DumpCAPS -Tokens $tokens -FullJsonOut -OutFile .\cap-policies.json
+        Description
+        -----------
+        Export the full normalized CAPS data structure to JSON.
+
+    .EXAMPLE
+
+        C:\PS> Get-Help Invoke-DumpCAPS -Detailed
+        Description
+        -----------
+        View the enhanced help menu, including terminal display mode and full JSON export examples.
+
 #>
 
-
     Param(
-
-
-    [Parameter(Position = 0, Mandatory = $False)]
-    [switch]
-    $ResolveGuids,
-
-    [Parameter(Position = 1, Mandatory = $False)]
-    [object[]]
-    $Tokens = "",
-    [switch]
-    $GraphRun,
-    [Parameter(Mandatory=$False)]
-    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
-    [String]$Device,
-    [Parameter(Mandatory=$False)]
-    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
-    [String]$Browser
+        [Parameter(Position = 0, Mandatory = $False)]
+        [switch]$ResolveGuids,
+        [Parameter(Position = 1, Mandatory = $False)]
+        [object[]]$Tokens = "",
+        [switch]$GraphRun,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+        [String]$Device,
+        [Parameter(Mandatory=$False)]
+        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+        [String]$Browser,
+        [Parameter(Mandatory=$False)]
+        [switch]$FullJsonOut,
+        [Parameter(Mandatory=$False)]
+        [string]$OutFile = ""
     )
+
     if ($Device) {
-		if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
-		}
-		else {
-			$UserAgent = Invoke-ForgeUserAgent -Device $Device
-		}
-	}
-	else {
-	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
-	   else {
-			$UserAgent = Invoke-ForgeUserAgent
-	   }
-	}
+        if ($Browser) {
+            $UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+        } else {
+            $UserAgent = Invoke-ForgeUserAgent -Device $Device
+        }
+    } else {
+        if ($Browser) {
+            $UserAgent = Invoke-ForgeUserAgent -Browser $Browser
+        } else {
+            $UserAgent = Invoke-ForgeUserAgent
+        }
+    }
+
+    $modernTokenData = $null
+    $legacyTokenData = $null
+
     if($Tokens){
         if(!$GraphRun){
-        Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
-        Write-Host -ForegroundColor Yellow "[*] Refreshing token to the Azure AD Graph API..."
+            Write-Host -ForegroundColor Yellow "[*] Using the provided access tokens."
         }
-        $RefreshToken = $tokens.refresh_token
-        $authUrl = "https://login.microsoftonline.com/$tenantid"
-        $refreshbody = @{
-                "resource" = "https://graph.windows.net/"
-                "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
-                "User-Agent" = $UserAgent
-                "grant_type" =    "refresh_token"
-                "refresh_token" = $RefreshToken
-                "scope"=         "openid"
-            }
-
-    try{
-    $reftokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Headers $Headers -Body $refreshbody
-    }
-    catch{
-    $details=$_.ErrorDetails.Message | ConvertFrom-Json
-    Write-Output $details.error
-    }
-    if($reftokens)
-        {
-            $aadtokens = $reftokens
-            $access_token = $aadtokens.access_token
-        }
+        $modernTokenData = $tokens
     }
     else{
-        # Login
-        Write-Host -ForegroundColor yellow "[*] Initiating a device code login."
-
-        $body = @{
-            "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
-            "resource" =      "https://graph.windows.net/"
+        if(!$GraphRun){
+            Write-Host -ForegroundColor Yellow "[*] Initiating a device code login."
         }
-        $Headers=@{}
-        $Headers["User-Agent"] = $UserAgent
-        $authResponse = Invoke-RestMethod `
-            -UseBasicParsing `
-            -Method Post `
-            -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
-            -Headers $Headers `
-            -Body $body
-        Write-Host -ForegroundColor yellow $authResponse.Message
-
-        $continue = "authorization_pending"
-        while($continue)
-            {
-    
-        $body=@{
-            "client_id" =  "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
-            "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
-            "code" =       $authResponse.device_code
-        }
-        try{
-        $aadtokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
-        }
-        catch{
-        $details=$_.ErrorDetails.Message | ConvertFrom-Json
-        $continue = $details.error -eq "authorization_pending"
-        Write-Output $details.error
-        }
-        if($aadtokens)
-            {
-                $access_token = $aadtokens.access_token
-                break
-            }
-        Start-Sleep -Seconds 3
-        }   
+        $modernTokenData = Invoke-CAPSDeviceCodeAuth -ClientId "04b07795-8ddb-461a-bbee-02f9e1bf7b46" -Resource "https://graph.microsoft.com/" -Tenant "common" -UserAgent $UserAgent
     }
 
-    $tokenPayload = $aadtokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
-    while ($tokenPayload.Length % 4) { Write-Verbose "Invalid length for a Base-64 char array or string, adding ="; $tokenPayload += "=" }
-    $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
-    $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
-    $tokobj = $tokenArray | ConvertFrom-Json
-    $tenantid = $tokobj.tid
+    if (-not $modernTokenData -or -not $modernTokenData.access_token) {
+        Write-Host -ForegroundColor Red "[-] Failed to acquire a modern Graph token."
+        return
+    }
 
+    $tenantid = Get-CAPSTenantIdFromToken -AccessToken $modernTokenData.access_token
+    if (-not $tenantid) {
+        $tenantid = "myorganization"
+    }
 
-    $HeadersAuth = @{
-        Authorization = "Bearer $access_token"
+    $HeadersModern = @{
+        Authorization = "Bearer $($modernTokenData.access_token)"
         "User-Agent" = $UserAgent
+        "Content-Type" = "application/json"
+        "Accept" = "application/json"
     }
 
-    $CAPSUrl = "https://graph.windows.net/$tenantid/policies?api-version=1.61-internal"
-    $CAPS = Invoke-RestMethod -Method GET -Uri $CAPSUrl -Headers $HeadersAuth
-    $parsedjson = $CAPS 
+    $collectionResult = $null
+    try {
+        $collectionResult = Get-CAPSModernData -Headers $HeadersModern
+    } catch {
+        $statusCode = Get-CAPSStatusCode -ErrorRecord $_
+        $canFallbackToLegacy = -not [string]::IsNullOrEmpty($modernTokenData.refresh_token)
+
+        if ($statusCode -in @(401, 403) -and $canFallbackToLegacy) {
+            if(!$GraphRun){
+                Write-Host -ForegroundColor Yellow "[!] Microsoft Graph access denied for CAPS endpoints. Falling back to legacy Azure AD Graph..."
+            }
+        } elseif ($statusCode -in @(401, 403)) {
+            Write-Host -ForegroundColor Red "[-] Microsoft Graph access denied and no refresh token is available for legacy fallback."
+            return
+        } else {
+            Write-Host -ForegroundColor Red "[-] Failed collecting CAPS from Microsoft Graph: $($_.Exception.Message)"
+            return
+        }
+    }
+
+    $HeadersLegacy = $null
+    if (-not $collectionResult) {
+        try {
+            $legacyTokenData = Invoke-CAPSRefreshTokenAuth -TenantId $tenantid -RefreshToken $modernTokenData.refresh_token -Resource "https://graph.windows.net/" -ClientId "04b07795-8ddb-461a-bbee-02f9e1bf7b46" -UserAgent $UserAgent
+            $HeadersLegacy = @{
+                Authorization = "Bearer $($legacyTokenData.access_token)"
+                "User-Agent" = $UserAgent
+                "Content-Type" = "application/json"
+                "Accept" = "application/json"
+            }
+            $collectionResult = Get-CAPSLegacyData -TenantId $tenantid -Headers $HeadersLegacy
+        } catch {
+            Write-Host -ForegroundColor Red "[-] Failed collecting CAPS from legacy Azure AD Graph: $($_.Exception.Message)"
+            return
+        }
+    } else {
+        if (-not [string]::IsNullOrEmpty($modernTokenData.refresh_token)) {
+            try {
+                $legacyTokenData = Invoke-CAPSRefreshTokenAuth -TenantId $tenantid -RefreshToken $modernTokenData.refresh_token -Resource "https://graph.windows.net/" -ClientId "04b07795-8ddb-461a-bbee-02f9e1bf7b46" -UserAgent $UserAgent
+                $HeadersLegacy = @{
+                    Authorization = "Bearer $($legacyTokenData.access_token)"
+                    "User-Agent" = $UserAgent
+                    "Content-Type" = "application/json"
+                    "Accept" = "application/json"
+                }
+            } catch {}
+        }
+    }
+
+    $tenantInfo = Get-CAPSTenantInfo -TenantId $tenantid -ModernHeaders $HeadersModern -LegacyHeaders $HeadersLegacy
+    $summary = Get-CAPSSummary -Policies $collectionResult.Data.conditionalAccessPolicies
+
+    $fullResult = [ordered]@{
+        meta = [ordered]@{
+            tool = "cap-ai"
+            version = "1.0.0"
+            collectedAt = (Get-Date).ToUniversalTime().ToString("o")
+            apiUsed = $collectionResult.ApiUsed
+            tenant = $tenantInfo
+        }
+        summary = $summary
+        data = $collectionResult.Data
+    }
+
+    if ($FullJsonOut) {
+        if (-not $OutFile) {
+            $OutFile = "cap-policies.json"
+        }
+
+        $fullResult | ConvertTo-Json -Depth 20 | Out-File -FilePath $OutFile -Encoding utf8
+
+        if(!$GraphRun){
+            Write-Host -ForegroundColor Green ("[*] Full CAPS JSON exported to " + $OutFile)
+        }
+    }
+
     if(!$GraphRun){
         Write-Host -ForegroundColor Yellow "[*] Now dumping conditional access policies from the tenant."
+        Write-Host -ForegroundColor Cyan ("=" * 56)
+        Write-Host -ForegroundColor Cyan ("Tenant   : " + ($tenantInfo.displayName ? $tenantInfo.displayName : "(unknown)") + " [" + $tenantInfo.tenantId + "]")
+        $displayApiUsed = $collectionResult.ActualApiUsed
+        if (-not $displayApiUsed) {
+            $displayApiUsed = $collectionResult.ApiUsed
+        }
+        Write-Host -ForegroundColor Cyan ("API Used : " + $displayApiUsed)
+        Write-Host -ForegroundColor Cyan ("Policies : " + $summary.totalPolicies + " total | " + $summary.enabledPolicies + " enabled | " + $summary.disabledPolicies + " disabled | " + $summary.reportOnlyPolicies + " report-only")
+        if ($FullJsonOut -and $OutFile) {
+            Write-Host -ForegroundColor Cyan ("Output   : " + (Resolve-Path -LiteralPath $OutFile))
+        }
+        Write-Host -ForegroundColor Cyan ("=" * 56)
     }
-    # Iterate through each policy object and print the details
-    foreach ($policy in $parsedJson.value) {
-        $policyType = $policy.policyType
-        $displayName = $policy.displayName
-        $policyDetail = $policy.policyDetail | ConvertFrom-Json
-        if ($policyType -eq "18"){
-            # Process the PolicyDetail field
-            $policyState = $policyDetail.State
-            $conditionspreformat = $policyDetail.Conditions 
-            $controls = $policyDetail.Controls.Control -join ", "
 
-            # Print the policy details
-            # If the policy is disabled print in gray
-            if ($policyState -eq "Disabled") {
-                Write-Output "Display Name: $displayName"
-                Write-Output  "Policy Type: $policyType"
-                Write-Output "Policy State: $policyState"
-                Write-Output  "Conditions:`n"
-                $formattedConditions = @()
-
-                foreach ($condition in $conditionspreformat.PSObject.Properties) {
-                    $conditionType = $condition.Name
-                    $conditionData = $condition.Value
-
-                    $conditionText = ""
-
-                    foreach ($includeExclude in @("Include", "Exclude")) {
-                        if ($conditionData.$includeExclude) {
-                            $conditionValues = @()
-
-                            foreach ($includeData in $conditionData.$includeExclude) {
-                                $includeType = $includeData.PSObject.Properties.Name
-                                $includeValues = $includeData.PSObject.Properties.Value -split ', '  
-                                $resolvedUsers = @()
-                                if($ResolveGuids){
-                                    foreach ($guid in $includeValues) {
-                                        if ($guid -match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
-                                            $resolvedUser = ResolveGUID $guid $HeadersAuth
-                                            $resolvedUsers += $resolvedUser
-                                        } else {
-                                            $resolvedUsers += $guid
-                                        }
-                                    }
-                                }
-                                else{
-                                    foreach ($guid in $includeValues) {
-                                        $resolvedUsers += $guid
-                                    }
-                                }
-                                $includeValue = "$($resolvedUsers -join ', ')"
-                                $conditionValues += "`t`t`t$includeType : $includeValue"
-                            }
-
-                            if ($conditionValues.Count -gt 0) {
-                                $conditionText += "`t`t$includeExclude :`n$($conditionValues -join "`n")`n"
-                            }
-                        }
-                    }
-
-                    $formattedCondition = "`t$conditionType :`n$conditionText"
-                    Write-Output $formattedCondition
-                }
-                Write-Output "Controls: $controls"
+    foreach ($policy in @($collectionResult.Data.conditionalAccessPolicies)) {
+        if ($policy.policyType -eq "18" -or $policy.state) {
+            if ($policy.state) {
+                Write-CAPSModernPolicyDisplay -Policy $policy -ResolveGuids:$ResolveGuids -ModernHeaders $HeadersModern -LegacyHeaders $HeadersLegacy -TenantId $tenantid
             } else {
-                Write-Output "Display Name: $displayName"
-                Write-Output "Policy Type: $policyType"
-                Write-Output "Policy State: $policyState"
-                Write-Output "Conditions:`n"
-                $formattedConditions = @()
-
-                foreach ($condition in $conditionspreformat.PSObject.Properties) {
-                    $conditionType = $condition.Name
-                    $conditionData = $condition.Value
-
-                    $conditionText = ""
-
-                    foreach ($includeExclude in @("Include", "Exclude")) {
-                        if ($conditionData.$includeExclude) {
-                            $conditionValues = @()
-
-                            foreach ($includeData in $conditionData.$includeExclude) {
-                                $includeType = $includeData.PSObject.Properties.Name
-                                $includeValues = $includeData.PSObject.Properties.Value -split ', '  
-                                $resolvedUsers = @()
-                                if($ResolveGuids){
-                                    foreach ($guid in $includeValues) {
-                                        if ($guid -match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
-                                            $resolvedUser = ResolveGUID $guid $HeadersAuth
-                                            $resolvedUsers += $resolvedUser
-                                        } else {
-                                            $resolvedUsers += $guid
-                                        }
-                                    }
-                                }
-                                else{
-                                    foreach ($guid in $includeValues) {
-                                        $resolvedUsers += $guid
-                                    }
-                                }
-                                $includeValue = "$($resolvedUsers -join ', ')"
-                                $conditionValues += "`t`t`t$includeType : $includeValue"
-                            }
-
-                            if ($conditionValues.Count -gt 0) {
-                                $conditionText += "`t`t$includeExclude :`n$($conditionValues -join "`n")`n"
-                            }
-                        }
-                    }
-
-                    $formattedCondition = "`t$conditionType :`n$conditionText"
-                    $formattedCondition
-                }
-    
-                Write-Output "Controls: $controls"
+                Write-CAPSLegacyPolicyDisplay -Policy $policy -ResolveGuids:$ResolveGuids -LegacyHeaders $HeadersLegacy -ModernHeaders $HeadersModern -TenantId $tenantid
             }
-            # Separator
-            Write-Output ("=" * 80) 
+            Write-Output ("=" * 80)
         }
     }
 }
 
 
 
-function ResolveGUID($guid,$HeadersAuth) {
-    $url = "https://graph.windows.net/$tenantid/directoryObjects/$guid/?api-version=1.61-internal"
+function ResolveGUID($guid,$HeadersAuth,[string]$TenantId = $global:tenantid) {
+    $url = "https://graph.windows.net/$TenantId/directoryObjects/$guid/?api-version=1.61-internal"
     try{
     $resolvedObject = Invoke-RestMethod -Method Get -Uri $url -Headers $HeadersAuth -ErrorAction Stop
     } catch {
@@ -3733,10 +4245,764 @@ function ResolveGUID($guid,$HeadersAuth) {
 
 
 
+function Invoke-DumpAppsPaginatedGet {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Headers
+    )
+
+    $items = @()
+    $nextUri = $Uri
+
+    do {
+        $response = Invoke-RestMethod -Method Get -Uri $nextUri -Headers $Headers
+        if ($response.value) {
+            $items += @($response.value)
+            $nextUri = $response.'@odata.nextLink'
+        } else {
+            $items += @($response)
+            $nextUri = $null
+        }
+    } while ($nextUri)
+
+    return $items
+}
+
+function Get-DumpAppsTenantInfo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Headers
+    )
+
+    $tenantInfo = [ordered]@{
+        tenantId = $null
+        displayName = $null
+        verifiedDomains = @()
+        defaultDomain = $null
+    }
+
+    try {
+        $orgResponse = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/organization" -Headers $Headers
+        if ($orgResponse.value -and $orgResponse.value.Count -gt 0) {
+            $org = $orgResponse.value[0]
+            $tenantInfo.tenantId = $org.id
+            $tenantInfo.displayName = $org.displayName
+            $tenantInfo.verifiedDomains = @($org.verifiedDomains | ForEach-Object { $_.name })
+            $defaultDomain = $org.verifiedDomains | Where-Object { $_.isDefault -eq $true } | Select-Object -First 1 -ExpandProperty name
+            if ($defaultDomain) {
+                $tenantInfo.defaultDomain = $defaultDomain
+            } elseif ($tenantInfo.verifiedDomains.Count -gt 0) {
+                $tenantInfo.defaultDomain = $tenantInfo.verifiedDomains[0]
+            }
+        }
+    } catch {}
+
+    return $tenantInfo
+}
+
+function Get-DumpAppsAuthUserInfo {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Headers
+    )
+
+    $authUser = [ordered]@{
+        id = $null
+        userPrincipalName = $null
+        displayName = $null
+    }
+
+    try {
+        $me = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/me?`$select=id,userPrincipalName,displayName" -Headers $Headers
+        $authUser.id = $me.id
+        $authUser.userPrincipalName = $me.userPrincipalName
+        $authUser.displayName = $me.displayName
+    } catch {}
+
+    return $authUser
+}
+
+function Get-DumpAppsReplyUrls {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        $ServicePrincipal,
+        [Parameter(Mandatory = $false)]
+        $Application
+    )
+
+    $replyUrls = @()
+
+    if ($ServicePrincipal -and $ServicePrincipal.replyUrls) {
+        $replyUrls += @($ServicePrincipal.replyUrls)
+    }
+
+    if ($Application) {
+        foreach ($platformKey in @("web", "spa", "publicClient")) {
+            if ($Application.$platformKey -and $Application.$platformKey.redirectUris) {
+                $replyUrls += @($Application.$platformKey.redirectUris)
+            }
+        }
+    }
+
+    return @($replyUrls | Where-Object { $_ } | Select-Object -Unique)
+}
+
+function Get-DumpAppsApplicationInventory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Headers
+    )
+
+    $selectFields = "id,appId,displayName,createdDateTime,signInAudience,publisherDomain,web,spa,publicClient,requiredResourceAccess"
+    $applicationsRaw = Invoke-DumpAppsPaginatedGet -Uri "https://graph.microsoft.com/v1.0/applications?`$select=$selectFields" -Headers $Headers
+
+    $applications = @()
+    $appByAppId = @{}
+
+    foreach ($app in @($applicationsRaw)) {
+        $normalizedApp = [ordered]@{
+            id = $app.id
+            appId = $app.appId
+            displayName = $app.displayName
+            createdDateTime = $app.createdDateTime
+            signInAudience = $app.signInAudience
+            publisherDomain = $app.publisherDomain
+            replyUrls = Get-DumpAppsReplyUrls -Application $app
+            requiredResourceAccess = @($app.requiredResourceAccess)
+            requiredResourceAccessResolved = @()
+        }
+
+        $applications += [pscustomobject]$normalizedApp
+        if ($app.appId) {
+            $appByAppId[$app.appId] = $app
+        }
+    }
+
+    return @{
+        Applications = @($applications)
+        AppByAppId = $appByAppId
+    }
+}
+
+function Get-DumpAppsServicePrincipalInventory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Headers,
+        [Parameter(Mandatory = $false)]
+        [string]$TenantId,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$AppByAppId
+    )
+
+    $selectFields = "id,appId,displayName,appDisplayName,servicePrincipalType,appOwnerOrganizationId,publisherName,verifiedPublisher,homepage,tags,accountEnabled,createdDateTime,alternativeNames,notes,appRoleAssignmentRequired,preferredSingleSignOnMode,loginUrl,replyUrls,oauth2PermissionScopes,appRoles"
+    $servicePrincipalsRaw = Invoke-DumpAppsPaginatedGet -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$select=$selectFields" -Headers $Headers
+
+    $servicePrincipals = @()
+    $spById = @{}
+    $spByAppId = @{}
+    $oauth2ScopesLookup = @{}
+    $appRolesLookup = @{}
+    $microsoftTenantId = "f8cdef31-a31e-4b4a-93e4-5f571e91255a"
+
+    foreach ($sp in @($servicePrincipalsRaw)) {
+        $appRegistration = $null
+        if ($AppByAppId -and $sp.appId -and $AppByAppId.ContainsKey($sp.appId)) {
+            $appRegistration = $AppByAppId[$sp.appId]
+        }
+
+        $appOwnerOrganizationId = $sp.appOwnerOrganizationId
+        $isMicrosoftOwned = $false
+        $isTenantOwned = $false
+
+        if ($appOwnerOrganizationId) {
+            if ($appOwnerOrganizationId.ToLower() -eq $microsoftTenantId.ToLower()) {
+                $isMicrosoftOwned = $true
+            }
+            if ($TenantId -and $appOwnerOrganizationId.ToLower() -eq $TenantId.ToLower()) {
+                $isTenantOwned = $true
+            }
+        }
+
+        $normalizedSp = [ordered]@{
+            id = $sp.id
+            appId = $sp.appId
+            displayName = $sp.displayName
+            appDisplayName = $sp.appDisplayName
+            servicePrincipalType = $sp.servicePrincipalType
+            appOwnerOrganizationId = $appOwnerOrganizationId
+            publisherName = $sp.publisherName
+            verifiedPublisher = $sp.verifiedPublisher
+            homepage = $sp.homepage
+            signInAudience = if ($appRegistration) { $appRegistration.signInAudience } else { $null }
+            tags = @($sp.tags)
+            accountEnabled = $sp.accountEnabled
+            createdDateTime = $sp.createdDateTime
+            alternativeNames = @($sp.alternativeNames)
+            notes = $sp.notes
+            appRoleAssignmentRequired = $sp.appRoleAssignmentRequired
+            preferredSingleSignOnMode = $sp.preferredSingleSignOnMode
+            loginUrl = $sp.loginUrl
+            replyUrls = Get-DumpAppsReplyUrls -ServicePrincipal $sp -Application $appRegistration
+            isMicrosoftOwned = $isMicrosoftOwned
+            isTenantOwned = $isTenantOwned
+        }
+
+        $normalizedObject = [pscustomobject]$normalizedSp
+        $servicePrincipals += $normalizedObject
+
+        if ($sp.id) {
+            $spById[$sp.id] = $normalizedObject
+        }
+        if ($sp.appId) {
+            $spByAppId[$sp.appId] = $normalizedObject
+        }
+        if ($sp.id -and $sp.oauth2PermissionScopes) {
+            $oauth2ScopesLookup[$sp.id] = @($sp.oauth2PermissionScopes)
+        }
+        if ($sp.id -and $sp.appRoles) {
+            $appRolesLookup[$sp.id] = @($sp.appRoles)
+        }
+    }
+
+    return @{
+        ServicePrincipals = @($servicePrincipals)
+        SpById = $spById
+        SpByAppId = $spByAppId
+        Oauth2ScopesLookup = $oauth2ScopesLookup
+        AppRolesLookup = $appRolesLookup
+    }
+}
+
+function Resolve-DumpAppsPermissionDefinition {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$ResourceSpId,
+        [Parameter(Mandatory = $false)]
+        [string]$PermissionId,
+        [Parameter(Mandatory = $false)]
+        [string]$PermissionType,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$Oauth2ScopesLookup,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$AppRolesLookup
+    )
+
+    if (-not $ResourceSpId -or -not $PermissionId) {
+        return $null
+    }
+
+    if ($PermissionType -eq "Scope" -and $Oauth2ScopesLookup -and $ResourceSpId -and $Oauth2ScopesLookup.ContainsKey($ResourceSpId)) {
+        foreach ($scopeDef in @($Oauth2ScopesLookup[$ResourceSpId])) {
+            if ($scopeDef.id -and $scopeDef.id.ToString().ToLower() -eq $PermissionId.ToLower()) {
+                return [ordered]@{
+                    permissionName = $scopeDef.value
+                    displayName = if ($scopeDef.adminConsentDisplayName) { $scopeDef.adminConsentDisplayName } elseif ($scopeDef.userConsentDisplayName) { $scopeDef.userConsentDisplayName } else { $scopeDef.value }
+                    description = if ($scopeDef.adminConsentDescription) { $scopeDef.adminConsentDescription } elseif ($scopeDef.userConsentDescription) { $scopeDef.userConsentDescription } else { $scopeDef.description }
+                    adminConsentRequired = $scopeDef.adminConsentRequired
+                }
+            }
+        }
+    }
+
+    if ($PermissionType -eq "Role" -and $AppRolesLookup -and $ResourceSpId -and $AppRolesLookup.ContainsKey($ResourceSpId)) {
+        foreach ($roleDef in @($AppRolesLookup[$ResourceSpId])) {
+            if ($roleDef.id -and $roleDef.id.ToString().ToLower() -eq $PermissionId.ToLower()) {
+                return [ordered]@{
+                    permissionName = if ($roleDef.value) { $roleDef.value } else { $PermissionId }
+                    displayName = $roleDef.displayName
+                    description = $roleDef.description
+                    adminConsentRequired = $true
+                }
+            }
+        }
+    }
+
+    return $null
+}
+
+function Resolve-DumpAppsRequiredResourceAccess {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [object[]]$RequiredResourceAccess,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$SpByAppId,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$Oauth2ScopesLookup,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$AppRolesLookup
+    )
+
+    $resolvedAccess = @()
+
+    foreach ($resourceAccess in @($RequiredResourceAccess)) {
+        $resourceAppId = $resourceAccess.resourceAppId
+        $resourceSp = $null
+        if ($SpByAppId -and $resourceAppId -and $SpByAppId.ContainsKey($resourceAppId)) {
+            $resourceSp = $SpByAppId[$resourceAppId]
+        }
+
+        foreach ($accessItem in @($resourceAccess.resourceAccess)) {
+            $permissionType = $accessItem.type
+            $resourceSpId = $null
+            if ($resourceSp) {
+                $resourceSpId = $resourceSp.id
+            }
+
+            $permissionId = $null
+            if ($accessItem.id) {
+                $permissionId = $accessItem.id.ToString()
+            }
+
+            $resolvedDefinition = Resolve-DumpAppsPermissionDefinition -ResourceSpId $resourceSpId -PermissionId $permissionId -PermissionType $permissionType -Oauth2ScopesLookup $Oauth2ScopesLookup -AppRolesLookup $AppRolesLookup
+
+            $resolvedAccess += [pscustomobject]([ordered]@{
+                resourceAppId = $resourceAppId
+                resourceDisplayName = if ($resourceSp) { $resourceSp.displayName } else { $null }
+                permissionId = $accessItem.id
+                permissionType = if ($permissionType -eq "Scope") { "Delegated" } elseif ($permissionType -eq "Role") { "Application" } else { $permissionType }
+                permissionName = if ($resolvedDefinition) { $resolvedDefinition.permissionName } elseif ($permissionId) { $permissionId } else { $null }
+                displayName = if ($resolvedDefinition) { $resolvedDefinition.displayName } else { $null }
+                description = if ($resolvedDefinition) { $resolvedDefinition.description } else { $null }
+                adminConsentRequired = if ($resolvedDefinition) { $resolvedDefinition.adminConsentRequired } else { $null }
+            })
+        }
+    }
+
+    return @($resolvedAccess)
+}
+
+function Get-DumpAppsDelegatedGrants {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Headers,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$SpById
+    )
+
+    $grantSelectFields = "id,clientId,resourceId,consentType,principalId,scope"
+    $grantsRaw = Invoke-DumpAppsPaginatedGet -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$select=$grantSelectFields" -Headers $Headers
+    $delegatedGrants = @()
+
+    foreach ($grant in @($grantsRaw)) {
+        $clientSp = $null
+        $resourceSp = $null
+
+            if ($SpById -and $grant.clientId -and $SpById.ContainsKey($grant.clientId)) {
+                $clientSp = $SpById[$grant.clientId]
+            }
+            if ($SpById -and $grant.resourceId -and $SpById.ContainsKey($grant.resourceId)) {
+                $resourceSp = $SpById[$grant.resourceId]
+            }
+
+        $individualScopes = @()
+        if ($grant.scope) {
+            $individualScopes = @($grant.scope -split ' ' | Where-Object { $_ })
+        }
+
+        $delegatedGrants += [pscustomobject]([ordered]@{
+            id = $grant.id
+            clientId = $grant.clientId
+            clientDisplayName = if ($clientSp) { $clientSp.displayName } else { $null }
+            clientAppId = if ($clientSp) { $clientSp.appId } else { $null }
+            resourceId = $grant.resourceId
+            resourceDisplayName = if ($resourceSp) { $resourceSp.displayName } else { $null }
+            resourceAppId = if ($resourceSp) { $resourceSp.appId } else { $null }
+            consentType = $grant.consentType
+            principalId = $grant.principalId
+            scope = $grant.scope
+            individualScopes = @($individualScopes)
+        })
+    }
+
+    return @($delegatedGrants)
+}
+
+function Get-DumpAppsAppRoleAssignments {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Headers,
+        [Parameter(Mandatory = $true)]
+        [object[]]$ServicePrincipals,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$SpById,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$AppRolesLookup,
+        [Parameter(Mandatory = $false)]
+        [switch]$GraphRun,
+        [Parameter(Mandatory = $false)]
+        [switch]$SkipMicrosoftOwnedSPs
+    )
+
+    $assignments = @()
+    $warningCount = 0
+    $seenAssignmentIds = @{}
+    $assignmentSelectFields = "id,principalId,principalDisplayName,resourceId,resourceDisplayName,appRoleId,createdDateTime"
+    $candidateServicePrincipals = @($ServicePrincipals)
+    if ($SkipMicrosoftOwnedSPs) {
+        $candidateServicePrincipals = @($candidateServicePrincipals | Where-Object { $_.isMicrosoftOwned -ne $true })
+    }
+
+    $total = @($candidateServicePrincipals).Count
+    $index = 0
+
+    foreach ($sp in @($candidateServicePrincipals)) {
+        $index += 1
+        if (!$GraphRun -and ($index % 100 -eq 0 -or $index -eq $total)) {
+            Write-Host -ForegroundColor Yellow ("[*] App role assignment progress: " + $index + " / " + $total)
+        }
+
+        try {
+            $spAssignments = Invoke-DumpAppsPaginatedGet -Uri ("https://graph.microsoft.com/v1.0/servicePrincipals/" + $sp.id + "/appRoleAssignments?`$select=" + $assignmentSelectFields) -Headers $Headers
+        } catch {
+            $warningCount += 1
+            continue
+        }
+
+        foreach ($assignment in @($spAssignments)) {
+            if ($assignment.id -and $seenAssignmentIds.ContainsKey($assignment.id)) {
+                continue
+            }
+            if ($assignment.id) {
+                $seenAssignmentIds[$assignment.id] = $true
+            }
+
+            $principalSp = $null
+            $resourceSp = $null
+            if ($SpById -and $assignment.principalId -and $SpById.ContainsKey($assignment.principalId)) {
+                $principalSp = $SpById[$assignment.principalId]
+            }
+            if ($SpById -and $assignment.resourceId -and $SpById.ContainsKey($assignment.resourceId)) {
+                $resourceSp = $SpById[$assignment.resourceId]
+            }
+
+            $assignmentRoleId = $null
+            if ($assignment.appRoleId) {
+                $assignmentRoleId = $assignment.appRoleId.ToString()
+            }
+
+            $resolvedRole = Resolve-DumpAppsPermissionDefinition -ResourceSpId $assignment.resourceId -PermissionId $assignmentRoleId -PermissionType "Role" -AppRolesLookup $AppRolesLookup
+
+            $assignments += [pscustomobject]([ordered]@{
+                id = $assignment.id
+                principalId = $assignment.principalId
+                principalDisplayName = if ($assignment.principalDisplayName) { $assignment.principalDisplayName } elseif ($principalSp) { $principalSp.displayName } else { $null }
+                principalAppId = if ($principalSp) { $principalSp.appId } else { $null }
+                resourceId = $assignment.resourceId
+                resourceDisplayName = if ($assignment.resourceDisplayName) { $assignment.resourceDisplayName } elseif ($resourceSp) { $resourceSp.displayName } else { $null }
+                resourceAppId = if ($resourceSp) { $resourceSp.appId } else { $null }
+                appRoleId = $assignment.appRoleId
+                permissionName = if ($resolvedRole) { $resolvedRole.permissionName } elseif ($assignmentRoleId) { $assignmentRoleId } else { $null }
+                permissionDisplayName = if ($resolvedRole) { $resolvedRole.displayName } else { $null }
+                permissionDescription = if ($resolvedRole) { $resolvedRole.description } else { $null }
+                createdDateTime = $assignment.createdDateTime
+            })
+        }
+    }
+
+    return @{
+        Records = @($assignments)
+        WarningCount = $warningCount
+    }
+}
+
+function Resolve-DumpAppsPermissions {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [object[]]$DelegatedGrants,
+        [Parameter(Mandatory = $false)]
+        [object[]]$AppRoleAssignments,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$Oauth2ScopesLookup,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$AppRolesLookup,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$SpById
+    )
+
+    $resolvedPermissions = @()
+
+    foreach ($grant in @($DelegatedGrants)) {
+        foreach ($scopeName in @($grant.individualScopes)) {
+            $resolvedScope = $null
+            if ($Oauth2ScopesLookup -and $grant.resourceId -and $Oauth2ScopesLookup.ContainsKey($grant.resourceId)) {
+                foreach ($scopeDef in @($Oauth2ScopesLookup[$grant.resourceId])) {
+                    if ($scopeDef.value -and $scopeName -and $scopeDef.value.ToLower() -eq $scopeName.ToLower()) {
+                        $resolvedScope = $scopeDef
+                        break
+                    }
+                }
+            }
+
+            $resolvedPermissions += [pscustomobject]([ordered]@{
+                permissionType = "Delegated"
+                permissionName = $scopeName
+                displayName = if ($resolvedScope) { if ($resolvedScope.adminConsentDisplayName) { $resolvedScope.adminConsentDisplayName } elseif ($resolvedScope.userConsentDisplayName) { $resolvedScope.userConsentDisplayName } else { $scopeName } } else { $null }
+                description = if ($resolvedScope) { if ($resolvedScope.adminConsentDescription) { $resolvedScope.adminConsentDescription } elseif ($resolvedScope.userConsentDescription) { $resolvedScope.userConsentDescription } else { $resolvedScope.description } } else { $null }
+                adminConsentRequired = if ($resolvedScope) { $resolvedScope.adminConsentRequired } else { $null }
+                clientSpId = $grant.clientId
+                clientDisplayName = $grant.clientDisplayName
+                clientAppId = $grant.clientAppId
+                resourceSpId = $grant.resourceId
+                resourceDisplayName = $grant.resourceDisplayName
+                resourceAppId = $grant.resourceAppId
+                consentType = $grant.consentType
+                principalId = $grant.principalId
+                grantId = $grant.id
+            })
+        }
+    }
+
+    foreach ($assignment in @($AppRoleAssignments)) {
+        $resolvedPermissions += [pscustomobject]([ordered]@{
+            permissionType = "Application"
+            permissionName = $assignment.permissionName
+            displayName = $assignment.permissionDisplayName
+            description = $assignment.permissionDescription
+            adminConsentRequired = $true
+            clientSpId = $assignment.principalId
+            clientDisplayName = $assignment.principalDisplayName
+            clientAppId = $assignment.principalAppId
+            resourceSpId = $assignment.resourceId
+            resourceDisplayName = $assignment.resourceDisplayName
+            resourceAppId = $assignment.resourceAppId
+            consentType = $null
+            principalId = $null
+            grantId = $assignment.id
+        })
+    }
+
+    return @($resolvedPermissions)
+}
+
+function Resolve-DumpAppsDirectoryObjectDisplay {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$ObjectId,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$Headers,
+        [Parameter(Mandatory = $false)]
+        [hashtable]$Cache
+    )
+
+    if (-not $ObjectId) {
+        return $null
+    }
+
+    if ($Cache -and $Cache.ContainsKey($ObjectId)) {
+        return $Cache[$ObjectId]
+    }
+
+    $resolvedValue = $ObjectId
+    try {
+        $directoryObject = Invoke-RestMethod -Method Get -Uri ("https://graph.microsoft.com/v1.0/directoryObjects/" + $ObjectId) -Headers $Headers
+        if ($directoryObject.userPrincipalName) {
+            $resolvedValue = $directoryObject.userPrincipalName
+        } elseif ($directoryObject.displayName) {
+            $resolvedValue = $directoryObject.displayName
+        }
+    } catch {}
+
+    if ($Cache) {
+        $Cache[$ObjectId] = $resolvedValue
+    }
+
+    return $resolvedValue
+}
+
+function Get-DumpAppsUnsupportedExternalAppPermissions {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TenantId,
+        [Parameter(Mandatory = $true)]
+        [string]$RefreshToken,
+        [Parameter(Mandatory = $true)]
+        [object[]]$ServicePrincipals,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$GraphHeaders
+    )
+
+    $portalTokenData = Invoke-CAPSRefreshTokenAuth -TenantId $TenantId -RefreshToken $RefreshToken -Resource "74658136-14ec-4630-ad9b-26e160ff0fc6" -ClientId "04b07795-8ddb-461a-bbee-02f9e1bf7b46" -UserAgent "Mozilla/5.0"
+    $portalHeaders = @{
+        "Authorization" = "Bearer $($portalTokenData.access_token)"
+        "Content-Type" = "application/json"
+        "X-Requested-With" = "XMLHttpRequest"
+        "x-ms-client-request-id" = [guid]::NewGuid().ToString()
+        "x-ms-correlation-id" = [guid]::NewGuid().ToString()
+    }
+
+    $principalDisplayCache = @{}
+    $unsupportedResults = @()
+    foreach ($servicePrincipal in @($ServicePrincipals)) {
+        if ($servicePrincipal.isMicrosoftOwned -or $servicePrincipal.isTenantOwned) {
+            continue
+        }
+
+        $userConsentEntries = @()
+        $adminConsentEntries = @()
+
+        try {
+            $userConsents = Invoke-RestMethod -Method Get -Uri ("https://main.iam.ad.ext.azure.com/api/EnterpriseApplications/" + $servicePrincipal.id + "/ServicePrincipalPermissions?consentType=User&userObjectId=") -Headers $portalHeaders
+            foreach ($consentItem in @($userConsents)) {
+                $principalDisplays = @()
+                foreach ($principalId in @($consentItem.principalIds)) {
+                    $principalDisplays += Resolve-DumpAppsDirectoryObjectDisplay -ObjectId $principalId -Headers $GraphHeaders -Cache $principalDisplayCache
+                }
+
+                $userConsentEntries += [pscustomobject]([ordered]@{
+                    permissionId = $consentItem.permissionId
+                    permissionType = $consentItem.permissionType
+                    principalIds = @($consentItem.principalIds)
+                    principals = @($principalDisplays)
+                })
+            }
+        } catch {}
+
+        try {
+            $adminConsents = Invoke-RestMethod -Method Get -Uri ("https://main.iam.ad.ext.azure.com/api/EnterpriseApplications/" + $servicePrincipal.id + "/ServicePrincipalPermissions?consentType=Admin&userObjectId=") -Headers $portalHeaders
+            foreach ($consentItem in @($adminConsents)) {
+                $principalDisplays = @()
+                foreach ($principalId in @($consentItem.principalIds)) {
+                    $principalDisplays += Resolve-DumpAppsDirectoryObjectDisplay -ObjectId $principalId -Headers $GraphHeaders -Cache $principalDisplayCache
+                }
+
+                $adminConsentEntries += [pscustomobject]([ordered]@{
+                    permissionId = $consentItem.permissionId
+                    permissionType = $consentItem.permissionType
+                    principalIds = @($consentItem.principalIds)
+                    principals = @($principalDisplays)
+                })
+            }
+        } catch {}
+
+        if ($userConsentEntries.Count -gt 0 -or $adminConsentEntries.Count -gt 0) {
+            $unsupportedResults += [pscustomobject]([ordered]@{
+                servicePrincipalId = $servicePrincipal.id
+                appId = $servicePrincipal.appId
+                displayName = $servicePrincipal.displayName
+                appOwnerOrganizationId = $servicePrincipal.appOwnerOrganizationId
+                createdDateTime = $servicePrincipal.createdDateTime
+                userConsentPermissions = @($userConsentEntries)
+                adminConsentPermissions = @($adminConsentEntries)
+            })
+        }
+    }
+
+    return @($unsupportedResults)
+}
+
+function Write-DumpAppsRegistrationDisplay {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        $Application
+    )
+
+    Write-Output ("App Name: " + $Application.displayName + " (App ID: " + $Application.appId + ")")
+    Write-Output ("Creation Date: " + $Application.createdDateTime)
+    Write-Output ("Sign-In Audience: " + $Application.signInAudience)
+    if ($Application.replyUrls -and $Application.replyUrls.Count -gt 0) {
+        Write-Output ("Reply URLs: " + ($Application.replyUrls -join ', '))
+    }
+    foreach ($permission in @($Application.requiredResourceAccessResolved)) {
+        Write-Output ($permission.permissionType + " Permission: " + $permission.permissionName + " | Resource: " + $permission.resourceDisplayName)
+    }
+}
+
+function Write-DumpAppsExternalAppDisplay {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        $ServicePrincipal,
+        [Parameter(Mandatory = $false)]
+        [object[]]$Permissions,
+        [Parameter(Mandatory = $false)]
+        $FallbackPermissions
+    )
+
+    Write-Output ("External App: " + $ServicePrincipal.displayName)
+    Write-Output ("AppId: " + $ServicePrincipal.appId)
+    Write-Output ("Object ID: " + $ServicePrincipal.id)
+    Write-Output ("appOwnerOrganizationId: " + $ServicePrincipal.appOwnerOrganizationId)
+    Write-Output ("Creation Date: " + $ServicePrincipal.createdDateTime)
+
+    if ($Permissions -and $Permissions.Count -gt 0) {
+        Write-Output "Resolved Permissions:"
+        foreach ($permission in @($Permissions)) {
+            $permissionLine = $permission.permissionType + ": " + $permission.permissionName
+            if ($permission.resourceDisplayName) {
+                $permissionLine += " | Resource: " + $permission.resourceDisplayName
+            }
+            if ($permission.consentType) {
+                $permissionLine += " | Consent: " + $permission.consentType
+            }
+            Write-Output $permissionLine
+        }
+    } elseif ($FallbackPermissions) {
+        Write-Output "Scope of Consent:"
+        foreach ($consent in @($FallbackPermissions.userConsentPermissions)) {
+            Write-Output ($consent.permissionId + ", " + $consent.permissionType + ", " + ($consent.principals -join '; '))
+        }
+        foreach ($consent in @($FallbackPermissions.adminConsentPermissions)) {
+            Write-Output ($consent.permissionId + ", " + $consent.permissionType + ", " + ($consent.principals -join '; '))
+        }
+    }
+}
+
+function Get-DumpAppsSummary {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [object[]]$Applications,
+        [Parameter(Mandatory = $false)]
+        [object[]]$ServicePrincipals,
+        [Parameter(Mandatory = $false)]
+        [object[]]$DelegatedGrants,
+        [Parameter(Mandatory = $false)]
+        [object[]]$AppRoleAssignments,
+        [Parameter(Mandatory = $false)]
+        [object[]]$ResolvedPermissions,
+        [Parameter(Mandatory = $false)]
+        [object[]]$UnsupportedExternalAppPermissions,
+        [Parameter(Mandatory = $false)]
+        [object[]]$Warnings,
+        [Parameter(Mandatory = $false)]
+        [object[]]$Errors
+    )
+
+    $externalEnterpriseApps = @($ServicePrincipals | Where-Object { $_.isMicrosoftOwned -ne $true -and $_.isTenantOwned -ne $true })
+
+    return [ordered]@{
+        applicationRegistrationCount = @($Applications).Count
+        servicePrincipalCount = @($ServicePrincipals).Count
+        externalEnterpriseAppCount = @($externalEnterpriseApps).Count
+        delegatedGrantCount = @($DelegatedGrants).Count
+        appRoleAssignmentCount = @($AppRoleAssignments).Count
+        resolvedPermissionCount = @($ResolvedPermissions).Count
+        unsupportedExternalAppFallbackCount = @($UnsupportedExternalAppPermissions).Count
+        warnings = @($Warnings)
+        errors = @($Errors)
+    }
+}
+
 Function Invoke-DumpApps{
     <#
         .SYNOPSIS
-            Dump all of the app registrations and external enterprise apps as well as list members that have consented to permissions on their accounts.
+            Dump app registrations, enterprise applications, consent grants, and resolved permission inventory.
             Author: Beau Bullock (@dafthack)
             License: MIT
             Required Dependencies: None
@@ -3744,11 +5010,48 @@ Function Invoke-DumpApps{
 
         .DESCRIPTION
         
-           Dump all of the app registrations and external enterprise apps as well as list members that have consented to permissions on their accounts.
+           Dump all of the app registrations and external enterprise apps in the tenant, then enrich them with delegated grants, application permissions, and resolved permission metadata. By default this prints enhanced terminal output. Use -FullJsonOut to export a structured inventory of applications, service principals, delegated grants, application permissions, resolved permissions, and unsupported external app fallback data when available.
 
-        .EXAMPLES      
+        .PARAMETER Tokens
+
+            Pass the $tokens global variable after authenticating to this parameter.
+
+        .PARAMETER GraphRun
+
+            Internal switch used by Invoke-GraphRunner to reduce interactive output and make the command easier to batch.
+
+        .PARAMETER FullJsonOut
+
+            Export the full structured application inventory to JSON in addition to the normal collection workflow.
+
+        .PARAMETER OutFile
+
+            Path to save the full structured JSON output when -FullJsonOut is used. Defaults to oauth-consent-inventory.json.
+
+        .PARAMETER SkipMicrosoftOwnedSPs
+
+            Skip Microsoft-owned service principals during app role assignment collection to reduce API calls in large tenants. This can speed up collection substantially, but it may omit Microsoft first-party app role assignments from the output.
+
+        .EXAMPLE
         
             C:\PS> Invoke-DumpApps -Tokens $tokens
+            Description
+            -----------
+            Dump the current tenant's app registrations, enterprise applications, consent grants, and resolved permissions to the terminal.
+
+        .EXAMPLE
+
+            C:\PS> Invoke-DumpApps -Tokens $tokens -FullJsonOut -OutFile .\oauth-consent-inventory.json
+            Description
+            -----------
+            Export the full structured app inventory to a JSON file while still printing the terminal summary.
+
+        .EXAMPLE
+
+            C:\PS> Invoke-DumpApps -Tokens $tokens -SkipMicrosoftOwnedSPs
+            Description
+            -----------
+            Speed up app role assignment collection by skipping Microsoft-owned service principals.
     #>
 
     Param(
@@ -3757,7 +5060,13 @@ Function Invoke-DumpApps{
         [object[]]
         $Tokens = "",
         [switch]
-        $GraphRun
+        $GraphRun,
+        [Parameter(Mandatory = $False)]
+        [switch]$FullJsonOut,
+        [Parameter(Mandatory = $False)]
+        [string]$OutFile = "",
+        [Parameter(Mandatory = $False)]
+        [switch]$SkipMicrosoftOwnedSPs
     )
 
     if($Tokens){
@@ -3785,194 +5094,155 @@ Function Invoke-DumpApps{
                 }
             }
     }
-    $accesstoken = $tokens.access_token   
-    [string]$refreshToken = $tokens.refresh_token   
-    if(!$GraphRun){
-        Write-Host -ForegroundColor yellow "[*] Getting Microsoft Graph Object ID"
+    $accessToken = $tokens.access_token
+    [string]$refreshToken = $tokens.refresh_token
+    $headers = @{
+        "Authorization" = "Bearer $accessToken"
+        "Content-Type" = "application/json"
+        "Accept" = "application/json"
     }
-    # Get full service principal list
 
-    $initialUrl = "https://graph.microsoft.com/v1.0/servicePrincipals"
-    $headers = @{"Authorization" = "Bearer $accesstoken"}
+    $warnings = @()
+    $errors = @()
 
-    # Initialize an array to store all collected data
-    $allData = @()
+    $tenantInfo = Get-DumpAppsTenantInfo -Headers $headers
+    $authUserInfo = Get-DumpAppsAuthUserInfo -Headers $headers
 
-    # Loop until there's no more nextLink
-    do {
-        # Invoke the web request
-        $response = Invoke-WebRequest -UseBasicParsing -Uri $initialUrl -Headers $headers
-
-        # Convert the response content to JSON
-        $jsonData = $response.Content | ConvertFrom-Json
-
-        # Add the current page's data to the array
-        $allData += $jsonData.value
-
-        # Check if there's a nextLink
-        if ($jsonData.'@odata.nextLink') {
-            $initialUrl = $jsonData.'@odata.nextLink'
-        } else {
-       
-            break
-        }
-    } while ($true)
-
-    $appDisplayNameToSearch = "Microsoft Graph"
-    $graphId = $allData | Where-Object { $_.appDisplayName -eq $appDisplayNameToSearch } | Select-Object -ExpandProperty appId
-    $graphIdInternal = $allData | Where-Object { $_.appDisplayName -eq $appDisplayNameToSearch } | Select-Object -ExpandProperty Id
-    Write-Output "Graph ID: $graphId"
-    Write-Output "Internal Graph ID: $graphIdInternal"
-
-    # Get Object IDs of individual permissions
     if(!$GraphRun){
-    Write-Host -ForegroundColor yellow "[*] Now getting object IDs for scope objects..."
+        Write-Host -ForegroundColor Yellow "[*] Enumerating applications and service principals..."
     }
-    $spns = Invoke-WebRequest -UseBasicParsing -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$graphIdInternal" -Headers $headers
-    $spnsjson = $spns.Content | ConvertFrom-Json
 
-    # Construct the Graph API endpoint
-    $graphApiUrl = "https://graph.microsoft.com/v1.0"
+    $applicationInventory = Get-DumpAppsApplicationInventory -Headers $headers
+    $servicePrincipalInventory = Get-DumpAppsServicePrincipalInventory -Headers $headers -TenantId $tenantInfo.tenantId -AppByAppId $applicationInventory.AppByAppId
+
+    foreach ($application in @($applicationInventory.Applications)) {
+        $application.requiredResourceAccessResolved = Resolve-DumpAppsRequiredResourceAccess -RequiredResourceAccess $application.requiredResourceAccess -SpByAppId $servicePrincipalInventory.SpByAppId -Oauth2ScopesLookup $servicePrincipalInventory.Oauth2ScopesLookup -AppRolesLookup $servicePrincipalInventory.AppRolesLookup
+    }
+
+    $delegatedGrants = @()
+    $delegatedGrantFailed = $false
+    try {
+        $delegatedGrants = Get-DumpAppsDelegatedGrants -Headers $headers -SpById $servicePrincipalInventory.SpById
+    } catch {
+        $delegatedGrantFailed = $true
+        $errors += ("Delegated grant enumeration failed: " + $_.Exception.Message)
+    }
+
+    $appRoleAssignmentResult = Get-DumpAppsAppRoleAssignments -Headers $headers -ServicePrincipals $servicePrincipalInventory.ServicePrincipals -SpById $servicePrincipalInventory.SpById -AppRolesLookup $servicePrincipalInventory.AppRolesLookup -GraphRun:$GraphRun -SkipMicrosoftOwnedSPs:$SkipMicrosoftOwnedSPs
+    $appRoleAssignments = @($appRoleAssignmentResult.Records)
+    if ($appRoleAssignmentResult.WarningCount -gt 0) {
+        $warnings += ($appRoleAssignmentResult.WarningCount.ToString() + " service principal(s) returned errors during app role assignment enumeration.")
+    }
+
+    $resolvedPermissions = Resolve-DumpAppsPermissions -DelegatedGrants $delegatedGrants -AppRoleAssignments $appRoleAssignments -Oauth2ScopesLookup $servicePrincipalInventory.Oauth2ScopesLookup -AppRolesLookup $servicePrincipalInventory.AppRolesLookup -SpById $servicePrincipalInventory.SpById
+
+    $unsupportedExternalAppPermissions = @()
+    $unsupportedFallbackUsed = $false
+    $shouldTryUnsupportedFallback = $false
+    if ($refreshToken -and ($delegatedGrantFailed -or ($delegatedGrants.Count -eq 0 -and $appRoleAssignments.Count -eq 0))) {
+        $shouldTryUnsupportedFallback = $true
+    }
+
+    if ($shouldTryUnsupportedFallback) {
+        if(!$GraphRun){
+            Write-Host -ForegroundColor Yellow "[!] Graph-native app consent collection was incomplete. Trying unsupported external app permissions fallback..."
+        }
+        try {
+            $unsupportedExternalAppPermissions = Get-DumpAppsUnsupportedExternalAppPermissions -TenantId $tenantInfo.tenantId -RefreshToken $refreshToken -ServicePrincipals $servicePrincipalInventory.ServicePrincipals -GraphHeaders $headers
+            if ($unsupportedExternalAppPermissions.Count -gt 0) {
+                $unsupportedFallbackUsed = $true
+            }
+        } catch {
+            $warnings += ("Unsupported external app fallback failed: " + $_.Exception.Message)
+        }
+    }
+
+    $summary = Get-DumpAppsSummary -Applications $applicationInventory.Applications -ServicePrincipals $servicePrincipalInventory.ServicePrincipals -DelegatedGrants $delegatedGrants -AppRoleAssignments $appRoleAssignments -ResolvedPermissions $resolvedPermissions -UnsupportedExternalAppPermissions $unsupportedExternalAppPermissions -Warnings $warnings -Errors $errors
+
+    $fullResult = [ordered]@{
+        tenant = $tenantInfo
+        collection = [ordered]@{
+            tool = "Invoke-DumpApps"
+            version = "1.0.0"
+            collectedAt = (Get-Date).ToUniversalTime().ToString("o")
+            authenticatedUser = $authUserInfo
+            unsupportedExternalFallbackUsed = $unsupportedFallbackUsed
+            skipMicrosoftOwnedSPs = $SkipMicrosoftOwnedSPs
+        }
+        summary = $summary
+        data = [ordered]@{
+            applications = @($applicationInventory.Applications)
+            servicePrincipals = @($servicePrincipalInventory.ServicePrincipals)
+            delegatedGrants = @($delegatedGrants)
+            appRoleAssignments = @($appRoleAssignments)
+            resolvedPermissions = @($resolvedPermissions)
+            unsupportedExternalAppPermissions = @($unsupportedExternalAppPermissions)
+        }
+    }
+
+    if ($FullJsonOut) {
+        if (-not $OutFile) {
+            $OutFile = "oauth-consent-inventory.json"
+        }
+        $fullResult | ConvertTo-Json -Depth 20 | Out-File -FilePath $OutFile -Encoding utf8
+        if(!$GraphRun){
+            Write-Host -ForegroundColor Green ("[*] Full app inventory JSON exported to " + $OutFile)
+        }
+    }
+
     if(!$GraphRun){
-    Write-Host -ForegroundColor yellow "[*] App Registrations:"
+        Write-Host -ForegroundColor Cyan ("=" * 72)
+        Write-Host -ForegroundColor Cyan ("Tenant                : " + $(if ($tenantInfo.displayName) { $tenantInfo.displayName } else { "(unknown)" }) + " [" + $tenantInfo.tenantId + "]")
+        Write-Host -ForegroundColor Cyan ("Authenticated User    : " + $(if ($authUserInfo.userPrincipalName) { $authUserInfo.userPrincipalName } else { "(unknown)" }))
+        Write-Host -ForegroundColor Cyan ("Applications          : " + $summary.applicationRegistrationCount)
+        Write-Host -ForegroundColor Cyan ("Service Principals    : " + $summary.servicePrincipalCount)
+        Write-Host -ForegroundColor Cyan ("Delegated Grants      : " + $summary.delegatedGrantCount)
+        Write-Host -ForegroundColor Cyan ("App Permissions       : " + $summary.appRoleAssignmentCount)
+        Write-Host -ForegroundColor Cyan ("Resolved Permissions  : " + $summary.resolvedPermissionCount)
+        Write-Host -ForegroundColor Cyan ("External Apps         : " + $summary.externalEnterpriseAppCount)
+        Write-Host -ForegroundColor Cyan ("Unsupported Fallback  : " + $summary.unsupportedExternalAppFallbackCount)
+        Write-Host -ForegroundColor Cyan ("Warnings              : " + @($summary.warnings).Count)
+        Write-Host -ForegroundColor Cyan ("Errors                : " + @($summary.errors).Count)
+        if ($FullJsonOut -and $OutFile) {
+            Write-Host -ForegroundColor Cyan ("Output                : " + (Resolve-Path -LiteralPath $OutFile))
+        }
+        Write-Host -ForegroundColor Cyan ("=" * 72)
+
+        if (@($summary.errors).Count -gt 0) {
+            Write-Host -ForegroundColor Red "[!] Errors:"
+            foreach ($errorItem in @($summary.errors)) {
+                Write-Host -ForegroundColor Red ("    " + $errorItem)
+            }
+        }
+
+        if (@($summary.warnings).Count -gt 0) {
+            Write-Host -ForegroundColor Yellow "[!] Warnings:"
+            foreach ($warningItem in @($summary.warnings)) {
+                Write-Host -ForegroundColor Yellow ("    " + $warningItem)
+            }
+        }
+
+        Write-Host -ForegroundColor Yellow "[*] App Registrations:"
+        Write-Output ("=" * 80)
+        foreach ($application in @($applicationInventory.Applications)) {
+            Write-DumpAppsRegistrationDisplay -Application $application
+            Write-Output ""
+            Write-Output ("=" * 80)
+        }
+
+        Write-Host -ForegroundColor Yellow "[*] External Enterprise Apps:"
+        Write-Output ("=" * 80)
+        foreach ($servicePrincipal in @($servicePrincipalInventory.ServicePrincipals | Where-Object { $_.isMicrosoftOwned -ne $true -and $_.isTenantOwned -ne $true })) {
+            $appPermissions = @($resolvedPermissions | Where-Object { $_.clientSpId -eq $servicePrincipal.id })
+            $fallbackPermissions = $unsupportedExternalAppPermissions | Where-Object { $_.servicePrincipalId -eq $servicePrincipal.id } | Select-Object -First 1
+            if ($appPermissions.Count -eq 0 -and -not $fallbackPermissions) {
+                continue
+            }
+            Write-DumpAppsExternalAppDisplay -ServicePrincipal $servicePrincipal -Permissions $appPermissions -FallbackPermissions $fallbackPermissions
+            Write-Output ""
+            Write-Output ("=" * 80)
+        }
     }
-    # Query app registrations
-    $appRegistrations = Invoke-RestMethod -Uri "$graphApiUrl/applications" -Headers @{ Authorization = "Bearer $accessToken" }
-
-    # Separator
-                Write-Output ("=" * 80) 
-
-    # Loop through each app registration
-    foreach ($app in $appRegistrations.value) {
-        $appId = $app.appId
-        $appName = $app.displayName
-        $createtime = $app.createdDateTime
-        $signinaudience = $app.signInAudience
-    
-        # Query users who have consented to the app's permissions
-        $approleurl = ($graphApiUrl + "/servicePrincipals(appId='" + $appId + "')/appRoleAssignedTo")
-        $consentedUsers = Invoke-RestMethod -Uri $approleurl -Headers @{ Authorization = "Bearer $accessToken" }
-    
-        # Display app information and consented users
-        Write-Output "App Name: $appName (App ID: $appId)"
-        Write-Output "Creation Date: $createtime"
-        Write-Output "Sign-In Audience: $signinaudience"
-        foreach ($user in $consentedUsers.value) {
-            $userId = $user.principalId
-            $userDisplayName = $user.principalDisplayName
-            Write-Output "Consented User: $userDisplayName (User ID: $userId)"
-        }
-        # Loop through each resource access entry
-        foreach ($resourceAccess in $app.requiredResourceAccess) {
-            $resourceAppId = $resourceAccess.resourceAppId
-            $appscopes = @()
-            $delegatedscopes = @()
-
-            # Loop through each resource access item
-            foreach ($accessItem in $resourceAccess.resourceAccess) {
-                $scopeGuid = $accessItem.id
-            
-                # Use the spn list to find names of permissions
-                foreach($approle in $spnsjson.appRoles){
-                    if ($scopeGuid -like $approle.id) {
-                        $scopeName = $approle.value
-                        $appscopes += $scopeName
-                    }
-                }
-                foreach($scoperole in $spnsjson.oauth2PermissionScopes){
-                    if ($scopeGuid -like $scoperole.id) {
-                        $dscopeName = $scoperole.value
-                        $delegatedscopes += $dscopeName
-                    }
-                }
-            }
-
-            # Display the resource app ID and associated permission names (scopes)
-            if ($appscopes.Count -gt 0) {
-                Write-Output "App Permissions (Scopes): $($appscopes -join ', ')"
-            }
-            if ($delegatedscopes -gt 0) {
-                Write-Output "Delegated Permissions (Scopes): $($delegatedscopes -join ', ')"
-            }
-        }
-        Write-Output ""
-        # Separator
-                Write-Output ("=" * 80) 
-    } 
-            if(!$GraphRun){
-            Write-Host -ForegroundColor yellow "[*] Now looking for external apps. Any apps displayed below are not owned by the current tenant or Microsoft's main app tenant."
-            }
-            Write-Output ("=" * 80) 
-
-            $orginfo = Invoke-RestMethod -Uri "$graphApiUrl/organization" -Headers $headers
-            $tenantid = $orginfo.value.id
-
-            $authUrl = "https://login.microsoftonline.com/$tenantid"
-            $unsupurl = "https://main.iam.ad.ext.azure.com"
-
-            $unsupbody = @{
-                    "resource" = "74658136-14ec-4630-ad9b-26e160ff0fc6"
-                    "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
-                    "grant_type" =    "refresh_token"
-                    "refresh_token" = $refreshToken
-                    "scope"=         "openid"
-                }
-
-            $unsuptokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$($authUrl)/oauth2/token" -Headers $Headers -Body $unsupbody
-            $unsupaccesstoken = $unsuptokens.access_token
-
-        foreach ($serviceprincipal in $allData){
-            $EntAppsScope = ""
-            # Filter out Microsoft Tenant service principals like Kaizala, Teams, etc... MS Tenant = f8cdef31-a31e-4b4a-93e4-5f571e91255a
-            if ($serviceprincipal.AppOwnerOrganizationId -ne "f8cdef31-a31e-4b4a-93e4-5f571e91255a" -and $serviceprincipal.AppOwnerOrganizationId -ne $tenantid)
-            {
-               $body = @{
-                "client_id" =     "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
-                "resource" =      "74658136-14ec-4630-ad9b-26e160ff0fc6"
-            }
-                $unsupheaders = @{
-                    "Authorization"          = "Bearer " + $unsupaccesstoken
-                    "Content-type"           = "application/json"
-                    "X-Requested-With"       = "XMLHttpRequest"
-                    "x-ms-client-request-id" = [guid]::NewGuid()
-                    "x-ms-correlation-id"    = [guid]::NewGuid()
-                }
-
-                $unsupfullurl = ($unsupurl + "/api/EnterpriseApplications/" + $serviceprincipal.Id + "/ServicePrincipalPermissions?consentType=User&userObjectId=")
-                $EntAppsScope = Invoke-RestMethod -Method GET -Uri $unsupfullurl -Headers $unsupheaders
-
-                $unsupAdminfullurl = ($unsupurl + "/api/EnterpriseApplications/" + $serviceprincipal.Id + "/ServicePrincipalPermissions?consentType=Admin&userObjectId=")
-                $EntAppsAdminScope = Invoke-RestMethod -Method GET -Uri $unsupAdminfullurl -Headers $unsupheaders
-            
-            
-
-                Write-Output ("External App: " + $serviceprincipal.displayName)
-                Write-Output ("AppId: " + $serviceprincipal.AppId)
-                Write-Output ("Object ID: " + $serviceprincipal.Id)
-                Write-Output ("appOwnerOrganizationId: " + $serviceprincipal.appOwnerOrganizationId)
-                Write-Output ("Creation Date: " + $serviceprincipal.createdDateTime)
-                Write-Output "Scope of Consent:"
-                Foreach ($Entscopeitem in $EntAppsScope){
-                $principals = @()
-                foreach($userorgroup in $Entscopeitem.principalIds){
-                    $userobject = Invoke-RestMethod -uri "$($graphApiUrl)/users/$userorgroup" -Headers $headers
-                    $principals += $userobject.userPrincipalName
-                }
-                Write-Output ($Entscopeitem.permissionId + ", " + $Entscopeitem.permissionType + ", " + $($principals -join '; '))
-                }
-                Foreach ($Entscopeadminitem in $EntAppsAdminScope){
-                $principals = @()
-                foreach($userorgroup in $Entscopeadminitem.principalIds){
-                    $userobject = Invoke-RestMethod -uri "$($graphApiUrl)/users/$userorgroup" -Headers $headers
-                    $principals += $userobject.userPrincipalName
-                }
-                Write-Output ($Entscopeadminitem.permissionId + ", " + $Entscopeadminitem.permissionType + ", " + $($principals -join '; '))
-                }
-                Write-Output ""
-                Write-Output ("=" * 80) 
-            }
-        
-        }
 }
 
 
@@ -8561,16 +9831,17 @@ function List-GraphRunnerModules {
     Write-Host -ForegroundColor Green "----------------- Recon & Enumeration Modules -----------------"
     Write-Host -ForegroundColor Green "`tMODULE`t`t`t-`t DESCRIPTION"
     Write-Host -ForegroundColor Green "Invoke-GraphRecon`t`t-`t Performs general recon for org info, user settings, directory sync settings, etc"
-    Write-Host -ForegroundColor Green "Invoke-DumpCAPS`t`t`t-`t Gets conditional access policies"
-    Write-Host -ForegroundColor Green "Invoke-DumpApps`t`t`t-`t Gets app registrations and external enterprise apps along with consent and scope info"
+    Write-Host -ForegroundColor Green "Invoke-DumpCAPS`t`t`t-`t Gets conditional access policies with Graph/beta/legacy fallback and optional full JSON export"
+    Write-Host -ForegroundColor Green "Invoke-DumpApps`t`t`t-`t Gets app registrations, grants, resolved permissions, and optional full JSON export"
     Write-Host -ForegroundColor Green "Get-AzureADUsers`t`t-`t Gets user directory"
     Write-Host -ForegroundColor Green "Get-DirectoryRoles`t`t-`t Gets activated directory roles and their members"
-    Write-Host -ForegroundColor Green "Get-SecurityGroups`t`t-`t Gets security groups and members"
+    Write-Host -ForegroundColor Green "Get-SecurityGroups`t`t-`t Gets all groups by default, or only security/M365 groups with switches"
     Write-Host -ForegroundColor Green "Get-UpdatableGroups`t`t-`t Gets groups that may be able to be modified by the current user"
     Write-Host -ForegroundColor Green "Get-DynamicGroups`t`t-`t Finds dynamic groups and displays membership rules"
     Write-Host -ForegroundColor Green "Get-SharePointSiteURLs`t`t-`t Gets a list of SharePoint site URLs visible to the current user"
     Write-Host -ForegroundColor Green "Invoke-GraphOpenInboxFinder`t-`t Checks each user's inbox in a list to see if they are readable"
     Write-Host -ForegroundColor Green "Find-PermissiveCalendars`t-`t Finds calendars shared more permissively than free/busy visibility"
+    Write-Host -ForegroundColor Green "Check-FrontDoorWAF`t`t-`t Audits Front Door WAF policies for RemoteAddr matching issues"
     Write-Host -ForegroundColor Green "Get-TenantID`t`t`t-`t Retrieves the tenant GUID from the domain name"
 
     Write-Host -ForegroundColor Green "--------------------- Persistence Modules ---------------------"
@@ -8611,6 +9882,7 @@ function List-GraphRunnerModules {
     Write-Host -ForegroundColor Green "Invoke-DeleteOAuthApp`t`t-`t Delete an OAuth App"
     Write-Host -ForegroundColor Green "Invoke-DeleteGroup`t`t-`t Delete a group"
     Write-Host -ForegroundColor Green "Invoke-RemoveGroupMember`t-`t Remove users/members from groups"
+    Write-Host -ForegroundColor Green "Get-EntraIDGroupInfo`t`t-`t Retrieves detailed information about Entra ID groups"
     Write-Host -ForegroundColor Green "Invoke-DriveFileDownload`t-`t Download single files as the current user"
     Write-Host -ForegroundColor Green "Invoke-CheckAccess`t`t-`t Check if tokens are valid"
     Write-Host -ForegroundColor Green "Invoke-AutoOAuthFlow`t`t-`t Automates OAuth flow via local web server"
@@ -8618,6 +9890,7 @@ function List-GraphRunnerModules {
     Write-Host -ForegroundColor Green "Invoke-BruteClientIDAccess`t-`t Tests various ClientIDs against MS Graph"
     Write-Host -ForegroundColor Green "Invoke-ImportTokens`t`t-`t Import tokens from other tools into GraphRunner"
     Write-Host -ForegroundColor Green "Get-UserObjectID`t`t-`t Retrieves a user's object ID"
+    Write-Host -ForegroundColor Green "Invoke-CreateCalendarEvent`t-`t Creates a calendar event in the current user's mailbox"
 
     Write-Host -ForegroundColor Green ("=" * 80)
     Write-Host -ForegroundColor Green '[*] For help with individual modules run Get-Help <module name> -Detailed'
