@@ -4197,9 +4197,13 @@ Function Invoke-DumpCAPS{
     }
 
     if(!$GraphRun){
+        $tenantDisplayName = "(unknown)"
+        if ($tenantInfo.displayName) {
+            $tenantDisplayName = $tenantInfo.displayName
+        }
         Write-Host -ForegroundColor Yellow "[*] Now dumping conditional access policies from the tenant."
         Write-Host -ForegroundColor Cyan ("=" * 56)
-        Write-Host -ForegroundColor Cyan ("Tenant   : " + ($tenantInfo.displayName ? $tenantInfo.displayName : "(unknown)") + " [" + $tenantInfo.tenantId + "]")
+        Write-Host -ForegroundColor Cyan ("Tenant   : " + $tenantDisplayName + " [" + $tenantInfo.tenantId + "]")
         $displayApiUsed = $collectionResult.ActualApiUsed
         if (-not $displayApiUsed) {
             $displayApiUsed = $collectionResult.ApiUsed
