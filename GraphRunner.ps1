@@ -75,7 +75,9 @@ function Get-GraphTokens{
     [String]$Device,
     [Parameter(Position = 6,Mandatory=$False)]
     [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
-    [String]$Browser
+    [String]$Browser,
+    [Parameter(Position = 7,Mandatory=$False)]
+    [switch]$AuthorizationCodeFlow
     )
     if ($Device) {
 		if ($Browser) {
@@ -114,18 +116,7 @@ function Get-GraphTokens{
             $tokens = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
 
             if ($tokens) {
-                $tokenPayload = $tokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
-                while ($tokenPayload.Length % 4) { Write-Verbose "Invalid length for a Base-64 char array or string, adding ="; $tokenPayload += "=" }
-                $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
-                $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
-                $tokobj = $tokenArray | ConvertFrom-Json
-                $global:tenantid = $tokobj.tid
-                Write-Output "Decoded JWT payload:"
-                $tokobj
-                Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
-                $baseDate = Get-Date -date "01-01-1970"
-                $tokenExpire = $baseDate.AddSeconds($tokobj.exp).ToLocalTime()
-                Write-Host -ForegroundColor Yellow "[!] Your access token is set to expire on: $tokenExpire"
+                Invoke-ParseTokens -Tokens $tokens
             }
         } catch {
             $details = $_.ErrorDetails.Message | ConvertFrom-Json
@@ -135,7 +126,6 @@ function Get-GraphTokens{
         if($ExternalCall){
             return $tokens
         }
-    
     }
     else{
         If($tokens){
@@ -144,11 +134,16 @@ function Get-GraphTokens{
                 Write-Host -ForegroundColor cyan "[*] It looks like you already tokens set in your `$tokens variable. Are you sure you want to authenticate again?"
                 $answer = Read-Host 
                 $answer = $answer.ToLower()
-                if ($answer -eq "yes" -or $answer -eq "y") {
+                if ($answer -eq "yes" -and $AuthorizationCodeFlow -or $answer -eq "y" -and $AuthorizationCodeFlow) {
+                    Write-Host -ForegroundColor yellow "[*] Initiating authorization code flow..."
+                    $global:tokens = ""
+                    $newtokens = "Yes"
+                } elseif ($answer -eq "yes" -and !$AuthorizationCodeFlow -or $answer -eq "y" -and !$AuthorizationCodeFlow) {
                     Write-Host -ForegroundColor yellow "[*] Initiating device code login..."
                     $global:tokens = ""
                     $newtokens = "Yes"
-                } elseif ($answer -eq "no" -or $answer -eq "n") {
+                }
+                elseif ($answer -eq "no" -or $answer -eq "n") {
                     Write-Host -ForegroundColor Yellow "[*] Quitting..."
                     return
                 } else {
@@ -157,65 +152,104 @@ function Get-GraphTokens{
             }
         }
 
-        $body = @{
-            "client_id" =     $ClientID
-            "resource" =      $Resource
-        }
-        $Headers=@{}
-        $Headers["User-Agent"] = $UserAgent
-        $authResponse = Invoke-RestMethod `
-            -UseBasicParsing `
-            -Method Post `
-            -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
-            -Headers $Headers `
-            -Body $body
-        Write-Host -ForegroundColor yellow $authResponse.Message
-
-        $continue = "authorization_pending"
-        while ($continue) {
-            $body = @{
-                "client_id"   = $ClientID
-                "grant_type"  = "urn:ietf:params:oauth:grant-type:device_code"
-                "code"        = $authResponse.device_code
-                "scope"       = "openid"
-            }
-
+        If($AuthorizationCodeFlow){
             try {
-                $tokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+                # start authorization code flow and obtain tokens for Azure CLI client
+                $copilot_app_tokens = Invoke-AuthorizationCodeFlow
 
-                if ($tokens) {
-                    $tokenPayload = $tokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
-                    while ($tokenPayload.Length % 4) { Write-Verbose "Invalid length for a Base-64 char array or string, adding ="; $tokenPayload += "=" }
-                    $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
-                    $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
-                    $tokobj = $tokenArray | ConvertFrom-Json
-                    $global:tenantid = $tokobj.tid
-                    Write-Output "Decoded JWT payload:"
-                    $tokobj
-                    $baseDate = Get-Date -date "01-01-1970"
-                    $tokenExpire = $baseDate.AddSeconds($tokobj.exp).ToLocalTime()
-                    Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
-                    Write-Host -ForegroundColor Yellow "[!] Your access token is set to expire on: $tokenExpire"
-                    $continue = $null
+                # exchange Azure CLI FOCI refresh token for Microsoft Office token
+                if ($copilot_app_tokens) {
+                    $token_endpoint = "https://login.microsoftonline.com/organizations/oauth2/v2.0/token"
+                    $body = @{
+                        client_id = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+                        scope = "https://graph.microsoft.com//.default offline_access openid profile"
+                        refresh_token = $copilot_app_tokens.refresh_token
+                        grant_type = "refresh_token"
+                    }
+                    $ms_office_tokens = Invoke-RestMethod -Uri $token_endpoint -Method Post -Body $body -ContentType "application/x-www-form-urlencoded"
+                    if ($ms_office_tokens) {
+                        Invoke-ParseTokens -Tokens $ms_office_tokens
+                        $global:tokens = $ms_office_tokens
+                    }
                 }
             } catch {
                 $details = $_.ErrorDetails.Message | ConvertFrom-Json
-                $continue = $details.error -eq "authorization_pending"
                 Write-Output $details.error
             }
+        }
 
-            if ($continue) {
-                Start-Sleep -Seconds 3
+        If(!$AuthorizationCodeFlow){
+
+            $body = @{
+                "client_id" =     $ClientID
+                "resource" =      $Resource
             }
-            else{
-                $global:tokens = $tokens
-                if($ExternalCall){
-                    return $tokens
+            $Headers=@{}
+            $Headers["User-Agent"] = $UserAgent
+            $authResponse = Invoke-RestMethod `
+                -UseBasicParsing `
+                -Method Post `
+                -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+                -Headers $Headers `
+                -Body $body
+            Write-Host -ForegroundColor yellow $authResponse.Message
+
+            $continue = "authorization_pending"
+            while ($continue) {
+                $body = @{
+                    "client_id"   = $ClientID
+                    "grant_type"  = "urn:ietf:params:oauth:grant-type:device_code"
+                    "code"        = $authResponse.device_code
+                    "scope"       = "openid"
+                }
+
+                try {
+                    $tokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" -Headers $Headers -Body $body
+                    if ($tokens) {
+                        Invoke-ParseTokens -Tokens $tokens
+                        $continue = $null
+                    }
+                } catch {
+                    $details = $_.ErrorDetails.Message | ConvertFrom-Json
+                    $continue = $details.error -eq "authorization_pending"
+                    Write-Output $details.error
+                }
+
+                if ($continue) {
+                    Start-Sleep -Seconds 3
+                }
+                else{
+                    $global:tokens = $tokens
+                    if($ExternalCall){
+                        return $tokens
+                    }
                 }
             }
         }
     }
 }
+
+function Invoke-ParseTokens{
+    Param([PSCustomObject]$tokens)
+    try{
+        $tokenPayload = $tokens.access_token.Split(".")[1].Replace('-', '+').Replace('_', '/')
+        while ($tokenPayload.Length % 4) { Write-Verbose "Invalid length for a Base-64 char array or string, adding ="; $tokenPayload += "=" }
+        $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
+        $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
+        $tokobj = $tokenArray | ConvertFrom-Json
+        $global:tenantid = $tokobj.tid
+        Write-Output "Decoded JWT payload:"
+        $tokobj
+        $baseDate = Get-Date -date "01-01-1970"
+        $tokenExpire = $baseDate.AddSeconds($tokobj.exp).ToLocalTime()
+        Write-Host -ForegroundColor Green '[*] Successful authentication. Access and refresh tokens have been written to the global $tokens variable. To use them with other GraphRunner modules use the Tokens flag (Example. Invoke-DumpApps -Tokens $tokens)'
+        Write-Host -ForegroundColor Yellow "[!] Your access token is set to expire on: $tokenExpire"
+    } catch {
+        $details = $_.ErrorDetails.Message | ConvertFrom-Json
+        Write-Output $details.error
+    }
+}
+
 function Invoke-AutoTokenRefresh{
     <#
         .SYNOPSIS
@@ -9702,6 +9736,119 @@ function Invoke-ForgeUserAgent
         return $UserAgent
    }   
 }
+
+function Invoke-AuthorizationCodeFlow {
+    # initial token will be for Copilot App client
+    $client_id = "14638111-3389-403d-b206-a6a71d9f8f16"
+    $Scope = "https://graph.microsoft.com//.default offline_access openid profile"
+    $tenant_id = "organizations"
+    $state = [System.Guid]::NewGuid().ToString()
+
+    # find an open port for redirect URI
+    $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
+    $listener.Start()
+    $port = $listener.LocalEndpoint.Port
+    $listener.Stop()
+    $redirect_uri = "http://localhost:$port/"
+
+    # start HTTP listener
+    $listener = New-Object System.Net.HttpListener
+    $listener.Prefixes.Add("$redirect_uri/")
+    $listener.Start()
+
+    Write-Host "[*] Started local HTTP listener on http://localhost:$port" -ForegroundColor Yellow
+
+    # Generate code verifier (43-128 characters, URL-safe)
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $code_verifier = [Convert]::ToBase64String($bytes) -replace '\+', '-' -replace '/', '_' -replace '=', ''
+    
+    # Generate code challenge (SHA256 hash of verifier, base64url encoded)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $challenge_bytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($code_verifier))
+    $code_challenge = [Convert]::ToBase64String($challenge_bytes) -replace '\+', '-' -replace '/', '_' -replace '=', ''
+
+    # send request to authorization endpoint
+    $authUrl = "https://login.microsoftonline.com/$tenant_id/oauth2/v2.0/authorize?" +
+        "client_id=$client_id" +
+        "&response_type=code" +
+        "&redirect_uri=$([System.Web.HttpUtility]::UrlEncode($redirect_uri))" +
+        "&response_mode=query" +
+        "&scope=$([System.Web.HttpUtility]::UrlEncode($Scope))" +
+        "&state=$state" +
+        "&code_challenge=$code_challenge" +
+        "&code_challenge_method=S256" +
+        "&prompt=select_account"
+    Start-Process $authUrl
+
+    Write-Host "[*] Obtaining authorization code..." -ForegroundColor Yellow
+
+    while($listener.IsListening) {
+        try {
+            $context = $listener.GetContext()
+            $request = $context.Request
+            $response = $context.Response
+
+            # Extract authorization code from query parameters
+            $query = $request.Url.Query
+            if ($query -match 'code=([^&]+)') {
+                $authorization_code = $matches[1]
+            } elseif ($query -match 'error=([^&]+)') {
+                $error = $matches[1]
+                $errorDescription = if ($query -match 'error_description=([^&]+)') { [System.Web.HttpUtility]::UrlDecode($matches[1]) } else { "Unknown error" }
+                throw "Authentication error: $error - $errorDescription"
+            } else {
+                throw "No authorization code received"
+            }
+
+            # Send response to browser
+            $responseString = @"
+                <html>
+                <body>
+                <h2>Authentication Complete</h2>
+                <p>You can close this window and return to PowerShell.</p>
+                </body>
+                </html>
+"@
+            $buffer = [System.Text.Encoding]::UTF8.GetBytes($responseString)
+            $response.ContentLength64 = $buffer.Length
+            $output = $response.OutputStream
+            $output.Write($buffer, 0, $buffer.Length)
+            $output.Close()
+            $response.Close()
+
+            $listener.Stop()
+        } catch {
+            Write-Host "Error handling request: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+
+    Write-Host "[*] Exchanging authorization code for access token..." -ForegroundColor Yellow
+
+    $tokenEndpoint = "https://login.microsoftonline.com/$tenant_id/oauth2/v2.0/token"
+    $body = @{
+        client_id = "$client_id"
+        scope = $Scope
+        code = $authorization_code
+        redirect_uri = $redirect_uri
+        grant_type = "authorization_code"
+        code_verifier = $code_verifier
+    }
+    try {
+        $tokens = Invoke-RestMethod -Uri $tokenEndpoint -Method Post -Body $body -ContentType "application/x-www-form-urlencoded"
+        return $tokens
+    } catch {
+        Write-Error "Failed to exchange authorization code: $($_.Exception.Message)"
+        if ($_.Exception.Response) {
+            $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+            $errorBody = $reader.ReadToEnd()
+            Write-Error "Error details: $errorBody"
+        }
+        throw
+    }
+}
+
 function Invoke-BruteClientIDAccess {
 
     [cmdletbinding()]
